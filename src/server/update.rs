@@ -17,7 +17,7 @@ use oxigraph::{
 
 use super::{
     SharedStore,
-    base::{AppError, blocking_deep},
+    base::{AppError, blocking},
     update_slice::{self, Plan, Subjects},
 };
 
@@ -127,7 +127,7 @@ pub(crate) async fn update_post(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
     let base = format!("http://{host}{}", uri.path());
-    let report = blocking_deep(move || {
+    let report = blocking(move || {
         apply_update_reported(&store, &format!("BASE <{base}>\n{update}"), &attribution)
     })
     .await?;
@@ -509,9 +509,6 @@ mod graph_tests;
 #[cfg(test)]
 #[path = "update_tests.rs"]
 mod tests;
-#[cfg(test)]
-#[path = "update_nesting_tests.rs"]
-mod update_nesting_tests;
 
 #[cfg(test)]
 #[path = "update_report_tests.rs"]

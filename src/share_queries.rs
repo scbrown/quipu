@@ -69,7 +69,7 @@ pub struct SharedQuery {
 /// a reader needs to see), or does not parse as SPARQL at all.
 pub fn read_only_form(query: &StoredQuery) -> Result<(&'static str, spargebra::Query)> {
     let probe = query.probe_sparql();
-    match crate::sparql::sparql_parser().parse_query(&probe) {
+    match crate::sparql_structure::parse_query(crate::sparql::sparql_parser(), &probe)? {
         Ok(parsed) => {
             let form = match &parsed {
                 spargebra::Query::Select { .. } => "SELECT",
@@ -82,7 +82,9 @@ pub fn read_only_form(query: &StoredQuery) -> Result<(&'static str, spargebra::Q
         Err(query_error) => {
             if spargebra::SparqlParser::new()
                 .with_base_iri("http://example.org/")
-                .is_ok_and(|p| p.parse_update(&probe).is_ok())
+                .is_ok_and(|p| {
+                    matches!(crate::sparql_structure::parse_update(p, &probe), Ok(Ok(_)))
+                })
             {
                 Err(Error::InvalidValue(format!(
                     "stored query '{}' is a SPARQL Update; a share carries read-only \

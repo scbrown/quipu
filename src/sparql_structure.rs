@@ -1,32 +1,48 @@
-//! A pre-parse bound on how deep a SPARQL request can drive the parser.
+//! One conservative bound on SPARQL structure, and one place every request is
+//! parsed (aegis-rq1afp, aegis-xcvb5z).
 //!
-//! spargebra's parser and the algebra walks behind it are recursive, and their
-//! depth follows the request's STRUCTURE, not its byte size. Nesting deepens
-//! them, but so do CHAINS: a flat run of `UNION`s or sibling `FILTER`s folds
-//! into a left-deep algebra tree. Measured on 674f3700 with the default 2 MiB
-//! blocking stack (aegis-rq1afp): /update aborted the WHOLE PROCESS with "stack
-//! overflow" at 500 nested `FILTER NOT EXISTS` (15 KB), 2,000 flat `UNION`s,
-//! 5,000 sibling `FILTER NOT EXISTS` and 5,000 nested parentheses. A crash is
-//! not a refusal: the store goes offline for every caller.
+//! The parser and the algebra walks behind it recurse with the request's
+//! STRUCTURE, not its size: nesting deepens them, and so do chains (operators,
+//! path alternatives, `UNION`s, sibling filters). On a pool thread's default
+//! stack a request of a few kilobytes overflowed and ABORTED the process, which
+//! is an outage for every caller, not a refused request.
 //!
-//! [`structural_cost`] counts every token that can add a level, ignoring string
-//! literals, IRIs and comments. It is an upper bound on depth, so a request
-//! within [`STRUCTURE_LIMIT`] can be parsed on a stack sized for it.
+//! [`structural_cost`] OVER-counts by design. It skips only what cannot recurse
+//! and can be recognised soundly (string literals, names, datatype tags); every
+//! bracket counts wherever it appears outside a string, every operator
+//! character counts, and so do the keywords that open a nested algebra node.
+//! Over-refusing a pathological literal is acceptable; under-counting a request
+//! that reaches the parser is not. [`parse_query`] and [`parse_update`] apply
+//! the bound and then parse on a dedicated thread with [`DEEP_STACK_BYTES`], so
+//! the cap has a margin even in a debug build.
 
 use crate::error::{Error, Result};
 
-/// The most structural tokens one request may carry. Callers parse on a stack
-/// sized so that this many tokens, in every shape measured, still fit: on
-/// 256 MiB the DEBUG build overflowed between 2,600 and 2,729 nested
-/// `FILTER NOT EXISTS` (3 tokens per level), so 4,096 tokens (~1,365 levels) is
-/// ~1.9x inside the worst profile and far inside release, which held 2,729
-/// levels on 64 MiB. A sibling batch of ~1,300 `FILTER NOT EXISTS` guards fits.
+/// The most structural tokens one request may carry. Sized to the DEBUG profile,
+/// whose frames are ~25x release's: on [`DEEP_STACK_BYTES`] every shape in the
+/// regression matrix parses at this cost in a debug build.
 pub const STRUCTURE_LIMIT: usize = 4096;
 
-const KEYWORDS: [&str; 5] = ["FILTER", "UNION", "MINUS", "OPTIONAL", "EXISTS"];
+/// Stack for parsing and evaluating caller-supplied SPARQL. Virtual memory,
+/// committed only as deep as a request actually recurses.
+pub const DEEP_STACK_BYTES: usize = 256 * 1024 * 1024;
 
-/// Count `{`, `(` and the keywords that open a nested algebra node, outside
-/// string literals, IRIs and comments.
+/// Beyond this length an IRI-shaped region is counted as if it were an
+/// expression: a long `<...>` could be parsed as a relational expression
+/// carrying an operator chain.
+const LONG_IRI: usize = 512;
+
+const KEYWORDS: [&str; 6] = ["FILTER", "UNION", "MINUS", "OPTIONAL", "EXISTS", "NOT"];
+
+/// Operator characters that can chain or nest an expression or a path.
+fn is_operator(c: u8) -> bool {
+    matches!(
+        c,
+        b'|' | b'&' | b'+' | b'-' | b'*' | b'/' | b'!' | b'^' | b'=' | b'<' | b'>'
+    )
+}
+
+/// An upper bound on how deep `text` can drive the parser. See the module docs.
 #[must_use]
 pub fn structural_cost(text: &str) -> usize {
     let b = text.as_bytes();
@@ -34,27 +50,64 @@ pub fn structural_cost(text: &str) -> usize {
     let mut i = 0;
     while i < b.len() {
         match b[i] {
-            b'#' => {
-                while i < b.len() && b[i] != b'\n' {
+            q @ (b'"' | b'\'') => {
+                i = skip_string(b, i, q);
+                // A datatype tag is not the inverse-path operator, and a
+                // language tag's '-' is not subtraction.
+                if b.get(i) == Some(&b'^') && b.get(i + 1) == Some(&b'^') {
+                    i += 2;
+                } else if b.get(i) == Some(&b'@') {
+                    i += 1;
+                    while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'-') {
+                        i += 1;
+                    }
+                }
+            }
+            b'<' => {
+                if let Some(end) = iri_end(b, i) {
+                    let body = &b[i + 1..end];
+                    let long = body.len() > LONG_IRI;
+                    cost += body
+                        .iter()
+                        .filter(|&&c| {
+                            matches!(c, b'(' | b'[' | b'{')
+                                || matches!(c, b'+' | b'*' | b'!' | b'^')
+                                || (long && is_operator(c))
+                        })
+                        .count();
+                    i = end + 1;
+                } else {
+                    cost += 1;
                     i += 1;
                 }
             }
-            q @ (b'"' | b'\'') => i = skip_string(b, i, q),
-            b'<' => i = skip_iri(b, i),
-            b'{' | b'(' => {
+            b'(' | b'[' | b'{' => {
                 cost += 1;
                 i += 1;
             }
-            // Variables and prefixed-name locals are names, never keywords.
-            b'?' | b'$' | b':' => {
+            c if is_operator(c) => {
+                cost += 1;
                 i += 1;
-                while i < b.len() && is_name(b[i]) {
+            }
+            // Variables: names only, never containing an operator character.
+            b'?' | b'$' => {
+                i += 1;
+                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_' || b[i] >= 0x80)
+                {
+                    i += 1;
+                }
+            }
+            // A prefixed name's local part, which may legally contain '-' and '.'.
+            b':' => {
+                i += 1;
+                while i < b.len() && is_local(b[i]) {
                     i += 1;
                 }
             }
             c if c.is_ascii_alphabetic() => {
                 let start = i;
-                while i < b.len() && is_name(b[i]) {
+                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_' || b[i] >= 0x80)
+                {
                     i += 1;
                 }
                 let word = &text[start..i];
@@ -68,26 +121,83 @@ pub fn structural_cost(text: &str) -> usize {
     cost
 }
 
-/// Refuse a request whose structure exceeds [`STRUCTURE_LIMIT`], before any
-/// parser sees it.
+/// Refuse a request whose structure exceeds [`STRUCTURE_LIMIT`].
 pub fn check(text: &str) -> Result<()> {
     let cost = structural_cost(text);
     if cost > STRUCTURE_LIMIT {
         return Err(Error::InvalidValue(format!(
-            "SPARQL request nests too deeply: {cost} structural tokens ({{, (, FILTER, \
-             UNION, MINUS, OPTIONAL, EXISTS) exceeds the limit of {STRUCTURE_LIMIT}. \
-             Split it into smaller requests (aegis-rq1afp)."
+            "SPARQL request is too deeply nested or too long a chain: structural cost \
+             {cost} exceeds the limit of {STRUCTURE_LIMIT}. Split it into smaller requests."
         )));
     }
     Ok(())
 }
 
-fn is_name(c: u8) -> bool {
-    c.is_ascii_alphanumeric() || c == b'_' || c == b'-' || c == b'.' || c >= 0x80
+/// Run `f` on a thread with [`DEEP_STACK_BYTES`] of stack. Scoped, so `f` may
+/// borrow. A panic in `f` is re-raised on the caller. On wasm32 there are no
+/// threads; `f` runs in place and the structural bound is the only defence.
+#[cfg(target_arch = "wasm32")]
+pub fn on_deep_stack<T: Send>(f: impl FnOnce() -> T + Send) -> Result<T> {
+    Ok(f())
 }
 
-/// Skip a string literal starting at `i`, short or long (`'''`/`"""`), with
-/// backslash escapes. An unterminated literal runs to the end.
+#[cfg(not(target_arch = "wasm32"))]
+thread_local! {
+    /// Set on a thread started by [`on_deep_stack`], so nested calls (a server
+    /// request already on a deep stack, then parsing) run in place instead of
+    /// paying for a second thread.
+    static ON_DEEP_STACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Run `f` on a thread with [`DEEP_STACK_BYTES`] of stack. Scoped, so `f` may
+/// borrow. A panic in `f` is re-raised on the caller. Already on such a
+/// thread, `f` runs in place.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn on_deep_stack<T: Send>(f: impl FnOnce() -> T + Send) -> Result<T> {
+    if ON_DEEP_STACK.with(std::cell::Cell::get) {
+        return Ok(f());
+    }
+    std::thread::scope(|scope| {
+        let handle = std::thread::Builder::new()
+            .name("quipu-parse".into())
+            .stack_size(DEEP_STACK_BYTES)
+            .spawn_scoped(scope, move || {
+                ON_DEEP_STACK.with(|deep| deep.set(true));
+                f()
+            })
+            .map_err(|e| Error::InvalidValue(format!("could not start parse thread: {e}")))?;
+        Ok(handle
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+    })
+}
+
+/// Bound, then parse a query on a deep stack. The outer `Result` is the bound;
+/// the inner one is the parser's own verdict.
+pub fn parse_query(
+    parser: spargebra::SparqlParser,
+    text: &str,
+) -> Result<std::result::Result<spargebra::Query, spargebra::SparqlSyntaxError>> {
+    check(text)?;
+    on_deep_stack(move || parser.parse_query(text))
+}
+
+/// [`parse_query`] for a SPARQL Update.
+pub fn parse_update(
+    parser: spargebra::SparqlParser,
+    text: &str,
+) -> Result<std::result::Result<spargebra::Update, spargebra::SparqlSyntaxError>> {
+    check(text)?;
+    on_deep_stack(move || parser.parse_update(text))
+}
+
+fn is_local(c: u8) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.' | b':' | b'%') || c >= 0x80
+}
+
+/// Skip a string literal starting at `i`, short or long, with backslash
+/// escapes. Quote delimiters are unambiguous outside an IRI, and IRI-shaped
+/// regions are consumed before a quote inside them can be read.
 fn skip_string(b: &[u8], i: usize, q: u8) -> usize {
     let long = b.len() >= i + 3 && b[i + 1] == q && b[i + 2] == q;
     let mut j = if long { i + 3 } else { i + 1 };
@@ -103,26 +213,26 @@ fn skip_string(b: &[u8], i: usize, q: u8) -> usize {
                 }
                 j += 1;
             }
-            b'\n' if !long => return j + 1,
+            b'\n' | b'\r' if !long => return j + 1,
             _ => j += 1,
         }
     }
     b.len()
 }
 
-/// Skip an IRIREF at `i` if one starts there; otherwise `<` is the less-than
-/// operator and only it is consumed.
-fn skip_iri(b: &[u8], i: usize) -> usize {
+/// The index of the `>` closing an IRIREF-shaped region that starts at `i`,
+/// using SPARQL's IRIREF character set. `None` means `<` is an operator here.
+fn iri_end(b: &[u8], i: usize) -> Option<usize> {
     let mut j = i + 1;
     while j < b.len() {
         match b[j] {
-            b'>' => return j + 1,
-            b'<' | b'"' | b'{' | b'}' | b'|' | b'^' | b'`' | b'\\' => return i + 1,
-            c if c <= b' ' => return i + 1,
+            b'>' => return Some(j),
+            b'<' | b'"' | b'{' | b'}' | b'|' | b'^' | b'`' | b'\\' => return None,
+            c if c <= b' ' => return None,
             _ => j += 1,
         }
     }
-    i + 1
+    None
 }
 
 #[cfg(test)]

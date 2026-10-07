@@ -176,61 +176,26 @@ where
 {
     let identity = super::auth::request_identity();
     let kind = super::request_middleware::request_write_kind();
+    // On a deep stack: request work parses and walks caller-supplied SPARQL,
+    // whose recursion follows its structure, and the pool's default stack
+    // aborted the process on a few kilobytes of nesting (aegis-xcvb5z). The
+    // structural bound in `sparql_structure` keeps requests inside this stack;
+    // the stack keeps the bound's margin. Identity and write kind are
+    // thread-scoped, so they are re-established on the new thread.
     match tokio::task::spawn_blocking(move || {
-        quipu::transaction_auth::with_identity(identity, || quipu::write_kind::scoped(kind, f))
+        quipu::sparql_structure::on_deep_stack(move || {
+            quipu::transaction_auth::with_identity(identity, || quipu::write_kind::scoped(kind, f))
+        })
     })
     .await
     {
-        Ok(result) => result,
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(AppError(e)),
         // Only reachable if the handler panicked; the mutex is then poisoned and
         // the process is not going to recover on its own either way.
         Err(e) => Err(AppError(quipu::Error::InvalidValue(format!(
             "request handler failed: {e}"
         )))),
-    }
-}
-
-/// Stack for request work whose recursion depth follows the caller's SPARQL
-/// structure (aegis-rq1afp). The blocking pool's default stack overflowed at
-/// 500 nested `FILTER NOT EXISTS` in a release build, which aborts the whole
-/// process. Sized for the WORST build profile, not the deployed one: at
-/// [`quipu::sparql_structure::STRUCTURE_LIMIT`] the release build held on
-/// 64 MiB and the debug build did not. A margin measured on one profile is not
-/// a margin. It is virtual memory, committed only as deep as a request
-/// actually recurses.
-pub(crate) const DEEP_STACK_BYTES: usize = 256 * 1024 * 1024;
-
-/// [`blocking`], on a dedicated thread with [`DEEP_STACK_BYTES`] of stack.
-/// Use it for work that parses or walks caller-supplied SPARQL. The caller
-/// must also bound the structure with `sparql_structure::check`: a bigger
-/// stack moves the cliff, the bound keeps requests on the near side of it.
-pub(crate) async fn blocking_deep<T, F>(f: F) -> Result<T, AppError>
-where
-    F: FnOnce() -> Result<T, AppError> + Send + 'static,
-    T: Send + 'static,
-{
-    let identity = super::auth::request_identity();
-    let kind = super::request_middleware::request_write_kind();
-    let joined = tokio::task::spawn_blocking(move || {
-        std::thread::Builder::new()
-            .name("quipu-deep".into())
-            .stack_size(DEEP_STACK_BYTES)
-            .spawn(move || {
-                quipu::transaction_auth::with_identity(identity, || {
-                    quipu::write_kind::scoped(kind, f)
-                })
-            })
-            .map(std::thread::JoinHandle::join)
-    })
-    .await;
-    match joined {
-        Ok(Ok(Ok(result))) => result,
-        Ok(Err(e)) => Err(AppError(quipu::Error::InvalidValue(format!(
-            "could not start request thread: {e}"
-        )))),
-        Ok(Ok(Err(_))) | Err(_) => Err(AppError(quipu::Error::InvalidValue(
-            "request handler failed".into(),
-        ))),
     }
 }
 
