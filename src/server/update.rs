@@ -18,6 +18,7 @@ use oxigraph::{
 use super::{
     SharedStore,
     base::{AppError, blocking},
+    update_eval,
     update_slice::{self, Plan, Subjects},
 };
 
@@ -338,8 +339,8 @@ pub(super) fn apply_update_attributed(
         .iter()
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
-    ox.update(update)
-        .map_err(|e| quipu::Error::InvalidValue(format!("SPARQL update error: {e}")))?;
+    // Not `ox.update`: Oxigraph interleaves DELETE/INSERT per solution (aegis-odm5yt).
+    update_eval::evaluate(&ox, update)?;
     let after: HashSet<Quad> = ox
         .iter()
         .collect::<Result<_, _>>()
