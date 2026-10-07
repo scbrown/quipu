@@ -326,6 +326,9 @@ fn routes_in_server_source() -> Vec<String> {
         "server/tests.rs",
         "server/tools.rs",
         "server/update.rs",
+        // SPARQL Update evaluator with spec DELETE/INSERT order
+        // (aegis-odm5yt), called from update.rs, no routes.
+        "server/update_eval.rs",
         // Parse-guard regression tests (aegis-xcvb5z): test-only, no routes.
         "server/parse_guard_tests.rs",
         // Slice planner for /update (aegis-jm1lcl): pure analysis of the parsed
