@@ -657,8 +657,12 @@ fn episode_to_turtle(
         ttl.push_str(&node_term(&local, base_ns));
 
         if let Some(ntype) = &node.node_type {
-            let type_local = sanitize_iri_local(ntype);
-            ttl.push_str(&format!(" a aegis:{type_local}"));
+            if ntype.starts_with(QUECHUA_TYPE_PREFIX) {
+                ttl.push_str(&format!(" a <{}>", node_type_iri(ntype, base_ns)));
+            } else {
+                let type_local = sanitize_iri_local(ntype);
+                ttl.push_str(&format!(" a aegis:{type_local}"));
+            }
         }
 
         ttl.push_str(&format!(
@@ -880,6 +884,15 @@ fn resolve_edge_predicate(relation: &str) -> Result<String> {
 /// whether the same request is legal.
 fn validate_node_type(node_name: &str, ntype: &str) -> Result<()> {
     let t = ntype.trim();
+    if let Some(local) = t.strip_prefix(QUECHUA_TYPE_PREFIX) {
+        if local.is_empty() || sanitize_iri_local(local) != local {
+            return Err(crate::error::Error::InvalidValue(format!(
+                "node '{node_name}' has type '{ntype}': a '{QUECHUA_TYPE_PREFIX}' type needs a \
+                 local name of only letters, digits, '-', '_' and '.' (aegis-kpy8ec)."
+            )));
+        }
+        return Ok(());
+    }
     if t.contains(',') {
         let split: Vec<&str> = t
             .split(',')
@@ -912,6 +925,23 @@ fn validate_node_type(node_name: &str, ntype: &str) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+/// The one type prefix an episode node may carry: the public Quechua vocabulary
+/// (aegis-kpy8ec). Any other prefix is refused by `validate_node_type`.
+pub(crate) const QUECHUA_TYPE_PREFIX: &str = "quechua:";
+
+/// The class IRI an episode node `type` denotes. A bare name is the legacy
+/// domain vocabulary under `base_ns`, byte-for-byte as before; `quechua:Local`
+/// is `<QUECHUA>Local`. The type namespace is independent of `base_ns`, so the
+/// instance IRIs an episode mints do not move when a writer switches vocabulary.
+/// Turtle emission and both vocabulary gates resolve through here, so the class
+/// that is checked is the class that is written.
+pub(crate) fn node_type_iri(ntype: &str, base_ns: &str) -> String {
+    match ntype.strip_prefix(QUECHUA_TYPE_PREFIX) {
+        Some(local) => format!("{}{}", namespace::QUECHUA, sanitize_iri_local(local)),
+        None => format!("{base_ns}{}", sanitize_iri_local(ntype)),
+    }
 }
 
 /// Sanitize a name into a valid IRI local name.
@@ -984,3 +1014,5 @@ fn escape_turtle(s: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod type_ns_tests;
