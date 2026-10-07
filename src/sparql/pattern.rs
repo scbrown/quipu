@@ -136,17 +136,8 @@ pub fn eval_pattern_seeded(
             let pushed = super::filter_pushdown::seed_iri_equalities(store, expr, inner, seed)?;
             let inner_seed = pushed.as_ref().unwrap_or(seed);
             // aegis-tl2q4j: narrow the scan by the filter's string tests.
-            let narrows = super::string_pushdown::collect(expr, inner, inner_seed);
-            let narrowed;
-            let inner_ctx = if narrows.is_empty() {
-                ctx
-            } else {
-                narrowed = TemporalContext {
-                    string_narrows: Some(std::sync::Arc::new(narrows)),
-                    ..ctx.clone()
-                };
-                &narrowed
-            };
+            let narrowed = super::string_pushdown::narrowed(expr, inner, inner_seed, ctx);
+            let inner_ctx = narrowed.as_ref().unwrap_or(ctx);
             let (rows, vars) = eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?;
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {

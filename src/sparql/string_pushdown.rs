@@ -116,6 +116,22 @@ pub fn collect(expr: &Expression, inner: &GraphPattern, seed: &Bindings) -> Vec<
     out
 }
 
+/// `ctx` carrying the narrowing predicates for `inner`, or `None` when the
+/// filter licenses none (evaluate under `ctx` unchanged).
+#[must_use]
+pub fn narrowed(
+    expr: &Expression,
+    inner: &GraphPattern,
+    seed: &Bindings,
+    ctx: &super::TemporalContext,
+) -> Option<super::TemporalContext> {
+    let narrows = collect(expr, inner, seed);
+    (!narrows.is_empty()).then(|| super::TemporalContext {
+        string_narrows: Some(Arc::new(narrows)),
+        ..ctx.clone()
+    })
+}
+
 fn conjuncts(expr: &Expression, out: &mut Vec<StringNarrow>) {
     match expr {
         Expression::And(a, b) => {
