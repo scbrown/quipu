@@ -167,8 +167,7 @@ impl StoredQuery {
         // Substitute probes and PARSE. A template that only parses for some
         // argument values is not a template, and finding that out at call time
         // means finding out in someone else's session.
-        crate::sparql::sparql_parser()
-            .parse_query(&self.probe_sparql())
+        crate::sparql_structure::parse_query(crate::sparql::sparql_parser(), &self.probe_sparql())?
             .map_err(|e| {
                 Error::InvalidValue(format!(
                     "query '{}': template does not parse as SPARQL: {e}",

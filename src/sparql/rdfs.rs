@@ -188,7 +188,7 @@ pub fn withheld_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<
     if !(ctx.graph.is_root_default() || (ctx.entails_rdfs && ctx.graph.includes_root_default())) {
         return Vec::new();
     }
-    let Ok(parsed) = super::sparql_parser().parse_query(query) else {
+    let Ok(Ok(parsed)) = crate::sparql_structure::parse_query(super::sparql_parser(), query) else {
         return Vec::new();
     };
 

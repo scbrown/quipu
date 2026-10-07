@@ -101,6 +101,7 @@ pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;
 pub mod sparql;
+pub mod sparql_structure;
 pub mod store;
 pub mod time;
 pub mod types;
