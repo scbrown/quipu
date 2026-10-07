@@ -24,10 +24,11 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::share::ShareManifest;
 use crate::share::sha256;
 use crate::share_merge::{
     DecisionRecord, Graph, LoadedShare, MergeResult, commit, locate_base, merge_graphs,
-    parse_graph, read_share, root_graph,
+    parse_graph, read_share, root_graph, share_from_parts,
 };
 use crate::store::Store;
 
@@ -138,13 +139,64 @@ struct Inputs {
     ours_hash: String,
 }
 
-fn inputs(store: &Store, incoming_dir: &Path) -> Result<Inputs> {
-    let incoming = read_share(incoming_dir)?;
-    let base = locate_base(&incoming)?;
+/// A share delivered in a request body rather than a directory, in the same
+/// shape `/import` takes (aegis-yavo9c).
+#[derive(Debug, Clone, Deserialize)]
+pub struct InlineShare {
+    pub manifest: ShareManifest,
+    pub export_ntriples: String,
+    pub shapes_turtle: String,
+}
+
+/// The incoming share and its base: read from a directory (the base found
+/// through `parent_share`), or both inline.
+pub struct SharePair {
+    incoming: LoadedShare,
+    base: LoadedShare,
+}
+
+impl SharePair {
+    /// Read `incoming_dir` and locate its base beside it.
+    ///
+    /// # Errors
+    /// Share read or verification failures, or no unique base.
+    pub fn from_dir(incoming_dir: &Path) -> Result<Self> {
+        let incoming = read_share(incoming_dir)?;
+        let base = locate_base(&incoming)?;
+        Ok(Self { incoming, base })
+    }
+
+    /// Verify two inline shares and that `base` is `incoming`'s parent.
+    ///
+    /// # Errors
+    /// A hash or envelope mismatch on either share, or a base that is not the
+    /// incoming share's declared `parent_share`.
+    pub fn inline(incoming: InlineShare, base: InlineShare) -> Result<Self> {
+        let load = |what: &str, s: InlineShare| {
+            share_from_parts(
+                Path::new(what),
+                s.manifest,
+                &s.export_ntriples,
+                s.shapes_turtle,
+            )
+        };
+        let incoming = load("inline incoming share", incoming)?;
+        let base = load("inline base share", base)?;
+        if incoming.manifest.parent_share.as_deref() != Some(base.manifest.share_id.as_str()) {
+            return Err(Error::InvalidValue(format!(
+                "the base share {} is not the incoming share's parent_share ({:?})",
+                base.manifest.share_id, incoming.manifest.parent_share
+            )));
+        }
+        Ok(Self { incoming, base })
+    }
+}
+
+fn inputs(store: &Store, pair: SharePair) -> Result<Inputs> {
     let (ours, ours_hash) = root_graph(store)?;
     Ok(Inputs {
-        incoming,
-        base,
+        incoming: pair.incoming,
+        base: pair.base,
         ours,
         ours_hash,
     })
@@ -195,7 +247,15 @@ fn local_facts(store: &Store, record: &DecisionRecord) -> Result<Vec<LocalFact>>
 /// # Errors
 /// Share read, base lookup, or store read failures.
 pub fn emit(store: &Store, incoming_dir: &Path) -> Result<DecisionFile> {
-    let i = inputs(store, incoming_dir)?;
+    emit_pair(store, SharePair::from_dir(incoming_dir)?)
+}
+
+/// [`emit`] for an already-loaded share pair.
+///
+/// # Errors
+/// Store read failures.
+pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
+    let i = inputs(store, pair)?;
     let (_, conflicts) = merge_graphs(
         &i.base.graph,
         &i.ours,
@@ -321,6 +381,23 @@ pub fn apply(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<DecidedMerge> {
+    let pair = SharePair::from_dir(incoming_dir)?;
+    apply_pair(store, pair, file, file_bytes, reviewer, timestamp, actor)
+}
+
+/// [`apply`] for an already-loaded share pair.
+///
+/// # Errors
+/// As [`apply`].
+pub fn apply_pair(
+    store: &mut Store,
+    pair: SharePair,
+    file: &DecisionFile,
+    file_bytes: &[u8],
+    reviewer: &str,
+    timestamp: &str,
+    actor: Option<&str>,
+) -> Result<DecidedMerge> {
     if reviewer.trim().is_empty() {
         return Err(Error::InvalidValue("a reviewer is required".into()));
     }
@@ -330,10 +407,10 @@ pub fn apply(
             file.schema
         )));
     }
-    let i = inputs(store, incoming_dir)?;
+    let i = inputs(store, pair)?;
     let stale = |what: &str| {
         Error::InvalidValue(format!(
-            "stale decisions: {what} changed since --emit-decisions; emit again and re-decide. Nothing was written"
+            "stale decisions: {what} changed since they were emitted (--emit-decisions / quipu_merge_decisions); emit again and re-decide. Nothing was written"
         ))
     };
     if file.incoming_share != i.incoming.manifest.share_id {

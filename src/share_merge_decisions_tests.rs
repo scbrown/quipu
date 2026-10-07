@@ -317,3 +317,64 @@ fn a_reordered_file_is_not_stale_and_an_empty_reviewer_is_refused() {
     .unwrap();
     assert_eq!(values(&local, STATUS), ["\"blocked\""]);
 }
+
+fn inline(dir: &Path) -> serde_json::Value {
+    let read = |n: &str| std::fs::read_to_string(dir.join(n)).unwrap();
+    serde_json::json!({
+        "manifest": serde_json::from_str::<serde_json::Value>(&read("manifest.json")).unwrap(),
+        "export_ntriples": read("export.nt"),
+        "shapes_turtle": read("shapes.ttl"),
+    })
+}
+
+#[test]
+fn inline_shares_emit_what_the_directory_emits_and_apply_through_the_tool() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let input = serde_json::json!({
+        "incoming": inline(&incoming),
+        "base": inline(&root.path().join("base")),
+        "propose": true,
+    });
+    let from_dir = propose(emit(&local, &incoming).unwrap());
+    let tool = crate::mcp::merge_decisions::tool_merge_decisions(&local, &input).unwrap();
+    assert_eq!(serde_json::to_value(&from_dir).unwrap(), tool);
+
+    let mut decisions = tool;
+    decisions["rows"][0]["decision"] = serde_json::json!({"choose": "theirs"});
+    let apply_input = serde_json::json!({
+        "incoming": input["incoming"],
+        "base": input["base"],
+        "decisions": decisions,
+        "reviewer": "stiwi",
+    });
+    let out = crate::mcp::merge_decisions::tool_merge_apply(&mut local, &apply_input).unwrap();
+    assert_eq!(out["outcome"], "merged");
+    assert_eq!(out["reviewer"], "stiwi");
+    assert_eq!(values(&local, STATUS), ["\"closed\""]);
+}
+
+#[test]
+fn inline_shares_are_verified_and_must_be_parent_and_child() {
+    let root = tempfile::tempdir().unwrap();
+    let (local, incoming) = scenario(root.path());
+    let base = inline(&root.path().join("base"));
+    let mut tampered = inline(&incoming);
+    tampered["export_ntriples"] =
+        serde_json::json!("<https://example.org/x> <https://example.org/y> \"z\" .\n");
+    let err = crate::mcp::merge_decisions::tool_merge_decisions(
+        &local,
+        &serde_json::json!({"incoming": tampered, "base": base}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("hash mismatch"), "{err}");
+    // The base passed as its own child: not its parent.
+    let err = crate::mcp::merge_decisions::tool_merge_decisions(
+        &local,
+        &serde_json::json!({"incoming": base, "base": inline(&incoming)}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("parent"), "{err}");
+}

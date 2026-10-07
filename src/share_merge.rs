@@ -79,8 +79,17 @@ pub(crate) fn read_share(dir: &Path) -> Result<LoadedShare> {
     };
     let manifest: ShareManifest = serde_json::from_str(&read("manifest.json")?)
         .map_err(|e| Error::Serialization(format!("share manifest: {e}")))?;
-    let export = read("export.nt")?;
-    let shapes = read("shapes.ttl")?;
+    share_from_parts(dir, manifest, &read("export.nt")?, read("shapes.ttl")?)
+}
+
+/// A share delivered inline (REST / MCP), checked exactly as one read from
+/// disk: envelope schema, share id, and both payload hashes (aegis-yavo9c).
+pub(crate) fn share_from_parts(
+    dir: &Path,
+    manifest: ShareManifest,
+    export: &str,
+    shapes: String,
+) -> Result<LoadedShare> {
     let expected_share_id = sha256(&manifest_bytes(&manifest, false)?);
     if manifest.schema != "https://github.com/scbrown/quipu/share-manifest/v1"
         || manifest.files.graph != "export.nt"
@@ -97,7 +106,7 @@ pub(crate) fn read_share(dir: &Path) -> Result<LoadedShare> {
     Ok(LoadedShare {
         dir: dir.into(),
         manifest,
-        graph: parse_graph(&export, "share export.nt")?,
+        graph: parse_graph(export, "share export.nt")?,
         shapes,
     })
 }
