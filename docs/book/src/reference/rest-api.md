@@ -277,6 +277,13 @@ both zero means the `WHERE` matched nothing, or the update changed nothing, and
 `null` for the default graph); `tx` is the last of them, usable with `--at` /
 `tx` reads. The SPARQL 1.1 Protocol leaves this body to the implementation.
 
+Attribute a write with the optional `actor` and `source` query parameters (or
+form fields beside `update=`), each at most once, 1–256 characters, no control
+characters: `POST /update?actor=agent:wu&source=seeds:claim`. They are recorded
+on the transaction as declared, like `/knot`'s fields; the verified caller is
+recorded separately as its `authenticated` principal. Without `actor` the
+transaction's actor is unknown (`null`); `source` defaults to `sparql-update`.
+
 Quipu's JSON extension compacts result IRIs to CURIEs by default using prefixes
 declared by the currently loaded shape sets; unknown namespaces remain full
 IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=1` on GET, to
@@ -379,6 +386,14 @@ curl -s localhost:3030/episode -X POST \
     "edges": [{"source": "myapp", "target": "kota", "relation": "runs_on"}]
   }'
 ```
+
+A bare node `type` such as `WebApplication` names a class under the store's
+`base_ns`. To name a class in the public Quechua vocabulary instead, prefix it:
+`"type": "quechua:WorkItem"` asserts
+`<https://scbrown.github.io/quechua/ns#WorkItem>`. The prefix changes only the
+class. The node's own IRI is still minted under `base_ns`. Like any other type, a
+Quechua class is refused until a loaded shape sanctions it. No other prefix is
+accepted.
 
 Set `"replace_snapshot": true` for producers whose payload is the complete
 current state of an inventory. Facts previously asserted by the same episode

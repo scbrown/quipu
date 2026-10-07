@@ -39,6 +39,9 @@ mod graph_store;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[cfg(test)]
+#[path = "server/parse_guard_tests.rs"]
+mod parse_guard_tests;
 #[path = "server/publication.rs"]
 mod publication;
 mod query_endpoint;
