@@ -32,6 +32,7 @@ pub(crate) async fn update_post(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.split(';').next())
         .map_or("", str::trim);
+    let mut form_fields: Vec<(String, String)> = Vec::new();
     let update = match content_type {
         "application/sparql-update" => std::str::from_utf8(&body)
             .map_err(|e| {
@@ -40,6 +41,11 @@ pub(crate) async fn update_post(
             .to_string(),
         "application/x-www-form-urlencoded" => {
             let fields: Vec<_> = url::form_urlencoded::parse(&body).collect();
+            form_fields = fields
+                .iter()
+                .filter(|(k, _)| k == "actor" || k == "source")
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
             let updates: Vec<_> = fields
                 .iter()
                 .filter_map(|(k, v)| (k == "update").then_some(v.as_ref()))
@@ -73,6 +79,15 @@ pub(crate) async fn update_post(
         )
             .into_response());
     }
+    let attribution = match Attribution::from_fields(
+        parameters
+            .iter()
+            .map(|(k, v)| (k.as_ref(), v.as_ref()))
+            .chain(form_fields.iter().map(|(k, v)| (k.as_str(), v.as_str()))),
+    ) {
+        Ok(a) => a,
+        Err(message) => return Ok((StatusCode::BAD_REQUEST, message).into_response()),
+    };
     let mut using = String::new();
     for (name, value) in &parameters {
         match name.as_ref() {
@@ -107,8 +122,10 @@ pub(crate) async fn update_post(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
     let base = format!("http://{host}{}", uri.path());
-    let report =
-        blocking(move || apply_update(&store, &format!("BASE <{base}>\n{update}"))).await?;
+    let report = blocking(move || {
+        apply_update_reported(&store, &format!("BASE <{base}>\n{update}"), &attribution)
+    })
+    .await?;
     Ok(axum::Json(report).into_response())
 }
 
@@ -183,8 +200,76 @@ impl Applied {
     }
 }
 
+/// Who a write says it is from (`actor`) and through what (`source`), as the
+/// caller declares them (aegis-7vlk7j). Declared, like `/knot`'s fields: the
+/// VERIFIED caller is recorded separately as the transaction's `authenticated`
+/// principal, so a declared actor attributes a write without impersonating
+/// anyone. An undeclared actor is recorded as unknown (null), never as the
+/// endpoint's name; `source` defaults to `sparql-update`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Attribution {
+    pub(super) actor: Option<String>,
+    pub(super) source: String,
+}
+
+impl Default for Attribution {
+    fn default() -> Self {
+        Self {
+            actor: None,
+            source: "sparql-update".to_owned(),
+        }
+    }
+}
+
+impl Attribution {
+    const MAX_LEN: usize = 256;
+
+    /// From the protocol query parameters and form fields; `actor` and `source`
+    /// may each appear once, non-empty, at most 256 chars, no control chars.
+    pub(super) fn from_fields<'a>(
+        fields: impl Iterator<Item = (&'a str, &'a str)>,
+    ) -> Result<Self, String> {
+        let mut out = Self::default();
+        let (mut actor, mut source) = (None, None);
+        for (name, value) in fields {
+            let slot = match name {
+                "actor" => &mut actor,
+                "source" => &mut source,
+                _ => continue,
+            };
+            if slot.is_some() {
+                return Err(format!("{name} may be given once"));
+            }
+            if value.is_empty()
+                || value.chars().count() > Self::MAX_LEN
+                || value.chars().any(char::is_control)
+            {
+                return Err(format!(
+                    "{name} must be 1..={} characters with no control characters",
+                    Self::MAX_LEN
+                ));
+            }
+            *slot = Some(value.to_owned());
+        }
+        out.actor = actor;
+        if let Some(source) = source {
+            out.source = source;
+        }
+        Ok(out)
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 fn apply_update(shared: &SharedStore, update: &str) -> Result<serde_json::Value, AppError> {
-    let applied = apply_update_as(shared, update, false)?;
+    apply_update_reported(shared, update, &Attribution::default())
+}
+
+fn apply_update_reported(
+    shared: &SharedStore,
+    update: &str,
+    attribution: &Attribution,
+) -> Result<serde_json::Value, AppError> {
+    let applied = apply_update_attributed(shared, update, false, attribution)?;
     let store = shared.lock();
     applied.report(&store)
 }
@@ -194,10 +279,21 @@ fn apply_update(shared: &SharedStore, update: &str) -> Result<serde_json::Value,
 /// The dataset is the slice [`update_slice::plan`] names, or a copy of the
 /// whole store when it cannot name one (or `force_full`, which tests use to
 /// compare both paths). Planning parses only, so it runs before the lock.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn apply_update_as(
     shared: &SharedStore,
     update: &str,
     force_full: bool,
+) -> Result<Applied, AppError> {
+    apply_update_attributed(shared, update, force_full, &Attribution::default())
+}
+
+/// [`apply_update_as`] with the caller's declared [`Attribution`].
+pub(super) fn apply_update_attributed(
+    shared: &SharedStore,
+    update: &str,
+    force_full: bool,
+    attribution: &Attribution,
 ) -> Result<Applied, AppError> {
     let plan = if force_full {
         Plan::Full("forced")
@@ -279,8 +375,8 @@ pub(super) fn apply_update_as(
     let txs = store.transact_graph_batches_tx(
         &batches,
         &now,
-        Some("sparql-update"),
-        Some("sparql-update"),
+        attribution.actor.as_deref(),
+        Some(&attribution.source),
     )?;
     // Register every named graph this update asserted into, so the next
     // update's dataset includes it (aegis-e9o5ci). After the commit, so a
@@ -400,3 +496,7 @@ mod tests;
 #[cfg(test)]
 #[path = "update_report_tests.rs"]
 mod update_report_tests;
+
+#[cfg(test)]
+#[path = "update_attribution_tests.rs"]
+mod update_attribution_tests;
