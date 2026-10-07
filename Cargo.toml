@@ -99,7 +99,7 @@ tar = "0.4"
 # `serialize` carries the wasm export/import story (quipu-2l5,
 # docs/design/wasm-support.md §6): sqlite3_serialize IS the .db interchange
 # format, on native and wasm alike.
-rusqlite = { version = "0.40", features = ["bundled", "hooks", "serialize"] }
+rusqlite = { version = "0.40", features = ["bundled", "functions", "hooks", "serialize"] }
 thiserror = "2"
 oxrdf = { version = "0.3", features = ["rdfc-10"] }
 oxttl = "0.2"
