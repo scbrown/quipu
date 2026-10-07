@@ -262,6 +262,21 @@ curl localhost:3030/update -X POST \
   --data 'INSERT DATA { <http://example/s> <http://example/p> "value" }'
 ```
 
+A successful update returns `200` with what it committed:
+
+```json
+{"tx": 4182, "asserted": 1, "retracted": 0,
+ "graphs": [{"graph": null, "tx": 4182, "asserted": 1, "retracted": 0}]}
+```
+
+`asserted` and `retracted` count the triples the update changed, so a
+conditional `DELETE`/`INSERT ... WHERE` used as a compare-and-swap (claim if
+unassigned, release if still mine) can tell whether it won without a read-back:
+both zero means the `WHERE` matched nothing, or the update changed nothing, and
+`tx` is `null`. Each graph with changes commits its own transaction (`graph` is
+`null` for the default graph); `tx` is the last of them, usable with `--at` /
+`tx` reads. The SPARQL 1.1 Protocol leaves this body to the implementation.
+
 Quipu's JSON extension compacts result IRIs to CURIEs by default using prefixes
 declared by the currently loaded shape sets; unknown namespaces remain full
 IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=1` on GET, to
