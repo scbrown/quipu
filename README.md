@@ -122,11 +122,19 @@ Quipu is for.
 | you want to | run |
 |---|---|
 | load Turtle, checked against your shapes | `quipu knot <file.ttl> --shapes <shapes.ttl>` |
+| bulk-load a lot of data at once, validated before it touches your graph | `quipu share --output <dir>` from a scratch store, then `quipu import <dir>` (staged and shape-checked; failures are quarantined), then `quipu import promote <share-id>` (one transaction into ROOT) |
+| migrate or move a dataset between stores | the same three steps: `share`, `import`, `import promote` |
 | ask a SPARQL question | `quipu read '<sparql>'` |
 | see the graph as it was on a date | `quipu read '<sparql>' --valid-at 2026-09-01` |
 | see what depends on an entity | `quipu impact <entity-IRI>` |
 | keep shapes in the store, so every write is checked | `quipu shapes load <name> <shapes.ttl>` |
 | explore it in a browser, or over HTTP | `quipu-server --db <file> --bind 127.0.0.1:3030` |
+
+For a bulk load, a migration or a backfill, use **import + promote**, not
+thousands of `knot` or SPARQL Update writes. `import` validates the whole dataset
+in its own staging graph and never touches ROOT. `promote` then admits it in a
+single transaction, and one fork rollback undoes it. Walkthrough:
+[Bulk loads and migrations](docs/book/src/recipes/bulk-loads.md).
 
 Every command and flag: [CLI reference](docs/book/src/reference/cli.md). The HTTP
 endpoints: [REST API](docs/book/src/reference/rest-api.md).
