@@ -14,6 +14,25 @@ pub(crate) async fn export(
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::response::Response, AppError> {
     blocking(move || {
+        // Fail closed: export builds packs and shares that leave the host, and an
+        // unrecognised scope key (`scope`, `scope_kind`, `graph_iri`, ...) used to
+        // fall through to a ROOT export with HTTP 200. ROOT stays the documented
+        // default only when the request names no scope at all.
+        if !input.is_object() {
+            return Err(quipu::Error::InvalidValue(
+                "export request must be a JSON object; nothing was exported".into(),
+            )
+            .into());
+        }
+        let unknown = super::input_fields::ignored("quipu_export", &input);
+        if !unknown.is_empty() {
+            return Err(quipu::Error::InvalidValue(format!(
+                "export refused: unrecognised field(s) {}; nothing was exported. \
+                 Scope with one of graph, group_id or construct, or omit all three for ROOT",
+                unknown.join(", ")
+            ))
+            .into());
+        }
         let format_str = input
             .get("format")
             .and_then(|v| v.as_str())
@@ -49,10 +68,7 @@ pub(crate) async fn export(
             (None, None) => quipu::export_rdf_subset(&store, format, graph)?,
             _ => unreachable!("mutually exclusive export scopes checked above"),
         };
-        let mut response =
-            ([(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response();
-        super::input_fields::header("quipu_export", &input, response.headers_mut());
-        Ok(response)
+        Ok(([(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response())
     })
     .await
 }
