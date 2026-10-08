@@ -41,9 +41,9 @@ fn a_copy_past_the_ceiling_is_refused_before_it_finishes() {
         error.contains("DELETE DATA"),
         "the refusal names the rewrite: {error}"
     );
-    assert!(
-        copied <= 5,
-        "the copy stops at the ceiling, not after the store: {copied}"
+    assert_eq!(
+        copied, 0,
+        "refused from the COUNT, before loading any graph"
     );
     assert!(REFUSED.load(Ordering::Relaxed) > refused_before);
 }

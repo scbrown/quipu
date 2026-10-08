@@ -65,23 +65,40 @@ pub(super) fn copy(
     limit: usize,
 ) -> Result<(), AppError> {
     STARTED.fetch_add(1, Ordering::Relaxed);
+    // Count FIRST: loading one graph's facts already materialises the whole
+    // graph, so a check during the copy fires only after that cost is paid
+    // (measured: +481 MB on a 773k-fact board before refusing). The per-graph
+    // COUNT is the store's documented affordability check.
+    let mut total = 0usize;
+    if limit > 0 {
+        for (graph_id, _) in graphs {
+            total = total.saturating_add(store.current_fact_count(*graph_id)?);
+        }
+    }
     let mut copied = 0usize;
     for (graph_id, graph) in graphs {
+        if limit > 0 && total > limit {
+            break;
+        }
         for fact in store.current_facts_in_graph(*graph_id)? {
             copied += 1;
             if limit > 0 && copied > limit {
-                REFUSED.fetch_add(1, Ordering::Relaxed);
-                return Err(quipu::Error::InvalidValue(format!(
-                    "this update cannot be sliced ({reason}): it reads an open subject \
+                total = copied;
+                break;
+            }
+            super::insert_fact(store, ox, fact.entity, fact.attribute, &fact.value, graph)?;
+        }
+    }
+    if limit > 0 && total > limit {
+        REFUSED.fetch_add(1, Ordering::Relaxed);
+        return Err(quipu::Error::InvalidValue(format!(
+            "this update cannot be sliced ({reason}): it reads an open subject \
                      with an open predicate, which needs a copy of the whole store, and \
                      the store holds more than {limit} facts. Rewrite it with constant \
                      subjects (for example DELETE DATA with the explicit triples, or one \
                      subject per pattern), or raise server.update_full_copy_max_facts"
-                ))
-                .into());
-            }
-            super::insert_fact(store, ox, fact.entity, fact.attribute, &fact.value, graph)?;
-        }
+        ))
+        .into());
     }
     Ok(())
 }
