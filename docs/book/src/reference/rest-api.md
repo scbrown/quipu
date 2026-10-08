@@ -886,7 +886,8 @@ semantic and keyword endpoints retain their configured result limits.
 Both branches retain temporal, graph and provenance scopes. Intermediate hybrid
 weights use semantic type inference for both branches (`infer_types: true`);
 asserted-only hybrid type scopes are refused until both branches support them.
-Content and anchor reranking are not yet composed with intermediate fusion.
+Content reranking is not composed with intermediate fusion. Graph anchors
+compose with semantic, keyword and hybrid ranking when `anchored = true`.
 Intermediate weights require query text; an optional embedding supplies the
 semantic branch. Endpoints retain their pure modes' input requirements and
 restrictions (keyword rejects embeddings; semantic permits an embedding without
@@ -1026,14 +1027,31 @@ facts (`valid_at` applies). `owl:sameAs` costs no hop. `rdf:type`,
 `rdfs:subClassOf`, PROV links, `distinctFrom`, `mentions` and `inDocument` are
 not traversed. Without that, everything is two hops from everything through a
 class, an activity or a document. A node with more than 150 edges is reached
-but not expanded; the anchor itself is always expanded. The walk stops at 5,000
+but not expanded along ordinary edges; zero-cost aliases remain traversable.
+Non-anchor reads fetch at most 151 object edges per direction before applying
+the hub rule. At the outer hop ring, only alias edges are queried. The anchor
+read is bounded by the node budget, and a possibly incomplete ring is reported
+as truncated. The walk stops at 5,000
 nodes. The response's `anchor` block reports `reached`, `hubs_not_expanded`,
 `truncated` and `truncated_at_hop`. A truncated ring is never presented as
 complete.
 
 Each result gains `hops` (null when unreachable) and `text_score` (the
-unanchored score). The 200 best unanchored candidates are reordered, so an
-entity outside that pool is not added by being near the anchor.
+blended text score before hop ranking). Global text candidates and candidates
+restricted to the bounded neighbourhood are unioned before fusion. Each source
+gets half the configured candidate pool; each text branch is capped at 1,000.
+This admits a near text match that falls below the global pool. Normalization
+and ranks use that bounded union. Anchored result limits above 1,000 are refused.
+Explicit named-graph anchors remain unsupported; traversal is ROOT-only.
+Malformed anchors and traversal options are refused.
+
+The CLI exposes the same controls:
+
+```bash
+quipu search "backup failure" --mode hybrid --alpha 0.5 --fusion rrf \
+  --anchor https://example.org/host --max-hops 3 --anchor-mode sort \
+  --direction both --decay 0.5 --explain
+```
 
 ### `POST /hybrid_search`
 

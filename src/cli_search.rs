@@ -9,7 +9,16 @@ pub fn cmd_search(args: &[String], db: &str) {
         );
         std::process::exit(1);
     };
-    for flag in ["--graph", "--graphs"] {
+    for flag in [
+        "--graph",
+        "--graphs",
+        "--anchor",
+        "--anchor-mode",
+        "--direction",
+        "--max-hops",
+        "--via",
+        "--decay",
+    ] {
         if args.iter().any(|arg| arg == flag)
             && flag_value(args, flag).is_none_or(|value| value.starts_with("--"))
         {
@@ -25,7 +34,11 @@ pub fn cmd_search(args: &[String], db: &str) {
             std::process::exit(1);
         }));
     }
-    for (flag, key) in [("--alpha", "alpha"), ("--rrf-k", "rrf_k")] {
+    for (flag, key) in [
+        ("--alpha", "alpha"),
+        ("--rrf-k", "rrf_k"),
+        ("--decay", "decay"),
+    ] {
         if let Some(value) = flag_value(args, flag) {
             let parsed = value
                 .parse::<f64>()
@@ -37,6 +50,24 @@ pub fn cmd_search(args: &[String], db: &str) {
                 });
             input[key] = serde_json::json!(parsed);
         }
+    }
+    for (flag, key) in [
+        ("--anchor", "anchor"),
+        ("--anchor-mode", "anchor_mode"),
+        ("--direction", "direction"),
+    ] {
+        if let Some(value) = flag_value(args, flag) {
+            input[key] = serde_json::json!(value);
+        }
+    }
+    if let Some(value) = flag_value(args, "--max-hops") {
+        input["max_hops"] = serde_json::json!(value.parse::<u64>().unwrap_or_else(|_| {
+            eprintln!("error: --max-hops must be an unsigned integer");
+            std::process::exit(1);
+        }));
+    }
+    if let Some(value) = flag_value(args, "--via") {
+        input["via"] = serde_json::json!(value.split(',').collect::<Vec<_>>());
     }
     if let Some(fusion) = flag_value(args, "--fusion") {
         input["fusion"] = serde_json::json!(fusion);
