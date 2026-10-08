@@ -23,9 +23,11 @@ pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
             .find(|window| window[0] == name)
             .map(|window| window[1].as_str())
     };
-    quipu::QuipuConfig::load(std::path::Path::new("."))
+    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
         .with_db_override(flag("--db"))
-        .with_bind_override(flag("--bind"))
+        .with_bind_override(flag("--bind"));
+    super::update::update_full::set_max_facts(config.server.update_full_copy_max_facts);
+    config
 }
 
 /// quipu #47: report the configured federation remotes at startup, and prove
