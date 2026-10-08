@@ -92,18 +92,35 @@ const NODE_BUDGET: usize = 5000;
 /// A node with more edges than this is reached but not expanded.
 const HUB_DEGREE: usize = 150;
 
+fn text_option<'a>(input: &'a JsonValue, key: &str) -> Result<Option<&'a str>> {
+    input
+        .get(key)
+        .map(|v| {
+            v.as_str()
+                .ok_or_else(|| Error::InvalidValue(format!("{key} must be a string")))
+        })
+        .transpose()
+}
+
 impl AnchorRequest {
     /// `None` when the request names no anchor: the plain path is untouched.
     pub fn parse(input: &JsonValue) -> Result<Option<Self>> {
-        let Some(anchor) = input.get("anchor").and_then(JsonValue::as_str) else {
+        let Some(value) = input.get("anchor") else {
             return Ok(None);
         };
-        let max_hops = input
-            .get("max_hops")
-            .and_then(JsonValue::as_u64)
-            .map_or(3, |h| u32::try_from(h).unwrap_or(u32::MAX))
-            .min(MAX_HOPS_CAP);
-        let mode = match input.get("anchor_mode").and_then(JsonValue::as_str) {
+        let anchor = value
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| Error::InvalidValue("anchor must be a nonempty string".into()))?;
+        let max_hops = match input.get("max_hops") {
+            None => 3,
+            Some(v) => u32::try_from(v.as_u64().ok_or_else(|| {
+                Error::InvalidValue("max_hops must be a nonnegative integer".into())
+            })?)
+            .unwrap_or(u32::MAX),
+        }
+        .min(MAX_HOPS_CAP);
+        let mode = match text_option(input, "anchor_mode")? {
             None | Some("decay") => Mode::Decay,
             Some("sort") => Mode::Sort,
             Some("filter") => Mode::Filter,
@@ -113,20 +130,33 @@ impl AnchorRequest {
                 )));
             }
         };
-        let decay = input
-            .get("decay")
-            .and_then(JsonValue::as_f64)
-            .unwrap_or(0.5);
+        let decay = match input.get("decay") {
+            None => 0.5,
+            Some(v) => v
+                .as_f64()
+                .ok_or_else(|| Error::InvalidValue("decay must be a number".into()))?,
+        };
         if !(decay > 0.0 && decay <= 1.0) {
             return Err(Error::InvalidValue("decay must be in (0, 1]".into()));
         }
-        let via = input.get("via").and_then(JsonValue::as_array).map(|a| {
-            a.iter()
-                .filter_map(JsonValue::as_str)
-                .map(str::to_owned)
-                .collect()
-        });
-        let direction = match input.get("direction").and_then(JsonValue::as_str) {
+        let via = match input.get("via") {
+            None => None,
+            Some(v) => Some(
+                v.as_array()
+                    .ok_or_else(|| Error::InvalidValue("via must be a string array".into()))?
+                    .iter()
+                    .map(|v| {
+                        v.as_str()
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_owned)
+                            .ok_or_else(|| {
+                                Error::InvalidValue("via entries must be nonempty strings".into())
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+        };
+        let direction = match text_option(input, "direction")? {
             None | Some("both") => Direction::Both,
             Some("out") => Direction::Out,
             Some("in") => Direction::In,
@@ -239,7 +269,20 @@ fn edges(
     node: i64,
     direction: Direction,
     valid_at: Option<&str>,
+    cap: usize,
+    aliases_only: Option<&HashSet<i64>>,
 ) -> Result<Vec<(i64, i64, bool)>> {
+    if aliases_only.is_some_and(HashSet::is_empty) {
+        return Ok(Vec::new());
+    }
+    let alias_filter = aliases_only.map_or(String::new(), |ids| {
+        let mut ids: Vec<_> = ids.iter().copied().collect();
+        ids.sort_unstable();
+        format!(
+            " AND a IN ({})",
+            ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",")
+        )
+    });
     let live = if valid_at.is_some() {
         "valid_from <= ?2 AND (valid_to IS NULL OR valid_to > ?2)"
     } else {
@@ -248,7 +291,7 @@ fn edges(
     let mut out = Vec::new();
     if direction != Direction::In {
         let mut stmt = store.prepare(&format!(
-            "SELECT a, v FROM facts WHERE e = ?1 AND g = 0 AND op = 1 AND {live}"
+            "SELECT a, v FROM facts WHERE e = ?1 AND g = 0 AND op = 1 AND {live} AND substr(v,1,1) = x'00'{alias_filter} ORDER BY a, v LIMIT {cap}"
         ))?;
         let rows = stmt.query_map(rusqlite::params![node, valid_at], |r| {
             Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?))
@@ -262,7 +305,7 @@ fn edges(
     }
     if direction != Direction::Out {
         let mut stmt = store.prepare(&format!(
-            "SELECT e, a FROM facts WHERE v = ?1 AND g = 0 AND op = 1 AND {}",
+            "SELECT e, a FROM facts WHERE v = ?1 AND g = 0 AND op = 1 AND {}{alias_filter} ORDER BY e, a LIMIT {cap}",
             live.replace("?2", "?3")
         ))?;
         let rows = stmt.query_map(
@@ -281,8 +324,9 @@ fn edges(
 
 fn ids(store: &Store, iris: &[String]) -> Result<HashSet<i64>> {
     let mut out = HashSet::new();
+    let prefixes = crate::compact::PrefixMap::from_store(store)?;
     for iri in iris {
-        out.extend(store.lookup_all(iri)?);
+        out.extend(store.lookup_all(&prefixes.expand(iri))?);
     }
     Ok(out)
 }
@@ -311,14 +355,32 @@ pub(super) fn walk(
     let mut hubs_not_expanded = 0;
     while let Some(node) = queue.pop_front() {
         let here = hops[&node];
-        // At the limit only a zero-cost sameAs edge can still reach a node.
-        if here >= req.max_hops && same_as.is_empty() {
-            continue;
+        // At the limit, query ONLY zero-cost aliases instead of materializing
+        // the whole outer ring merely to discard every ordinary edge.
+        let aliases_only = (here >= req.max_hops).then_some(&same_as);
+        let cap = if node == anchor {
+            req.budget.saturating_add(1)
+        } else {
+            HUB_DEGREE + 1
+        };
+        let mut all = edges(store, node, req.direction, valid_at, cap, aliases_only)?;
+        if node == anchor && all.len() >= cap {
+            truncated_at = Some(here.saturating_add(1).min(req.max_hops));
         }
-        let all = edges(store, node, req.direction, valid_at)?;
         if node != anchor && all.len() > HUB_DEGREE {
             hubs_not_expanded += 1;
-            continue;
+            // A hub suppresses ordinary expansion, never alias collapse.
+            all = edges(
+                store,
+                node,
+                req.direction,
+                valid_at,
+                HUB_DEGREE + 1,
+                Some(&same_as),
+            )?;
+            if all.len() > HUB_DEGREE {
+                truncated_at = Some(truncated_at.map_or(here, |t: u32| t.min(here)));
+            }
         }
         for (next, pred, out) in all {
             let zero = same_as.contains(&pred);

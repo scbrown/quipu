@@ -198,3 +198,186 @@ fn a_budget_hit_reports_truncation_and_explain_gives_a_path() {
         "{path}"
     );
 }
+
+#[test]
+fn malformed_anchor_is_refused_instead_of_answering_unanchored() {
+    for anchor in [json!(null), json!(7), json!([]), json!("")] {
+        let input = json!({"embedding":[1.,0.,0.,0.],"anchor":anchor});
+        assert!(
+            tool_search(&store(true), &input)
+                .unwrap_err()
+                .to_string()
+                .contains("nonempty string")
+        );
+    }
+}
+
+#[test]
+fn hub_edges_are_bounded_and_outer_ring_queries_only_aliases() {
+    let s = store(true);
+    let hub = s.lookup(&format!("{EX}hub")).unwrap().unwrap();
+    let capped = edges(&s, hub, Direction::Out, None, HUB_DEGREE + 1, None).unwrap();
+    assert_eq!(capped.len(), HUB_DEGREE + 1);
+    let a = s.lookup(&format!("{EX}a")).unwrap().unwrap();
+    let aliases = ids(&s, &[namespace::OWL_SAME_AS.to_owned()]).unwrap();
+    let outer = edges(&s, a, Direction::Both, None, HUB_DEGREE + 1, Some(&aliases)).unwrap();
+    assert_eq!(outer.len(), 1);
+    assert!(
+        outer
+            .iter()
+            .all(|(_, predicate, _)| aliases.contains(predicate))
+    );
+    assert!(
+        edges(
+            &s,
+            a,
+            Direction::Both,
+            None,
+            HUB_DEGREE + 1,
+            Some(&HashSet::new())
+        )
+        .unwrap()
+        .is_empty()
+    );
+}
+
+#[test]
+fn anchor_neighbours_are_admitted_below_the_global_pool_for_each_text_mode() {
+    let mut s = store(true);
+    s.search_config_mut().keyword = true;
+    s.search_config_mut().hybrid = true;
+    s.initialize_lexical_index().unwrap();
+    while !s.backfill_lexical_batch(1000).unwrap().complete {}
+    let mut ttl = String::from(
+        "@prefix ex: <http://example.org/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . ex:r ex:p ex:near . ex:near rdfs:label \"needle weak\" .\n",
+    );
+    for n in 0..250 {
+        ttl.push_str(&format!("ex:global{n} rdfs:label \"needle\" .\n"));
+    }
+    crate::rdf::ingest_rdf(
+        &mut s,
+        ttl.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-10-07T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let near = s.lookup(&format!("{EX}near")).unwrap().unwrap();
+    s.embed_entity(
+        near,
+        "needle weak",
+        &[0.01, 1., 0., 0.],
+        "2026-10-07T00:00:00Z",
+    )
+    .unwrap();
+    for n in 0..250 {
+        let id = s.lookup(&format!("{EX}global{n}")).unwrap().unwrap();
+        s.embed_entity(id, "needle", &[1., 0., 0., 0.], "2026-10-07T00:00:00Z")
+            .unwrap();
+    }
+    for alpha in [0.0, 0.5, 1.0] {
+        let mut input = json!({"query":"needle","limit":1,"mode":"hybrid","alpha":alpha,"anchor":format!("{EX}r"),"anchor_mode":"sort","explain":true,"verbose":true});
+        if alpha != 0.0 {
+            input["embedding"] = json!([1., 0., 0., 0.]);
+        }
+        let r = tool_search(&s, &input).unwrap();
+        assert_eq!(r["count"], 1, "{r}");
+        assert_eq!(r["results"][0]["entity"], format!("{EX}near"), "{r}");
+        assert_eq!(r["results"][0]["hops"], 1);
+        assert!(r["results"][0]["path"].as_str().unwrap().contains("near"));
+        assert!(r["results"][0]["explain"].is_object());
+        let mut plain = input.clone();
+        plain.as_object_mut().unwrap().remove("anchor");
+        let before = tool_search(&s, &plain).unwrap();
+        s.search_config_mut().anchored = false;
+        assert_eq!(tool_search(&s, &plain).unwrap(), before);
+        assert!(
+            tool_search(&s, &input)
+                .unwrap_err()
+                .to_string()
+                .contains("disabled")
+        );
+        s.search_config_mut().anchored = true;
+    }
+}
+
+#[test]
+fn malformed_traversal_options_cannot_silently_widen_the_walk() {
+    for extra in [
+        json!({"max_hops":-1}),
+        json!({"max_hops":"3"}),
+        json!({"via":[7]}),
+        json!({"via":"p"}),
+        json!({"direction":7}),
+        json!({"anchor_mode":7}),
+        json!({"decay":"0.5"}),
+    ] {
+        let mut input = extra;
+        input["anchor"] = json!(format!("{EX}a"));
+        assert!(AnchorRequest::parse(&input).is_err(), "{input}");
+    }
+    assert!(AnchorRequest::parse(&json!({"anchor":format!("{EX}a"),"via":[]})).is_ok());
+}
+
+#[test]
+fn neighbourhood_candidates_retain_type_and_historical_text_scope() {
+    let mut s = Store::open_in_memory().unwrap();
+    s.search_config_mut().anchored = true;
+    s.search_config_mut().hybrid = true;
+    s.search_config_mut().keyword = true;
+    s.initialize_lexical_index().unwrap();
+    let old = r#"@prefix ex: <http://example.org/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+      ex:root ex:p ex:public, ex:secret . ex:public a ex:Public ; rdfs:label "old record" .
+      ex:secret a ex:Secret ; rdfs:label "needle secret" ."#;
+    crate::rdf::ingest_rdf(
+        &mut s,
+        old.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    for (name, text) in [("public", "old record"), ("secret", "needle secret")] {
+        let id = s.lookup(&format!("{EX}{name}")).unwrap().unwrap();
+        s.embed_entity(id, text, &[1., 0.], "2026-01-01T00:00:00Z")
+            .unwrap();
+    }
+    let later = r#"<http://example.org/public> <http://www.w3.org/2000/01/rdf-schema#comment> "needle future" ."#;
+    crate::rdf::ingest_rdf(
+        &mut s,
+        later.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-10-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let public = s.lookup(&format!("{EX}public")).unwrap().unwrap();
+    s.embed_entity(public, "needle future", &[1., 0.], "2026-10-01T00:00:00Z")
+        .unwrap();
+    let base = json!({"mode":"hybrid","alpha":0.5,"query":"needle","embedding":[1.,0.],"anchor":format!("{EX}root"),"anchor_mode":"filter","entity_type":format!("{EX}Public"),"valid_at":"2026-02-01T00:00:00Z","verbose":true,"explain":true});
+    let historical = tool_search(&s, &base).unwrap();
+    assert_eq!(historical["count"], 1);
+    assert_eq!(historical["results"][0]["entity"], format!("{EX}public"));
+    assert!(
+        !historical["results"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("future")
+    );
+    assert!(historical["results"][0]["explain"]["bm25"].is_null());
+    let mut keyword = base.clone();
+    keyword["alpha"] = json!(0.0);
+    keyword.as_object_mut().unwrap().remove("embedding");
+    assert_eq!(tool_search(&s, &keyword).unwrap()["count"], 0);
+    keyword["query"] = json!("old");
+    assert_eq!(tool_search(&s, &keyword).unwrap()["count"], 1);
+    keyword["query"] = json!("needle");
+    keyword["valid_at"] = json!("2026-10-02T00:00:00Z");
+    assert_eq!(tool_search(&s, &keyword).unwrap()["count"], 1);
+}
