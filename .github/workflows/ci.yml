@@ -514,9 +514,17 @@ jobs:
         run: scripts/quipu-query-perf.py self-test
       - name: Build release binaries
         run: cargo build --release --locked --features full --bin quipu --bin quipu-server
-      - name: Generate and load the fixture
+      - name: Restore generated query fixture
+        id: query-fixture
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/fixture
+          key: query-fixture-v1-${{ hashFiles('scripts/quipu-query-perf.py') }}
+      - name: Generate query fixture on cache miss
+        if: steps.query-fixture.outputs.cache-hit != 'true'
+        run: scripts/quipu-query-perf.py generate --out "$RUNNER_TEMP/fixture"
+      - name: Load the fixture
         run: |
-          scripts/quipu-query-perf.py generate --out "$RUNNER_TEMP/fixture"
           scripts/quipu-query-perf.py load --fixture "$RUNNER_TEMP/fixture" \
             --db /dev/shm/query-perf.db --quipu target/release/quipu
       - name: Run the query performance gate

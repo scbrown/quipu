@@ -56,6 +56,10 @@ urn:quipu:graph:root`. Load the fixture onto tmpfs (`/dev/shm`): every chunk
 commits with an fsync, and on a busy disk the same load takes over 10 minutes
 instead of about 3.
 
+CI caches the generated N-Triples and manifest by generator source hash. A
+changed generator invalidates the cache. Each job still loads a fresh database
+with its own binaries, so a cached database cannot hide schema changes.
+
 ## Running it
 
 ```sh
