@@ -319,6 +319,7 @@ fn routes_in_server_source() -> Vec<String> {
     const NO_ROUTES: &[&str] = &[
         "server/admission.rs",
         "server/auth.rs",
+        "server/auth_response.rs",
         "server/base.rs",
         "server/entity.rs",
         "server/feed.rs",
@@ -571,7 +572,9 @@ fn auth_refusals_carry_a_json_body_not_a_bare_status() {
     // And the replacement must actually be there — a file that stopped
     // refusing at all would pass the checks above vacuously.
     assert!(
-        src.contains("missing_or_invalid_bearer_token"),
+        src.contains("auth_response::unauthorized(&path, why)")
+            && include_str!("../server/auth_response.rs")
+                .contains("missing_or_invalid_bearer_token"),
         "the 401 arm no longer emits its JSON reason code"
     );
     assert!(
