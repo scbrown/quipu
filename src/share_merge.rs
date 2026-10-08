@@ -20,11 +20,11 @@ pub(crate) type Graph = HashSet<Triple>;
 type Slot = (String, String);
 
 #[derive(Clone)]
-struct LoadedShare {
-    dir: PathBuf,
-    manifest: ShareManifest,
-    graph: Graph,
-    shapes: String,
+pub(crate) struct LoadedShare {
+    pub(crate) dir: PathBuf,
+    pub(crate) manifest: ShareManifest,
+    pub(crate) graph: Graph,
+    pub(crate) shapes: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,15 +72,24 @@ pub(crate) fn parse_graph(input: &str, what: &str) -> Result<Graph> {
         .collect()
 }
 
-fn read_share(dir: &Path) -> Result<LoadedShare> {
+pub(crate) fn read_share(dir: &Path) -> Result<LoadedShare> {
     let read = |name: &str| {
         std::fs::read_to_string(dir.join(name))
             .map_err(|e| Error::Store(format!("share read {}/{name}: {e}", dir.display())))
     };
     let manifest: ShareManifest = serde_json::from_str(&read("manifest.json")?)
         .map_err(|e| Error::Serialization(format!("share manifest: {e}")))?;
-    let export = read("export.nt")?;
-    let shapes = read("shapes.ttl")?;
+    share_from_parts(dir, manifest, &read("export.nt")?, read("shapes.ttl")?)
+}
+
+/// A share delivered inline (REST / MCP), checked exactly as one read from
+/// disk: envelope schema, share id, and both payload hashes (aegis-yavo9c).
+pub(crate) fn share_from_parts(
+    dir: &Path,
+    manifest: ShareManifest,
+    export: &str,
+    shapes: String,
+) -> Result<LoadedShare> {
     let expected_share_id = sha256(&manifest_bytes(&manifest, false)?);
     if manifest.schema != "https://github.com/scbrown/quipu/share-manifest/v1"
         || manifest.files.graph != "export.nt"
@@ -97,7 +106,7 @@ fn read_share(dir: &Path) -> Result<LoadedShare> {
     Ok(LoadedShare {
         dir: dir.into(),
         manifest,
-        graph: parse_graph(&export, "share export.nt")?,
+        graph: parse_graph(export, "share export.nt")?,
         shapes,
     })
 }
@@ -123,7 +132,7 @@ fn scan(root: &Path, depth: usize, out: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn locate_base(incoming: &LoadedShare) -> Result<LoadedShare> {
+pub(crate) fn locate_base(incoming: &LoadedShare) -> Result<LoadedShare> {
     let parent = incoming.manifest.parent_share.as_deref().ok_or_else(|| {
         Error::InvalidValue(
             "incoming share has no parent_share; three-way merge has no base".into(),
@@ -151,7 +160,7 @@ fn locate_base(incoming: &LoadedShare) -> Result<LoadedShare> {
     }
 }
 
-fn root_graph(store: &Store) -> Result<(Graph, String)> {
+pub(crate) fn root_graph(store: &Store) -> Result<(Graph, String)> {
     let (bytes, _) = crate::rdf::export_rdf_subset(store, RdfFormat::NTriples, None)?;
     let hash = sha256(&bytes);
     let text = String::from_utf8(bytes)
@@ -159,7 +168,7 @@ fn root_graph(store: &Store) -> Result<(Graph, String)> {
     Ok((parse_graph(&text, "ROOT export")?, hash))
 }
 
-fn by_slot(graph: &Graph) -> BTreeMap<Slot, BTreeSet<String>> {
+pub(crate) fn by_slot(graph: &Graph) -> BTreeMap<Slot, BTreeSet<String>> {
     let mut out = BTreeMap::new();
     for t in graph {
         out.entry((t.subject.to_string(), t.predicate.as_str().to_string()))
@@ -291,8 +300,22 @@ pub fn merge(
             conflicts,
         });
     }
-    let additions: Graph = merged.difference(&ours).cloned().collect();
-    let removals: Graph = ours.difference(&merged).cloned().collect();
+    let source = format!("share-merge:parents={},{}", parents[0], parents[1]);
+    commit(store, &ours, &merged, parents, &source, timestamp, actor)
+}
+
+/// Write `merged` over `ours` as ONE transaction and report it.
+pub(crate) fn commit(
+    store: &mut Store,
+    ours: &Graph,
+    merged: &Graph,
+    parents: [String; 2],
+    source: &str,
+    timestamp: &str,
+    actor: Option<&str>,
+) -> Result<MergeResult> {
+    let additions: Graph = merged.difference(ours).cloned().collect();
+    let removals: Graph = ours.difference(merged).cloned().collect();
     let render = |g: &Graph| {
         let mut lines: Vec<_> = g.iter().map(|t| format!("{t} .\n")).collect();
         lines.sort();
@@ -316,8 +339,7 @@ pub fn merge(
         d.op = Op::Retract;
     }
     datums.extend(retracts);
-    let source = format!("share-merge:parents={},{}", parents[0], parents[1]);
-    let tx_id = store.transact(&datums, timestamp, actor, Some(&source))?;
+    let tx_id = store.transact(&datums, timestamp, actor, Some(source))?;
     Ok(MergeResult {
         outcome: "merged".into(),
         tx_id: Some(tx_id),

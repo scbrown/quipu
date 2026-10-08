@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **46 tools** in a default build, or
-**48** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
+**50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -120,6 +120,34 @@ These are three separate tools rather than one with a `mode` because an MCP clie
 a tool by its annotation. A moded tool would carry a single, necessarily destructive
 annotation, and every read-only call — including `propose`, the entry point — would be
 refused under a no-approval policy.
+
+### `quipu_merge_decisions`
+
+**READ.** Lists the conflicts of merging an incoming share into ROOT: one row per slot
+with the `base` / `ours` / `theirs` values, the slot's `max_count`, and each side's
+provenance. The rows are bound to ROOT's graph hash and the incoming share id. With
+`propose: true`, each row also gets a mechanical `proposal` (`choose` plus `evidence`).
+It never sets a `decision` and writes nothing.
+
+`incoming` and `base` are shares **inline**, in the shape `/import` takes (`manifest`,
+`export_ntriples`, `shapes_turtle`). Both are verified by hash, and `base` must be the
+incoming share's `parent_share`. A server path is never accepted. REST:
+`POST /merge/decisions`. CLI: `quipu merge <share-dir> --emit-decisions <file> [--propose]`.
+
+### `quipu_merge_apply`
+
+**WRITE.** Finishes the merge from the decisions file with each row's `decision` set
+(`{"choose": "ours"|"theirs"|"base"}` or `{"values": [<N-Triples terms>]}`). It commits
+the clean part of the merge plus every decided slot in one transaction. The
+transaction's source records both parents, the `reviewer`, and the SHA-256 of the
+decisions.
+
+It refuses, and writes nothing, on an undecided row, stale decisions (ROOT or the share
+moved since they were emitted), more values than the slot's `sh:maxCount`, or a value
+that is not an RDF term. It also refuses a field merge-decisions/v1 does not
+define. `dry_run: true` runs every check and returns the counts it would write,
+without writing. REST: `POST /merge/apply`. CLI: `quipu merge <share-dir>
+--decisions <file> --reviewer <who> [--dry-run]`.
 
 ### `quipu_knot`
 
