@@ -25,6 +25,68 @@ fn enabled() -> Store {
 }
 
 #[test]
+fn legacy_root_index_upgrade_preserves_documents_and_requires_bounded_completion() {
+    let mut s = Store::open_in_memory().unwrap();
+    s.search_config_mut().keyword = true;
+    // Byte-frozen schema from the stage .2 implementation, before graph scope.
+    s.conn
+        .execute_batch(include_str!("legacy_root_schema.sql"))
+        .unwrap();
+    let root = fact(
+        &s,
+        "urn:legacy:root",
+        LABEL,
+        Value::Str("rootsentinel".into()),
+        T1,
+        Op::Assert,
+    );
+    s.transact(&[root], T1, None, None).unwrap();
+    let g = s.graph_create("urn:legacy:graph").unwrap();
+    let named = fact(
+        &s,
+        "urn:legacy:named",
+        LABEL,
+        Value::Str("namedsentinel".into()),
+        T1,
+        Op::Assert,
+    );
+    s.transact_to_graph(&[named], T1, None, None, g).unwrap();
+    assert_eq!(hits(&s, "rootsentinel", None).len(), 1);
+    assert!(
+        s.keyword_search_hits_in_graphs("namedsentinel", 1, None, None, &[g])
+            .unwrap_err()
+            .to_string()
+            .contains("upgrade")
+    );
+    let before = s.lexical_progress().unwrap().unwrap().documents;
+    s.initialize_lexical_index().unwrap();
+    assert_eq!(s.lexical_progress().unwrap().unwrap().documents, before);
+    assert!(!s.lexical_progress().unwrap().unwrap().complete);
+    assert!(
+        s.keyword_search("rootsentinel", 1, None, None)
+            .unwrap_err()
+            .to_string()
+            .contains("not ready")
+    );
+    let mut batches = 0;
+    loop {
+        batches += 1;
+        if s.backfill_lexical_batch(1).unwrap().complete {
+            break;
+        }
+    }
+    assert!(batches > 1);
+    assert_eq!(hits(&s, "rootsentinel", None).len(), 1);
+    assert_eq!(
+        s.keyword_search_hits_in_graphs("namedsentinel", 1, None, None, &[g])
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(hits(&s, "namedsentinel", None).is_empty());
+}
+
+#[test]
 fn source_access_uses_rowid_bounds_instead_of_scanning_root_graph() {
     let s = enabled();
     for predicate in ["fact_id>34000 AND fact_id<=36000", "fact_id=34001"] {

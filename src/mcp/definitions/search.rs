@@ -22,7 +22,9 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" },
                     "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: best-effort filter to entities from these provenance groups (episode-scoped label, NOT an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope)" },
                     "entity_type": { "type": "string", "description": "Optional: restrict to entities of this rdf:type IRI" },
-                    "graph": { "type": "string", "description": "Optional: search one registered named graph instead of ROOT. An unknown graph IRI is refused, never silently ROOT. Omit to search ROOT." },
+                    "graph": { "type": "string", "description": "Search one registered graph IRI, or all. Unknown IRIs are refused; omitted scope searches ROOT." },
+                    "graphs": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "Search the union of these registered graph IRIs. Mutually exclusive with graph/all_graphs." },
+                    "all_graphs": { "type": "boolean", "description": "Search ROOT and all registered named graphs, excluding the graph metadata plane. Opt-in." },
                     "ranking": { "type": "string", "enum": ["content", "semantic"], "default": "semantic", "description": "Content ranking demotes repository artifacts lacking explanatory content; semantic returns raw cosine order." }
                     ,"verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
                     ,"anchor": { "type": "string", "description": "Root the search on ONE entity (IRI, CURIE or exact label; ambiguity is refused, never guessed) and rank by hop distance from it. Requires [quipu.search] anchored = true on the server." }

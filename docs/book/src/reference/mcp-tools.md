@@ -375,6 +375,9 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `limit` | No | Max results (default: 10) |
 | `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
+| `graph` | No | Registered graph IRI, or `all`; omitted scope searches ROOT |
+| `graphs` | No | Nonempty list of registered graph IRIs; search their union |
+| `all_graphs` | No | Search ROOT and all registered named graphs, excluding graph metadata |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
 Requires an embedding provider when called with `query` and no `embedding`;
@@ -386,6 +389,19 @@ so zero results are distinguishable from an unembedded store — see
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
 
 Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+
+Graph selectors are mutually exclusive; unknown graphs are refused. Explicit
+scope results carry `graph` and `graphs`. Semantic scope selects entity
+membership before the result limit on the built-in SQLite backend. Other
+vector backends use bounded best-effort oversampling. Embeddings remain per entity: ROOT text
+is retained for entities with ROOT facts; other entities combine their
+named-graph facts. This is membership scoping, not per-graph embedding text.
+Explicit graph scope supports semantic and keyword ranking; ROOT content and
+anchor reranking are refused with it.
+
+Explicit graph selection requires `[quipu.search] named_graphs = true`.
+The default is false. Prepare named-only vectors with bounded backfill before
+enabling it; the flag also gates automatic named-only embedding text.
 
 Keyword mode returns `score` (positive relevance, higher first), raw SQLite
 `bm25` (lower first), and `ranking_reason: "keyword"`. It indexes literal terms

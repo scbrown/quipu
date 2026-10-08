@@ -464,7 +464,7 @@ impl Store {
             .is_some())
     }
 
-    /// Whether `entity` is a named-graph-only entity: it has current facts in
+    /// Whether `entity` is a named-graph-only entity: it has had facts in
     /// some named graph and has never had a fact in ROOT. Unscoped search
     /// excludes these so ROOT results are unchanged (aegis-rcz5ib.10).
     pub fn entity_is_named_graph_only(&self, entity: i64) -> Result<bool> {
@@ -483,8 +483,7 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT 1 FROM facts WHERE e = ?1 AND g != 0 AND op = 1 \
-                 AND valid_to IS NULL LIMIT 1",
+                "SELECT 1 FROM facts WHERE e = ?1 AND g != 0 LIMIT 1",
                 params![entity],
                 |_| Ok(()),
             )

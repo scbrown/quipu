@@ -622,6 +622,16 @@ fn named_graph_only_entity_gets_embedding_text() {
         .unwrap();
     assert_eq!(
         build_entity_text(&store, id).unwrap(),
+        "",
+        "default-off prevents an automatic named-corpus drain"
+    );
+    assert_eq!(
+        super::build_entity_text_for_graph_backfill(&store, id).unwrap(),
+        "beads#5877: Proposal: Memory Beads"
+    );
+    store.search_config_mut().named_graphs = true;
+    assert_eq!(
+        build_entity_text(&store, id).unwrap(),
         "beads#5877: Proposal: Memory Beads"
     );
 }

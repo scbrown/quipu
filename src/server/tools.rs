@@ -547,6 +547,15 @@ pub(crate) fn backfill_graph_embeddings(
         let vs = s.vector_store();
         let mut missing = Vec::new();
         for eid in s.entities_in_graph(g).map_err(|e| e.to_string())? {
+            // Preserve the observed ROOT corpus, including entities with ROOT
+            // facts but no current vector. Filling those holes is separate
+            // maintenance, not a side effect of named-graph backfill.
+            if !s
+                .entity_is_named_graph_only(eid)
+                .map_err(|e| e.to_string())?
+            {
+                continue;
+            }
             if vs
                 .current_embedding_text(eid)
                 .map_err(|e| e.to_string())?
@@ -571,7 +580,8 @@ pub(crate) fn backfill_graph_embeddings(
             let s = store.lock();
             let mut out = Vec::with_capacity(ids.len());
             for &eid in ids {
-                let text = quipu::build_entity_text(&s, eid).map_err(|e| e.to_string())?;
+                let text = quipu::build_entity_text_for_graph_backfill(&s, eid)
+                    .map_err(|e| e.to_string())?;
                 if !text.is_empty() {
                     out.push((eid, text));
                 }
@@ -586,7 +596,8 @@ pub(crate) fn backfill_graph_embeddings(
         let s = store.lock();
         let vs = s.vector_store();
         for ((eid, text), emb) in snapshots.iter().zip(embs.iter()) {
-            let current = quipu::build_entity_text(&s, *eid).map_err(|e| e.to_string())?;
+            let current =
+                quipu::build_entity_text_for_graph_backfill(&s, *eid).map_err(|e| e.to_string())?;
             if current != *text
                 || vs
                     .current_embedding_text(*eid)

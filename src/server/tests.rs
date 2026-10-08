@@ -1698,6 +1698,9 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
             "<http://example.org/item{i:02}> <http://www.w3.org/2000/01/rdf-schema#label> \"item {i:02}\" .\n"
         ));
     }
+    // A ROOT entity may also have overlay facts and no vector. Adding its
+    // first vector here would change the previously observed ROOT ranking.
+    nt.push_str("<http://example.org/root> <http://www.w3.org/2000/01/rdf-schema#label> \"overlay label\" .\n");
     quipu::rdf::ingest_rdf_to_graph(
         &mut store,
         nt.as_bytes(),
