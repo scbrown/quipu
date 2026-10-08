@@ -158,6 +158,72 @@ by value, so `"01"` reads back as `1`); others are engine defects being fixed.
 Every case, with its diagnostic, is in
 [`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).
 
+### Named SPARQL 1.0 deviations
+
+These are the current ledger's non-passing cases, including loader errors and
+runner limitations. Listing a case does not claim its engine defect is fixed.
+
+| W3C test | Status | Diagnostic |
+|---|---|---|
+| `:open-eq-01` | failed | actual result differs from expected multiset |
+| `:open-eq-03` | failed | actual result differs from expected multiset |
+| `:open-eq-04` | failed | actual result differs from expected multiset |
+| `:open-eq-06` | failed | actual result differs from expected multiset |
+| `:open-eq-07` | error | error ingesting: bad integer literal: invalid digit found in string |
+| `:open-eq-08` | error | error ingesting: bad integer literal: invalid digit found in string |
+| `:open-eq-09` | error | error ingesting: bad integer literal: invalid digit found in string |
+| `:open-eq-10` | error | error ingesting: bad integer literal: invalid digit found in string |
+| `:open-eq-11` | error | error ingesting: bad integer literal: invalid digit found in string |
+| `:open-eq-12` | error | error ingesting: bad integer literal: invalid digit found in string |
+| `:date-2` | failed | actual result differs from expected multiset |
+| `:date-3` | failed | actual result differs from expected multiset |
+| `:open-cmp-01` | failed | actual result differs from expected multiset |
+| `:open-cmp-02` | failed | actual result differs from expected multiset |
+| `:cast-str` | failed | actual result differs from expected multiset |
+| `:cast-flt` | failed | actual result differs from expected multiset |
+| `:cast-dec` | failed | actual result differs from expected multiset |
+| `:cast-int` | failed | actual result differs from expected multiset |
+| `:cast-dT` | failed | actual result differs from expected multiset |
+| `:cast-bool` | failed | actual result differs from expected multiset |
+| `:dawg-str-1` | failed | actual result differs from expected multiset |
+| `:dawg-str-2` | failed | actual result differs from expected multiset |
+| `:dawg-isBlank-1` | failed | actual result differs from expected multiset |
+| `:dawg-datatype-1` | failed | actual result differs from expected multiset |
+| `:dawg-datatype-2` | failed | actual result differs from expected multiset |
+| `:dawg-lang-1` | failed | actual result differs from expected multiset |
+| `:dawg-lang-2` | failed | actual result differs from expected multiset |
+| `:dawg-isURI-1` | failed | actual result differs from expected multiset |
+| `:dawg-isIRI-1` | failed | actual result differs from expected multiset |
+| `:dawg-langMatches-4` | failed | actual result differs from expected multiset |
+| `:lang-case-insensitive-eq` | failed | actual result differs from expected multiset |
+| `:sameTerm-simple` | failed | actual result differs from expected multiset |
+| `:sameTerm-eq` | failed | actual result differs from expected multiset |
+| `:sameTerm-not-eq` | failed | actual result differs from expected multiset |
+| `:eq-2-1` | failed | actual result differs from expected multiset |
+| `:eq-2-2` | failed | actual result differs from expected multiset |
+| `:eq-graph-1` | failed | actual result differs from expected multiset |
+| `:eq-graph-2` | failed | actual result differs from expected multiset |
+| `:dawg-regex-003` | failed | actual result differs from expected multiset |
+| `:construct-3` | failed | actual result differs from expected multiset |
+| `:construct-4` | failed | actual result differs from expected multiset |
+| `:no-distinct-1` | failed | actual result differs from expected multiset |
+| `:distinct-1` | failed | actual result differs from expected multiset |
+| `:no-distinct-2` | failed | actual result differs from expected multiset |
+| `:no-distinct-9` | failed | actual result differs from expected multiset |
+| `:distinct-9` | failed | actual result differs from expected multiset |
+| `:dawg-sort-1` | unsupported |  |
+| `:dawg-sort-2` | unsupported |  |
+| `:dawg-sort-3` | unsupported |  |
+| `:dawg-sort-4` | unsupported |  |
+| `:dawg-sort-5` | unsupported |  |
+| `:dawg-sort-6` | unsupported |  |
+| `:dawg-sort-7` | unsupported |  |
+| `:dawg-sort-8` | unsupported |  |
+| `:dawg-sort-9` | unsupported |  |
+| `:dawg-sort-10` | unsupported |  |
+| `:dawg-sort-function` | failed | actual result differs from expected multiset |
+| `:reduced-2` | failed | actual result differs from expected multiset |
+
 ## SPARQL 1.2 query tests
 
 The W3C SPARQL 1.2 query tests (`sparql/sparql12`) at the same rdf-tests revision

@@ -526,6 +526,14 @@ def render_sparql10(data: dict) -> list[str]:
         "[`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).",
         "",
     ]
+    deviations = [row for row in rows if row["status"] != "passed"]
+    out += ["### Named SPARQL 1.0 deviations", "",
+            "These are the current ledger's non-passing cases, including loader errors and",
+            "runner limitations. Listing a case does not claim its engine defect is fixed.", ""]
+    out += _table(["W3C test", "Status", "Diagnostic"],
+                  [[f"`{row['id']}`", row["status"], row.get("diagnostic", "")]
+                   for row in deviations])
+    out += [""]
     return out
 
 
