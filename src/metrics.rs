@@ -166,6 +166,7 @@ const MAX_TASKS: usize = 128;
 
 type ClientTaskEndpoint = (String, String, String);
 type RequestObservation = (u64, f64);
+type AuthRefusalMethods = BTreeMap<(&'static str, bool), u64>;
 
 fn client_key<V>(
     map: &BTreeMap<(String, String), V>,
@@ -229,6 +230,8 @@ pub struct Metrics {
     write_provenance: write_provenance::WriteProvenanceMetrics,
     /// (endpoint template, status) -> request count.
     requests: Mutex<BTreeMap<(String, u16), u64>>,
+    /// Bounded client/route identities, with a fixed method vocabulary.
+    auth_refusals: Mutex<BTreeMap<(String, String), AuthRefusalMethods>>,
     /// endpoint template -> duration histogram.
     durations: Mutex<BTreeMap<String, Hist>>,
     /// /policy/check outcome -> count.
@@ -293,6 +296,31 @@ pub fn metrics() -> &'static Metrics {
 }
 
 impl Metrics {
+    /// Count 401s separately from successful requests, without task/host labels.
+    /// Observed successful methods initialize a zero counter for that series.
+    pub fn observe_auth_result(&self, client: &str, endpoint: &str, method: &str, status: u16) {
+        let method = match method {
+            "GET" => "GET",
+            "POST" => "POST",
+            "HEAD" => "HEAD",
+            _ => "OTHER",
+        };
+        // Probe purpose is operational attribution, not authenticated identity.
+        // Preserve it before caller overflow so known controls stay identifiable.
+        let expected_probe = (client == "aegis-doc-link-check" && method == "GET")
+            || (client == "auth-negative-probe"
+                && matches!(endpoint, "/episode" | "/shapes")
+                && method == "POST");
+        let mut map = self.auth_refusals.lock().unwrap();
+        let key = client_key(&map, client, endpoint);
+        let n = map
+            .entry(key)
+            .or_default()
+            .entry((method, expected_probe))
+            .or_default();
+        *n += u64::from(status == 401);
+    }
+
     /// Record one served request: endpoint template, response status, duration.
     pub fn observe_request(&self, endpoint: &str, status: u16, seconds: f64) {
         *self
@@ -430,6 +458,21 @@ impl Metrics {
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.write_provenance.render(&mut out);
+
+        out.push_str(
+            "# HELP quipu_http_auth_refusals_total HTTP 401 responses by bounded client, route template and method.\n\
+             # TYPE quipu_http_auth_refusals_total counter\n",
+        );
+        for ((client, endpoint), methods) in self.auth_refusals.lock().unwrap().iter() {
+            for ((method, expected_probe), n) in methods {
+                let _ = writeln!(
+                    out,
+                    "quipu_http_auth_refusals_total{{client=\"{}\",endpoint=\"{}\",method=\"{method}\",expected_probe=\"{expected_probe}\"}} {n}",
+                    esc(client),
+                    esc(endpoint),
+                );
+            }
+        }
 
         out.push_str(
             "# HELP quipu_http_requests_total Requests served, by route template and status.\n\

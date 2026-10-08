@@ -22,6 +22,8 @@ mod align;
 mod assets;
 #[path = "server/auth.rs"]
 mod auth;
+#[path = "server/auth_response.rs"]
+mod auth_response;
 #[path = "server/base.rs"]
 mod base;
 #[path = "server/entity.rs"]
@@ -558,20 +560,7 @@ async fn main() {
                             } else {
                                 ""
                             };
-                            let mut response = (
-                                StatusCode::UNAUTHORIZED,
-                                axum::Json(serde_json::json!({
-                                    "error": format!(
-                                        "unauthorized: {path} is a WRITE endpoint and requires a bearer \
-                                         token. Send `Authorization: Bearer <token>`. Read endpoints \
-                                         (/query, /search, entity reads, /health) are open and need no \
-                                         credential.{why}"
-                                    ),
-                                    "endpoint": path,
-                                    "reason": "missing_or_invalid_bearer_token",
-                                })),
-                            )
-                                .into_response();
+                            let mut response = auth_response::unauthorized(&path, why);
                             response.extensions_mut().insert(
                                 quipu::request_usage::AuthOutcome::Unauthorized,
                             );
