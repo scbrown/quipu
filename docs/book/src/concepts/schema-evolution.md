@@ -51,7 +51,7 @@ Tool: `quipu_list_proposals`
 ### Accept a Proposal
 
 ```json
-{ "id": 1, "decided_by": "aegis/crew/braino", "note": "Looks good" }
+{ "id": 1, "decided_by": "reviewer-1", "note": "Looks good" }
 ```
 
 Tool: `quipu_accept_proposal`
@@ -102,5 +102,6 @@ agents a clear remediation path instead of a dead-end error.
   future OWL axiom diffs can coexist. The `kind` column disambiguates.
 - Proposals only mutate shape/ontology definitions — they never touch the EAVT
   fact store directly.
-- The approver role defaults to `aegis/crew/braino`. A capability-based
+- There is no default approver: accept and reject refuse a request without
+  `decided_by`, so every decision names who made it. A capability-based
   authorization system (`quipu.schema.approve`) is a future concern.

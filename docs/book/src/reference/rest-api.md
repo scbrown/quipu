@@ -1073,13 +1073,13 @@ List schema-evolution proposals. Body: optional `status`
 
 ### `POST /proposal/accept`
 
-Accept a pending proposal. Body: `id`, optional `decided_by`, `note`,
-`timestamp`.
+Accept a pending proposal. Body: `id`, `decided_by` (required), optional
+`note`, `timestamp`.
 
 ### `POST /proposal/reject`
 
-Reject a pending proposal. Body: `id`, `note`, optional `decided_by`,
-`timestamp`.
+Reject a pending proposal. Body: `id`, `note`, `decided_by` (required),
+optional `timestamp`.
 
 ### `POST /entity_history`
 
