@@ -782,6 +782,50 @@ curl -s localhost:3030/explain -X POST \
 
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 `valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
+Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
+omitted mode or `mode: "semantic"` preserves vector search.
+
+#### Keyword index
+
+Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
+activation installs an empty FTS5 index and same-transaction fact triggers; it
+never backfills during startup or a read. Writes, source replacement, closure,
+rollback and physical deletion are reflected atomically. Index documents are
+ROOT assertion rows; `valid_at` checks their original valid-time intervals,
+with an exclusive `valid_to` boundary. Named-graph/attached-pack search is not
+part of this initial lexical stage.
+
+Backfill is explicit and resumable:
+
+```bash
+quipu search-index backfill --batch-size 500 --db /path/to/store.db
+quipu search-index status --db /path/to/store.db
+quipu search '"complete episode phrase"' --mode keyword --db /path/to/store.db
+```
+
+One command commits one batch (1–10000 scanned fact rows), then releases the
+writer. A durable cursor/highwater bounds historical work, while insertion
+triggers index newer writes. The CLI refuses backfill during UTC minutes
+10–20, inclusive. Repeat calls outside ingestion lanes until `complete` is
+true; an incomplete index returns an error instead of a partial answer.
+
+`mode: "keyword"` requires query text and needs no embedding provider. It
+accepts literal terms and double-quoted phrases, with conjunctions scoped to
+one fact document; it does not interpret field/boolean syntax yet. All literal
+codecs are decoded, full comments/body text is retained, and type/entity local
+names include CamelCase tokens. Scores are positive BM25 relevance (`score`,
+higher first); `bm25` exposes SQLite's negative raw rank. Entity duplicates
+are collapsed and group/type scope is filtered before applying the limit.
+Embedding arrays, anchors and content reranking are refused in this mode.
+
+Rollback: disable the flag, then `quipu search-index drop --db <path>` to remove
+the derived index and its triggers/progress only. Existing facts/vectors are
+preserved. A previously activated index continues following writes until it
+is dropped, even when keyword queries are disabled; no query silently serves
+stale documents after a flag toggle. Index size/RSS depend on the corpus and
+must be measured on an isolated restored store before production backfill.
+
+#### Semantic ranking
 
 Opt-in `ranking: "content"` reranks the oversampled candidates before the
 result limit. A `Section`, `Chunk`, or `CodeSymbol` with no explanatory comment

@@ -370,6 +370,7 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
+| `mode` | No | `semantic` (default) or opt-in `keyword` (SQLite FTS5 BM25; requires query text, enabled and backfilled index; no embedding provider) |
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
 | `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
@@ -385,6 +386,21 @@ so zero results are distinguishable from an unembedded store — see
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
 
 Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+
+Keyword mode returns `score` (positive relevance, higher first), raw SQLite
+`bm25` (lower first), and `ranking_reason: "keyword"`. It indexes literal terms
+and quoted phrases from labels, alternate labels, descriptions including full
+episode bodies, other literal attributes, type names, and entity IRI local-name
+tokens. Phrase/term conjunctions currently match one fact document; structured
+cross-attribute expressions belong to the structured-query stage. The default
+semantic response and scores are unchanged. Keyword mode rejects embeddings,
+anchors and content ranking rather than silently ignoring them.
+
+Activate `[quipu.search] keyword = true`, then run explicit bounded
+`quipu search-index backfill --batch-size 500 --db <path>` calls until status
+reports `complete: true`. Search refuses an incomplete index. Each call commits
+one batch and releases the writer; the CLI refuses UTC minutes 10 through 20
+to protect scheduled ingestion. See [keyword index](./rest-api.md#keyword-index).
 See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
 exceptions, temporal behavior, and bounded candidate recall.
 

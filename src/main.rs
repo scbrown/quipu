@@ -61,6 +61,7 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_search;
 mod cli_share_diff;
 mod hook_session_capture;
 mod hooks_install;
@@ -159,6 +160,8 @@ fn main() {
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
+        "search" => cli_search::cmd_search(&args, db_path),
+        "search-index" => cli_search::cmd_index(&args, db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_pack::cmd_pack(&args, db_path),
         "share" => cli_pack::cmd_share(&args, db_path),
@@ -351,6 +354,8 @@ COMMANDS:
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     quipu stats [--db <path>]
+    quipu search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
+    quipu search-index status|backfill|drop [--batch-size 500] [--db <path>]
     quipu doctor labels [--db <path>]
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --full --format text --destination internal --out <dir> [--db <path>]
