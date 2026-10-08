@@ -165,10 +165,15 @@ macro_rules! embed_handler {
                 let mut i = i;
                 let no_embed = if stringify!($name) == "search" {
                     let config = s.vector_read().search_config().clone();
+                    let configured_mode = if config.mode == "hybrid" && !config.hybrid {
+                        "semantic"
+                    } else {
+                        config.mode.as_str()
+                    };
                     let mode = i
                         .get("mode")
                         .and_then(JsonValue::as_str)
-                        .unwrap_or(&config.mode);
+                        .unwrap_or(configured_mode);
                     mode == "keyword"
                         || (mode == "hybrid"
                             && i.get("alpha")

@@ -179,3 +179,90 @@ fn fts_delimiters_are_escaped_and_closed_when_truncated() {
     let raw = format!("\u{1e}{}", "x".repeat(1000));
     assert!(lexical_snippet(&raw).ends_with("</mark>"));
 }
+
+#[test]
+fn disabling_hybrid_restores_the_implicit_semantic_default() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().mode = "hybrid".into();
+    store.search_config_mut().hybrid = false;
+    let request = json!({"embedding":[1.0,0.0],"limit":5});
+    let expected = super::super::search::semantic_response(&store, &request).unwrap();
+    assert_eq!(
+        dispatch_search_fusion(&store, &request).unwrap(),
+        expected,
+        "flag-off must restore old callers without requiring a second config edit"
+    );
+    let mut explicit = request.clone();
+    explicit["mode"] = json!("hybrid");
+    assert!(
+        dispatch_search_fusion(&store, &explicit)
+            .unwrap_err()
+            .to_string()
+            .contains("disabled")
+    );
+}
+
+#[test]
+fn historical_hybrid_filters_both_branches_and_retains_old_lexical_text() {
+    use crate::vector::KnowledgeVectorStore;
+    let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().hybrid = true;
+    store.search_config_mut().keyword = true;
+    store.search_config_mut().named_graphs = true;
+    store.initialize_lexical_index().unwrap();
+    let graph = store.graph_create("urn:test:hybrid:history").unwrap();
+    for (predicate, text, at) in [
+        ("label", "old label", "2026-01-01T00:00:00Z"),
+        ("comment", "later secret text", "2026-02-01T00:00:00Z"),
+    ] {
+        let turtle = format!(
+            "<https://example.org/history> <http://www.w3.org/2000/01/rdf-schema#{predicate}> \"{text}\" ."
+        );
+        crate::rdf::ingest_rdf_to_graph(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            at,
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+    }
+    let id = store
+        .lookup("https://example.org/history")
+        .unwrap()
+        .unwrap();
+    store
+        .embed_entity(
+            id,
+            "old label; later secret text",
+            &[1., 0.],
+            "2026-10-01T00:00:00Z",
+        )
+        .unwrap();
+    let mut query = json!({"mode":"hybrid","query":"later secret text","embedding":[1.,0.],"graph":"urn:test:hybrid:history","alpha":0.5,"explain":true});
+    assert_eq!(
+        dispatch_search_fusion(&store, &query).unwrap()["count"],
+        1,
+        "present-time positive control"
+    );
+    query["valid_at"] = json!("2026-01-15T00:00:00Z");
+    assert_eq!(
+        dispatch_search_fusion(&store, &query).unwrap()["count"],
+        0,
+        "neither later vector nor later assertion is eligible"
+    );
+    query["query"] = json!("old label");
+    let old = dispatch_search_fusion(&store, &query).unwrap();
+    assert_eq!(
+        old["count"], 1,
+        "older lexical assertion remains searchable without a historical vector"
+    );
+    assert!(old["results"][0]["explain"]["cosine"].is_null());
+    assert_eq!(
+        old["results"][0]["explain"]["matched_fields"],
+        json!(["label"])
+    );
+}

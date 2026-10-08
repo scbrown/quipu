@@ -843,8 +843,9 @@ Lexical snippets use the winning FTS assertion and tokenizer; semantic-only
 snippets use the vector text. Both are bounded, HTML-escaped text with `<mark>`
 highlights. The CLI accepts `--mode hybrid --alpha 0.5 --fusion rrf --rrf-k 60
 --explain`; native MCP exposes the same fields. Fleet proxy rollout is a separate
-surface gate. Disable `search.hybrid` and restore `search.mode = "semantic"`
-for rollback; fusion creates no additional persisted index.
+surface gate. Disable `search.hybrid` for rollback: callers omitting mode return
+to semantic even if the configured default remains hybrid. Explicit hybrid
+requests are refused while disabled. Fusion creates no additional persisted index.
 
 #### Keyword index
 

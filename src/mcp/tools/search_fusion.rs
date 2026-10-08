@@ -17,9 +17,16 @@ pub(super) fn dispatch_search_fusion(store: &Store, input: &JsonValue) -> Result
         return Err(invalid("search input must be an object"));
     }
     let config = store.search_config();
+    // Turning the feature off must restore old implicit callers even when
+    // an operator previously selected hybrid as the server default.
+    let configured_mode = if config.mode == "hybrid" && !config.hybrid {
+        "semantic"
+    } else {
+        config.mode.as_str()
+    };
     let mode = input
         .get("mode")
-        .map_or(Some(config.mode.as_str()), JsonValue::as_str)
+        .map_or(Some(configured_mode), JsonValue::as_str)
         .ok_or_else(|| invalid("mode must be semantic, keyword, or hybrid"))?;
     if !matches!(mode, "semantic" | "keyword" | "hybrid") {
         return Err(invalid("mode must be semantic, keyword, or hybrid"));
