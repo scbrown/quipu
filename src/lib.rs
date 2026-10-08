@@ -30,6 +30,7 @@ pub mod namespace;
 pub mod onnx_embedder;
 pub mod transaction_auth;
 pub mod write_kind;
+pub mod write_provenance;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
 #[cfg(feature = "owl")]

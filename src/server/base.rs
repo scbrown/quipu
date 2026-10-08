@@ -176,15 +176,18 @@ where
 {
     let identity = super::auth::request_identity();
     let kind = super::request_middleware::request_write_kind();
+    let provenance = super::request_middleware::request_write_provenance();
     // On a deep stack: request work parses and walks caller-supplied SPARQL,
     // whose recursion follows its structure, and the pool's default stack
     // aborted the process on a few kilobytes of nesting (aegis-xcvb5z). The
     // structural bound in `sparql_structure` keeps requests inside this stack;
-    // the stack keeps the bound's margin. Identity and write kind are
-    // thread-scoped, so they are re-established on the new thread.
+    // the stack keeps the bound's margin. Identity, write kind and write
+    // provenance are thread-scoped, so they are re-established on the new thread.
     match tokio::task::spawn_blocking(move || {
         quipu::sparql_structure::on_deep_stack(move || {
-            quipu::transaction_auth::with_identity(identity, || quipu::write_kind::scoped(kind, f))
+            quipu::transaction_auth::with_identity(identity, || {
+                quipu::write_provenance::scoped(provenance, || quipu::write_kind::scoped(kind, f))
+            })
         })
     })
     .await
