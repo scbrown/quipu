@@ -32,6 +32,7 @@ mod bind_join;
 #[cfg(test)]
 mod bind_join_tests;
 mod construct;
+mod group;
 mod join;
 mod progress;
 mod sql_in;
