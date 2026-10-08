@@ -13,7 +13,6 @@ use crate::error::{Error, Result};
 use crate::store::Store;
 use crate::types::Value;
 
-use super::aggregate::eval_aggregate;
 use super::bind_join::try_values_bind_join;
 use super::filter::eval_filter;
 use super::triple::eval_bgp as eval_bgp_inner;
@@ -337,54 +336,7 @@ pub fn eval_pattern_seeded(
             aggregates,
         } => {
             let (rows, _) = eval_pattern_seeded(store, inner, ctx, seed)?;
-            let group_keys: Vec<String> =
-                variables.iter().map(|v| v.as_str().to_string()).collect();
-            let agg_vars: Vec<String> = aggregates
-                .iter()
-                .map(|(v, _)| v.as_str().to_string())
-                .collect();
-
-            // Group rows by the group-by variables.
-            let mut groups: Vec<(Vec<Option<Value>>, Vec<Bindings>)> = Vec::new();
-            for row in &rows {
-                let key: Vec<Option<Value>> =
-                    group_keys.iter().map(|k| row.get(k).cloned()).collect();
-                if let Some(group) = groups.iter_mut().find(|(k, _)| k == &key) {
-                    group.1.push(row.clone());
-                } else {
-                    groups.push((key, vec![row.clone()]));
-                }
-            }
-
-            // If no group keys, all rows form a single group.
-            if group_keys.is_empty() && groups.is_empty() {
-                groups.push((vec![], rows));
-            }
-
-            let mut result_rows = Vec::new();
-            for (key, group_rows) in &groups {
-                let mut result_row = Bindings::new();
-
-                // Set group-by variable bindings.
-                for (i, var) in group_keys.iter().enumerate() {
-                    if let Some(val) = &key[i] {
-                        result_row.insert(var.clone(), val.clone());
-                    }
-                }
-
-                // Compute aggregates.
-                for (i, (_, agg_expr)) in aggregates.iter().enumerate() {
-                    if let Some(agg_val) = eval_aggregate(store, agg_expr, group_rows) {
-                        result_row.insert(agg_vars[i].clone(), agg_val);
-                    }
-                }
-
-                result_rows.push(result_row);
-            }
-
-            let mut vars = group_keys;
-            vars.extend(agg_vars);
-            Ok((result_rows, vars))
+            Ok(super::group::evaluate(store, rows, variables, aggregates))
         }
 
         GraphPattern::Extend {
