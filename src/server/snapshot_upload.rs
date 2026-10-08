@@ -26,8 +26,13 @@ use super::{
     tools::finish_deferred_embed,
 };
 
+// Share-merge conflict resolution: shares in, like /import (aegis-yavo9c).
+#[path = "merge_decisions.rs"]
+mod merge_decisions;
+
 pub(crate) fn routes() -> Router<SharedStore> {
     Router::new()
+        .merge(merge_decisions::routes())
         .route("/import", post(super::publication::import_share))
         .route("/import/promote", post(super::publication::promote_import))
         .route("/knot", post(super::publication::knot))
