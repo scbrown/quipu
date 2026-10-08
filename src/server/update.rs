@@ -152,6 +152,7 @@ pub(crate) fn render_update_paths(out: &mut String) {
             counter.load(Ordering::Relaxed)
         );
     }
+    update_full::render(out);
 }
 
 /// Which dataset an update was evaluated over.
@@ -320,12 +321,8 @@ pub(super) fn apply_update_attributed(
         graphs.push((graph_id, name));
     }
     let path = match &plan {
-        Plan::Full(_) => {
-            for (graph_id, graph) in &graphs {
-                for fact in store.current_facts_in_graph(*graph_id)? {
-                    insert_fact(&store, &ox, fact.entity, fact.attribute, &fact.value, graph)?;
-                }
-            }
+        Plan::Full(reason) => {
+            update_full::copy(&store, &ox, &graphs, reason, update_full::max_facts())?;
             UPDATES_FULL.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Full
         }
@@ -510,6 +507,8 @@ fn graph_id(
 }
 
 // Write gates (aegis-1hfyk5); declared here because server.rs is at the size cap.
+#[path = "update_full.rs"]
+pub(crate) mod update_full;
 #[path = "update_gates.rs"]
 mod update_gates;
 
