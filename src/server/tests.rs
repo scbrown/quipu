@@ -1746,3 +1746,6 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
         "an unknown graph is refused"
     );
 }
+
+#[path = "graph_backfill_temporal_tests.rs"]
+mod graph_backfill_temporal;

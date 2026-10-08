@@ -56,11 +56,6 @@ pub(crate) fn backfill_graph_embeddings(
         missing.truncate(max_entities);
         (provider, missing, total)
     };
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .to_string();
     let mut embedded = 0usize;
     let mut stale_skipped = 0usize;
     for ids in todo.chunks(BATCH_SIZE) {
@@ -104,7 +99,10 @@ pub(crate) fn backfill_graph_embeddings(
             }
             s.mark_named_search_embedding(*eid)
                 .map_err(|e| e.to_string())?;
-            vs.embed_entity(*eid, text, emb, &ts)
+            // Vector validity is compared to ISO fact/query cutoffs. Numeric
+            // epoch strings sort before ISO years and leak later text backwards.
+            // Stamp after rechecking the snapshot, at this batch's actual apply.
+            vs.embed_entity(*eid, text, emb, &quipu::time::now_iso())
                 .map_err(|e| e.to_string())?;
             embedded += 1;
         }
