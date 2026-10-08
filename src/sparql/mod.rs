@@ -22,6 +22,9 @@ pub mod rdfs;
 pub mod rdfs_closure;
 #[cfg(test)]
 mod rdfs_closure_tests;
+pub mod status_pushdown;
+#[cfg(test)]
+mod status_pushdown_tests;
 pub mod string_pushdown;
 #[cfg(test)]
 mod string_pushdown_tests;
