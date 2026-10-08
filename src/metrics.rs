@@ -308,8 +308,9 @@ impl Metrics {
         // Probe purpose is operational attribution, not authenticated identity.
         // Preserve it before caller overflow so known controls stay identifiable.
         let expected_probe = (client == "aegis-doc-link-check" && method == "GET")
-            || (client == "auth-negative-probe" && endpoint == "/episode" && method == "POST")
-            || (client == "auth-diagnostic" && endpoint == "/shapes" && method == "POST");
+            || (client == "auth-negative-probe"
+                && matches!(endpoint, "/episode" | "/shapes")
+                && method == "POST");
         let mut map = self.auth_refusals.lock().unwrap();
         let key = client_key(&map, client, endpoint);
         let n = map

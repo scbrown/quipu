@@ -389,3 +389,19 @@ fn held_histogram_shows_a_per_request_bound_a_total_cannot() {
     assert!(text.contains("quipu_store_held_seconds_bucket{client=\"one-expensive\",le=\"30\"} 1"));
     assert!(text.contains("quipu_store_held_seconds_count{client=\"one-expensive\"} 1"));
 }
+
+#[test]
+fn positive_auth_diagnostic_failures_remain_unexpected() {
+    let m = Metrics::default();
+    m.observe_auth_result("auth-diagnostic", "/shapes", "POST", 401);
+    m.observe_auth_result("auth-negative-probe", "/shapes", "POST", 401);
+    let map = m.auth_refusals.lock().unwrap();
+    assert_eq!(
+        map[&("auth-diagnostic".into(), "/shapes".into())][&("POST", false)],
+        1
+    );
+    assert_eq!(
+        map[&("auth-negative-probe".into(), "/shapes".into())][&("POST", true)],
+        1
+    );
+}
