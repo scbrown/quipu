@@ -812,6 +812,40 @@ prepared. It retains their exclusion from ROOT even if the named facts are
 physically cleaned up. The cache is regenerated with embeddings when a store
 is reconstructed; it is not exported as factual content.
 
+#### Hybrid fusion
+
+Hybrid is disabled by default. With `[quipu.search] hybrid = true` and a ready
+keyword index, request `mode: "hybrid"`, `alpha` in `[0,1]`,
+`fusion: "weighted" | "rrf"`, and positive `rrf_k` (default 60).
+Alpha is the semantic contribution: `alpha: 1` returns the existing semantic
+response exactly, without accessing the lexical index; `alpha: 0` returns the
+keyword response exactly, without embedding. Omitted mode and parameters use
+the server search configuration; the default mode remains semantic.
+
+Weighted fusion min-max normalizes each candidate list independently. A
+nonempty equal-score list normalizes to one; missing candidates contribute zero.
+RRF uses `alpha/(rrf_k + semantic_rank) + (1-alpha)/(rrf_k + keyword_rank)`,
+with one-based ranks and zero for a missing branch. Equal fused scores are
+ordered by entity identifier. Candidate lists use the configured oversampling,
+capped at the server result limit and 1000 (the response reports `candidate_limit`);
+normalization is over this bounded pool, not the entire corpus.
+
+Both branches retain temporal, graph and provenance scopes. Intermediate hybrid
+weights use semantic type inference for both branches (`infer_types: true`);
+asserted-only hybrid type scopes are refused until both branches support them.
+Content and anchor reranking are not yet composed with intermediate fusion.
+Query text is required; an optional embedding supplies the semantic branch only.
+Empty/punctuation-only lexical expressions are refused as in keyword mode.
+
+`explain: true` adds raw BM25, cosine, fused score, branch ranks, actual matched
+FTS columns and applied filters. A missing branch component is null, not zero.
+Lexical snippets use the winning FTS assertion and tokenizer; semantic-only
+snippets use the vector text. Both are bounded, HTML-escaped text with `<mark>`
+highlights. The CLI accepts `--mode hybrid --alpha 0.5 --fusion rrf --rrf-k 60
+--explain`; native MCP exposes the same fields. Fleet proxy rollout is a separate
+surface gate. Disable `search.hybrid` and restore `search.mode = "semantic"`
+for rollback; fusion creates no additional persisted index.
+
 #### Keyword index
 
 Keyword search is off by default (`[quipu.search] keyword = false`). Explicit

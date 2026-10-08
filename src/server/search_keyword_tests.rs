@@ -24,6 +24,8 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let path = db.to_str().unwrap();
     let mut store = Store::open(path).unwrap();
     store.search_config_mut().keyword = true;
+    store.search_config_mut().hybrid = true;
+    store.search_config_mut().mode = "keyword".into();
     store.search_config_mut().named_graphs = true;
     store.initialize_lexical_index().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
@@ -75,6 +77,8 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let mut results = Vec::new();
     for (input, count) in [
         (json!({"mode":"keyword","query":"walneedle"}), 1),
+        (json!({"query":"walneedle"}), 1),
+        (json!({"mode":"hybrid","alpha":0,"query":"walneedle"}), 1),
         (
             json!({"mode":"keyword","query":"walneedle","graph":"urn:test:keyword:graph"}),
             1,

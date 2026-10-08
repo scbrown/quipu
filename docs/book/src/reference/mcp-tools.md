@@ -956,3 +956,9 @@ Manage OWL ontologies: `load` (parse + materialize entailments), `list`, or
 | `name` | For load/remove | Ontology name |
 | `turtle` | For load | OWL ontology in Turtle format |
 | `timestamp` | No | ISO-8601 timestamp |
+
+Hybrid fusion parameters on `quipu_search`: `mode: "hybrid"`, `alpha` (semantic
+weight, 0..1), `fusion` (`weighted` or `rrf`), positive `rrf_k`, and `explain`.
+Server activation and the ready lexical index are required for intermediate
+weights. Alpha endpoints retain exact pure responses. See the REST search
+reference for candidate bounds, scope compatibility, snippets and rollback.
