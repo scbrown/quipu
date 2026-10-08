@@ -345,6 +345,14 @@ pub(super) fn apply_update_attributed(
         .iter()
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
+    // The write gates /knot enforces, on what this update asserts, before any
+    // term is interned or any transaction begins (aegis-1hfyk5).
+    update_gates::enforce(
+        &store,
+        after.difference(&before),
+        attribution.actor.as_deref(),
+        &attribution.source,
+    )?;
     let now = quipu::time::now_iso();
     let mut changes: HashMap<i64, Vec<quipu::store::Datum>> = HashMap::new();
     for quad in before.difference(&after) {
@@ -501,6 +509,10 @@ fn graph_id(
     Ok(id)
 }
 
+// Write gates (aegis-1hfyk5); declared here because server.rs is at the size cap.
+#[path = "update_gates.rs"]
+mod update_gates;
+
 #[cfg(test)]
 #[path = "update_bench.rs"]
 mod bench;
@@ -518,3 +530,7 @@ mod update_report_tests;
 #[cfg(test)]
 #[path = "update_attribution_tests.rs"]
 mod update_attribution_tests;
+
+#[cfg(test)]
+#[path = "update_gates_tests.rs"]
+mod update_gates_tests;
