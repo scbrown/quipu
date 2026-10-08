@@ -32,9 +32,10 @@ cords are entities, knots are facts.
   fails with the rule it broke, so an agent can correct it on the spot.
 - **Nothing is overwritten.** Every fact carries when it was recorded and when
   it was true, so you can query the graph as it was at any moment.
-- **Standard, and measured.** It passes all Working Group–approved W3C SPARQL
-  1.1 Query, Update, Protocol and Results tests, scored alongside other stores
-  in [the conformance report](docs/book/src/benchmarks/conformance.md).
+- **Standard, and scored.** Its SPARQL 1.1 conformance is measured against the
+  Working Group–approved W3C tests, class by class with every exception named,
+  and scored alongside other stores in
+  [the conformance report](docs/book/src/benchmarks/conformance.md).
 
 The long form (sharing between stores, the feature list, the architecture and
 a comparison): [Why Quipu](docs/book/src/why-quipu.md).
@@ -122,11 +123,19 @@ Quipu is for.
 | you want to | run |
 |---|---|
 | load Turtle, checked against your shapes | `quipu knot <file.ttl> --shapes <shapes.ttl>` |
+| bulk-load a lot of data at once, validated before it touches your graph | `quipu share --output <dir>` from a scratch store, then `quipu import <dir>` (staged and shape-checked; failures are quarantined), then `quipu import promote <share-id>` (one transaction into ROOT) |
+| migrate or move a dataset between stores | the same three steps: `share`, `import`, `import promote` |
 | ask a SPARQL question | `quipu read '<sparql>'` |
 | see the graph as it was on a date | `quipu read '<sparql>' --valid-at 2026-09-01` |
 | see what depends on an entity | `quipu impact <entity-IRI>` |
 | keep shapes in the store, so every write is checked | `quipu shapes load <name> <shapes.ttl>` |
 | explore it in a browser, or over HTTP | `quipu-server --db <file> --bind 127.0.0.1:3030` |
+
+For a bulk load, a migration or a backfill, use **import + promote**, not
+thousands of `knot` or SPARQL Update writes. `import` validates the whole dataset
+in its own staging graph and never touches ROOT. `promote` then admits it in a
+single transaction, and one fork rollback undoes it. Walkthrough:
+[Bulk loads and migrations](docs/book/src/recipes/bulk-loads.md).
 
 Every command and flag: [CLI reference](docs/book/src/reference/cli.md). The HTTP
 endpoints: [REST API](docs/book/src/reference/rest-api.md).
@@ -137,7 +146,7 @@ Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, an
 `quipu mcp --db store.db` provides stdio using the companion server binary.
 Build both with `cargo build --release --features full`. Protected stdio writes use
 `--mcp-token-file /path/to/private-token`; HTTP writes use the existing bearer policy.
-Quipu defines 46 MCP tools (48 with `owl`), from one shared schema manifest.
+Quipu defines 48 MCP tools (50 with `owl`), from one shared schema manifest.
 Bobbin's `knowledge_*` tools and existing REST-backed proxies remain compatible.
 See the [connection and authentication guide](docs/book/src/reference/mcp-tools.md#connect-directly).
 
