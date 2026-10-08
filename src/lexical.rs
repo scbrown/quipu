@@ -8,6 +8,9 @@ use rusqlite::{Connection, OptionalExtension, functions::FunctionFlags, params};
 use crate::{Error, Result, Store, Value, vector::VectorMatch};
 
 const COLUMNS: &str = "label, alt_label, description, attributes, type_names, iri_tokens, entity_iri, type_iri, language, datatype, graph_id";
+// The source view is accessed by fact rowid (one trigger row or a bounded
+// backfill range). NOT INDEXED preserves INTEGER PRIMARY KEY lookup: otherwise
+// SQLite can choose the graph index and scan all ROOT facts for every batch.
 const SCHEMA: &str = r#"
 CREATE VIRTUAL TABLE IF NOT EXISTS lexical_fts USING fts5(
     label, alt_label, description, attributes, type_names, iri_tokens,
@@ -48,7 +51,7 @@ SELECT f.rowid AS fact_id,
     quipu_lexical_language(f.v) AS language,
     quipu_lexical_datatype(f.v) AS datatype,
     f.g AS graph_id
-FROM facts f JOIN terms e ON e.id=f.e JOIN terms p ON p.id=f.a
+FROM facts f NOT INDEXED JOIN terms e ON e.id=f.e JOIN terms p ON p.id=f.a
 LEFT JOIN terms o ON o.id=quipu_lexical_ref(f.v)
 WHERE f.op=1 AND f.g=0;
 CREATE TRIGGER IF NOT EXISTS lexical_insert AFTER INSERT ON facts BEGIN

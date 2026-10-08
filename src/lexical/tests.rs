@@ -24,6 +24,30 @@ fn enabled() -> Store {
     s
 }
 
+#[test]
+fn source_access_uses_rowid_bounds_instead_of_scanning_root_graph() {
+    let s = enabled();
+    for predicate in ["fact_id>34000 AND fact_id<=36000", "fact_id=34001"] {
+        let sql = format!("EXPLAIN QUERY PLAN SELECT * FROM lexical_source WHERE {predicate}");
+        let mut stmt = s.conn.prepare(&sql).unwrap();
+        let details: Vec<String> = stmt
+            .query_map([], |row| row.get(3))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(
+            details
+                .iter()
+                .any(|d| d.contains("SEARCH f USING INTEGER PRIMARY KEY")),
+            "{details:?}"
+        );
+        assert!(
+            !details.iter().any(|d| d.contains("idx_geav")),
+            "{details:?}"
+        );
+    }
+}
+
 fn hits(s: &Store, q: &str, at: Option<&str>) -> Vec<VectorMatch> {
     s.keyword_search(q, 20, at, None).unwrap()
 }
