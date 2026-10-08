@@ -32,6 +32,7 @@ mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
 mod search_graph_scope;
+pub mod search_trace;
 pub mod transaction_auth;
 pub mod write_kind;
 pub mod write_provenance;
