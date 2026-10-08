@@ -460,7 +460,9 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             eprintln!(
                 "usage: quipu import <share-dir|archive|URL> [--actor <id>] \
                  [--destination internal] [--query-namespace <ns>] [--replace-queries] \
-                 [--db <path>]"
+                 [--db <path>]\n\
+                 Stages and validates; ROOT is untouched. Next step: \
+                 quipu import promote <share-id> [--actor <id>] [--db <path>]"
             );
             std::process::exit(1);
         });

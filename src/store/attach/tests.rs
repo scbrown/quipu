@@ -1335,3 +1335,48 @@ fn describe_attachments_reports_what_is_actually_mounted() {
     );
     assert!(lines[0].ends_with("ro"), "mounts are read-only: {lines:?}");
 }
+
+/// aegis-tl2q4j: a string FILTER narrowed through `terms` must search the
+/// attachment's term space too, or every attached subject silently drops out.
+#[test]
+fn string_filter_pushdown_sees_attached_terms() {
+    let scratch = Scratch::new("narrow");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+    let (a, _) = respaced_layer(&scratch, "a", "a", 4);
+    let store = Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only("first", &a.to_string_lossy())],
+    )
+    .unwrap();
+    let rows = |q: &str| {
+        let mut out: Vec<String> = query_temporal(&store, q, &TemporalContext::default())
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| {
+                let mut kv: Vec<String> = r.iter().map(|(k, v)| format!("{k}={v:?}")).collect();
+                kv.sort();
+                kv.join(" ")
+            })
+            .collect();
+        out.sort();
+        out
+    };
+    for test in [
+        "CONTAINS(STR(?s), \"entity\")",
+        "STRSTARTS(STR(?p), \"urn:a:\")",
+        "REGEX(?o, \"named$\")",
+    ] {
+        let pushed = format!("SELECT * WHERE {{ GRAPH ?g {{ ?s ?p ?o FILTER({test}) }} }}");
+        let plain =
+            format!("SELECT * WHERE {{ GRAPH ?g {{ ?s ?p ?o FILTER(({test}) || false) }} }}");
+        let got = rows(&pushed);
+        assert_eq!(got, rows(&plain), "{pushed}");
+        assert!(
+            got.iter()
+                .any(|r| r.contains("urn:a:") || r.contains("a named")),
+            "control: the attached layer answers {pushed}: {got:?}"
+        );
+    }
+}
