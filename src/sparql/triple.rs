@@ -377,7 +377,10 @@ fn visit_triple_pattern_limited(
     // ROOT-scoped — and an attachment contributes only NAMED graphs, so a
     // ROOT-scoped read could not see one even if it composed.
     let facts = store.facts_source();
-    let sql = if want_g {
+    let sql = if emit.is_none() {
+        super::count_cover::projection(store, ctx, &conditions)?
+            .unwrap_or_else(|| format!("SELECT DISTINCT e, a, v FROM {facts}{where_clause}"))
+    } else if want_g {
         format!("SELECT DISTINCT e, a, v, g FROM {facts}{where_clause}")
     } else {
         format!("SELECT DISTINCT e, a, v FROM {facts}{where_clause}")

@@ -307,3 +307,52 @@ fn paired_mean_count_preserves_types_invalid_and_empty_inputs() {
         compare(&store, q, &TemporalContext::default(), false);
     }
 }
+
+#[test]
+fn covering_scalar_count_keeps_same_fact_currentness_and_missing_index_fallback() {
+    let store = fixture();
+    let graph = store.lookup("http://example.org/board").unwrap().unwrap();
+    // One triple has two current physical assertions. Other rows of the same
+    // subjects are retracted/closed: intersecting subjects instead of rowids
+    // would wrongly make those noncurrent facts visible again.
+    store
+        .conn
+        .execute(
+            "INSERT INTO facts(e,a,v,g,tx,valid_from,valid_to,op)
+         SELECT e,a,v,g,(SELECT MAX(id) FROM transactions),valid_from,valid_to,op
+         FROM facts WHERE g=?1 LIMIT 1",
+            [graph],
+        )
+        .unwrap();
+    let status = store.lookup("http://example.org/status").unwrap().unwrap();
+    let alias = store.lookup("http://example.org/alias").unwrap().unwrap();
+    let tomb = store.lookup("http://example.org/tomb").unwrap().unwrap();
+    store
+        .conn
+        .execute(
+            "UPDATE facts SET valid_to='2026-10-07T00:00:00Z' WHERE e=?1 AND a=?2 AND g=?3",
+            [alias, status, graph],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "UPDATE facts SET op=0 WHERE e=?1 AND a=?2 AND g=?3",
+            [tomb, status, graph],
+        )
+        .unwrap();
+    for q in [
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s ?p ?o } }",
+        "SELECT (COUNT(?id) AS ?n) WHERE { GRAPH ex:board { ?s ex:id ?id } }",
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:missing { ?s ?p ?o } }",
+    ] {
+        compare(&store, q, &TemporalContext::default(), true);
+    }
+    store.conn.execute("DROP INDEX idx_current_g", []).unwrap();
+    compare(
+        &store,
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s ?p ?o } }",
+        &TemporalContext::default(),
+        true,
+    );
+}
