@@ -16,7 +16,7 @@
 //! DATA`, `DELETE DATA`, `LOAD`, `CLEAR`, …) has no solution sequence and goes
 //! to Oxigraph unchanged, one operation at a time, in request order.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use oxigraph::{
     model::{BlankNode, GraphName, NamedNode, NamedOrBlankNode, Quad, Term, Triple},
@@ -63,18 +63,9 @@ pub(super) fn evaluate(ox: &OxStore, update: &str) -> Result<(), AppError> {
                 else {
                     return Err(update_error("WHERE did not evaluate to solutions"));
                 };
-                let (mut deletes, mut inserts) = (Vec::new(), Vec::new());
-                for solution in solutions {
-                    let solution = solution.map_err(update_error)?;
-                    deletes.extend(delete.iter().filter_map(|q| ground_quad(q, &solution)));
-                    // Template blank nodes are fresh per solution (§3.1.3).
-                    let mut bnodes = HashMap::new();
-                    inserts.extend(
-                        insert
-                            .iter()
-                            .filter_map(|q| quad(q, &solution, &mut bnodes)),
-                    );
-                }
+                let Instantiated {
+                    deletes, inserts, ..
+                } = instantiate(&delete, &insert, solutions)?;
                 for q in &deletes {
                     ox.remove(q).map_err(update_error)?;
                 }
@@ -96,6 +87,121 @@ pub(super) fn evaluate(ox: &OxStore, update: &str) -> Result<(), AppError> {
         }
     }
     Ok(())
+}
+
+/// Quads to delete and to insert, over every solution, each set
+/// deduplicated (aegis-11rwfs).
+///
+/// A template quad with no variable and no blank node is the same quad for
+/// every solution, so it is instantiated ONCE, when at least one solution
+/// exists. Instantiating it per solution made memory O(solutions x template):
+/// a seeds CAS update over N seeds has ~N*f solutions (its WHERE unions every
+/// fact of every seed) and a constant insert template of ~N*f quads, and at
+/// N=537 that OOM-killed the production server (8G + 6.8G swap in 17 s).
+pub(super) struct Instantiated {
+    pub(super) deletes: HashSet<Quad>,
+    pub(super) inserts: HashSet<Quad>,
+    /// Quads built before deduplication: the intermediate this bounds.
+    /// Read by the regression test only.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(super) built: usize,
+}
+
+pub(super) fn instantiate(
+    delete: &[GroundQuadPattern],
+    insert: &[QuadPattern],
+    solutions: impl IntoIterator<Item = Result<QuerySolution, impl std::fmt::Display>>,
+) -> Result<Instantiated, AppError> {
+    let (fixed_delete, varying_delete): (Vec<_>, Vec<_>) =
+        delete.iter().partition(|q| constant_ground_quad(q));
+    let (fixed_insert, varying_insert): (Vec<_>, Vec<_>) =
+        insert.iter().partition(|q| constant_quad(q));
+    let (mut deletes, mut inserts, mut built) = (HashSet::new(), HashSet::new(), 0);
+    let mut first = None;
+    for solution in solutions {
+        let solution = solution.map_err(update_error)?;
+        for q in varying_delete
+            .iter()
+            .filter_map(|q| ground_quad(q, &solution))
+        {
+            built += 1;
+            deletes.insert(q);
+        }
+        // Template blank nodes are fresh per solution (§3.1.3).
+        let mut bnodes = HashMap::new();
+        for q in varying_insert
+            .iter()
+            .filter_map(|q| quad(q, &solution, &mut bnodes))
+        {
+            built += 1;
+            inserts.insert(q);
+        }
+        if first.is_none() {
+            first = Some(solution);
+        }
+    }
+    if let Some(solution) = first {
+        for q in fixed_delete
+            .iter()
+            .filter_map(|q| ground_quad(q, &solution))
+        {
+            built += 1;
+            deletes.insert(q);
+        }
+        let mut bnodes = HashMap::new();
+        for q in fixed_insert
+            .iter()
+            .filter_map(|q| quad(q, &solution, &mut bnodes))
+        {
+            built += 1;
+            inserts.insert(q);
+        }
+    }
+    Ok(Instantiated {
+        deletes,
+        inserts,
+        built,
+    })
+}
+
+fn constant_ground_term(pattern: &GroundTermPattern) -> bool {
+    match pattern {
+        GroundTermPattern::NamedNode(_) | GroundTermPattern::Literal(_) => true,
+        GroundTermPattern::Triple(t) => {
+            constant_ground_term(&t.subject)
+                && matches!(t.predicate, NamedNodePattern::NamedNode(_))
+                && constant_ground_term(&t.object)
+        }
+        GroundTermPattern::Variable(_) => false,
+    }
+}
+
+fn constant_ground_quad(pattern: &GroundQuadPattern) -> bool {
+    constant_ground_term(&pattern.subject)
+        && matches!(pattern.predicate, NamedNodePattern::NamedNode(_))
+        && constant_ground_term(&pattern.object)
+        && !matches!(pattern.graph_name, GraphNamePattern::Variable(_))
+}
+
+/// No variable AND no blank node: a template blank node is fresh per
+/// solution, so a quad holding one differs between solutions.
+fn constant_term(pattern: &TermPattern) -> bool {
+    match pattern {
+        TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
+        TermPattern::Triple(t) => {
+            constant_term(&t.subject)
+                && matches!(t.predicate, NamedNodePattern::NamedNode(_))
+                && constant_term(&t.object)
+        }
+        TermPattern::BlankNode(_) | TermPattern::Variable(_) => false,
+    }
+}
+
+fn constant_quad(pattern: &QuadPattern) -> bool {
+    constant_term(&pattern.subject)
+        && matches!(pattern.predicate, NamedNodePattern::NamedNode(_))
+        && constant_term(&pattern.object)
+        && !matches!(pattern.graph_name, GraphNamePattern::Variable(_))
 }
 
 // The instantiation rules below match spareval's (src/update.rs): a quad with
@@ -196,3 +302,7 @@ fn quad(
         graph_name(&pattern.graph_name, solution)?,
     ))
 }
+
+#[cfg(test)]
+#[path = "update_eval_tests.rs"]
+mod tests;
