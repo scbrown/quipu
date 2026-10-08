@@ -168,11 +168,28 @@ pub fn candidates(
     };
     // No composition, so ids are canonical and no cross-layer anti-join is
     // needed. Named graph scope was already admitted by the GRAPH evaluator.
+    // Intersect existing covering indexes by ROWID of the SAME fact. This
+    // keeps graph/currentness checks off the large fact table pages. Readers
+    // without the indexes retain the exact ordinary evaluator.
+    let indexes: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN
+            ('idx_active_vge','idx_current_aev','idx_geav')",
+        [],
+        |r| r.get(0),
+    )?;
+    if indexes != 3 {
+        return Ok(None);
+    }
     let mut stmt = store.prepare(
-        "SELECT DISTINCT t.e FROM facts AS t
-        WHERE t.a=?1 AND t.v=?2 AND t.g=?3 AND t.op=1 AND t.valid_to IS NULL
-        AND NOT EXISTS (SELECT 1 FROM facts AS p WHERE p.e=t.e AND p.a=?4
-            AND p.g=?3 AND p.op=1 AND p.valid_to IS NULL AND quipu_plain_literal(p.v))",
+        "SELECT DISTINCT t.e FROM facts AS t INDEXED BY idx_active_vge
+        WHERE t.v=?2 AND t.g=?3 AND t.op=1 AND t.valid_to IS NULL
+        AND t.rowid IN (SELECT rowid FROM facts INDEXED BY idx_current_aev
+            WHERE a=?1 AND v=?2 AND op=1 AND valid_to IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM facts AS p INDEXED BY idx_current_aev
+            WHERE p.e=t.e AND p.a=?4 AND p.op=1 AND p.valid_to IS NULL
+            AND quipu_plain_literal(p.v) AND p.rowid IN
+                (SELECT rowid FROM facts AS gp INDEXED BY idx_geav
+                    WHERE gp.g=?3 AND gp.e=t.e AND gp.a=?4))",
     )?;
     let mut rows = stmt.query(rusqlite::params![
         rdf_type,

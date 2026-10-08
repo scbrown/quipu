@@ -85,6 +85,8 @@ fn store() -> Store {
          <{EX}dup2> <{EX}id> \"duplicate-id\" <{EX}g> .\n\
          <{EX}foreign> <{RDF_TYPE}> <{EX}Other> <{EX}g> .\n\
          <{EX}untyped> <{EX}id> \"untyped-id\" <{EX}g> .\n\
+         <{EX}crossgraph> <{RDF_TYPE}> <{EX}T> <{EX}other> .\n\
+         <{EX}crossgraph> <{EX}lookalike> <{EX}T> <{EX}g> .\n\
          <{EX}absent> <{EX}status> \"closed\" <{EX}other> .\n\
          <{EX}Sub> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <{EX}T> .\n\
          <{EX}sub> <{RDF_TYPE}> <{EX}Sub> .\n\
@@ -294,5 +296,49 @@ fn status_pushdown_composed_aliases_use_exact_fallback() {
     assert_eq!(
         accepted(&s, original, &expr, &ctx),
         vec![format!("{EX}layer_absent")]
+    );
+}
+
+#[test]
+fn status_pushdown_dataset_restrictions_empty_graph_and_missing_index_keep_exactness() {
+    let s = store();
+    let body = format!(
+        "GRAPH <{EX}g> {{ ?s a <{EX}T> FILTER NOT EXISTS {{ ?s <{EX}status> ?v FILTER(isLiteral(?v) && sameTerm(?v, STR(?v))) }} }}"
+    );
+    let admitted = query(
+        &s,
+        &format!("SELECT ?s FROM NAMED <{EX}g> WHERE {{ {body} }}"),
+    )
+    .unwrap();
+    assert_eq!(
+        admitted.rows().len(),
+        6,
+        "nonempty admitted dataset control"
+    );
+    let excluded = query(
+        &s,
+        &format!("SELECT ?s FROM NAMED <{EX}other> WHERE {{ {body} }}"),
+    )
+    .unwrap();
+    assert!(excluded.rows().is_empty());
+    let empty = query(&s, &format!("SELECT ?s WHERE {{ GRAPH <{EX}not-interned> {{ ?s a <{EX}T> FILTER NOT EXISTS {{ ?s <{EX}status> ?v FILTER(isLiteral(?v) && sameTerm(?v, STR(?v))) }} }} }}")).unwrap();
+    assert!(empty.rows().is_empty());
+    s.conn.execute("DROP INDEX idx_active_vge", []).unwrap();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+        ..TemporalContext::default()
+    };
+    let (expr, inner) = shape();
+    assert!(
+        candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        query(&s, &format!("SELECT ?s WHERE {{ {body} }}"))
+            .unwrap()
+            .rows()
+            .len(),
+        6
     );
 }
