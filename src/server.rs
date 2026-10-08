@@ -59,6 +59,8 @@ mod tests;
 mod tools;
 #[path = "server/update.rs"]
 mod update;
+#[path = "server/update_eval.rs"]
+mod update_eval;
 #[path = "server/update_gates.rs"]
 mod update_gates;
 #[path = "server/update_slice.rs"]
