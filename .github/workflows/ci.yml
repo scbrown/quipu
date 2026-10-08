@@ -512,6 +512,8 @@ jobs:
           python-version: "3.12"
       - name: Harness self-test
         run: scripts/quipu-query-perf.py self-test
+      - name: Reject failed and malformed defeated queries
+        run: python3 scripts/ci/test-query-perf.py
       - name: Build release binaries
         run: cargo build --release --locked --features full --bin quipu --bin quipu-server
       - name: Restore generated query fixture

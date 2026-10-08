@@ -256,13 +256,17 @@ def run_query(url: str, sparql: str, timeout: float) -> tuple[float, str, list |
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.load(resp)
-        status = "ok"
         rows = data.get("results", data.get("rows")) if isinstance(data, dict) else data
+        status = "ok" if valid_rows(rows) and not (isinstance(data, dict) and "error" in data) else "malformed"
     except urllib.error.HTTPError as e:
         status, rows = str(e.code), None
     except Exception as e:  # noqa: BLE001 - a timeout is a result here
         status, rows = type(e).__name__, None
     return time.monotonic() - started, status, rows
+
+
+def valid_rows(rows: object) -> bool:
+    return isinstance(rows, list) and all(isinstance(row, dict) for row in rows)
 
 
 def canon(rows: list) -> list[str]:
@@ -280,9 +284,11 @@ def measure(url: str, name: str, cls: dict, reps: int, timeout: float, defeated:
     run_query(url, sparql, timeout)  # warm the page cache and the plan cache
     for _ in range(reps):
         t, status, r = run_query(url, sparql, timeout)
+        if status == "ok" and not valid_rows(r):
+            status = "malformed"
         times.append(t)
         statuses.append(status)
-        rows = r if r is not None else rows
+        rows = r if status == "ok" else rows
     return {
         "p50_ms": round(statistics.median(times) * 1000, 2),
         "p95_ms": round(pctl(times, 0.95) * 1000, 2),
@@ -315,24 +321,31 @@ def gate(url: str, budget: dict, reps: int, timeout: float, only: list[str] | No
         # Differential: the narrowed answer must equal the un-narrowed answer.
         _, s1, a = run_query(url, render(cls, False, limit=False), timeout)
         _, s2, b = run_query(url, render(cls, True, limit=False), timeout)
-        if s1 != "ok" or s2 != "ok":
+        if s1 != "ok" or s2 != "ok" or not valid_rows(a) or not valid_rows(b):
             failures.append(f"{name}: differential could not run ({s1}, {s2})")
         elif not a:
             failures.append(f"{name}: control: the query matched no rows, so it proves nothing")
         elif canon(a) != canon(b):
             failures.append(f"{name}: pushdown changed the answer ({len(a)} vs {len(b)} rows)")
-        entry["differential_rows"] = None if a is None else len(a)
+        entry["differential_rows"] = len(a) if valid_rows(a) else None
 
         entry["defeated"] = measure(url, name, cls, max(3, reps // 2), timeout, True)
-        ratio = entry["defeated"]["p50_ms"] / max(pushed["p50_ms"], 0.1)
-        entry["ratio"] = round(ratio, 2)
         entry["rel_c0"] = round(pushed["p95_ms"] / c0, 2)
+        defeated = entry["defeated"]
+        entry["ratio"] = None
+        if defeated["errors"] or not defeated["rows"]:
+            failures.append(f"{name}: defeated form failed {defeated['statuses']} (rows={defeated['rows']})")
         if pushed["errors"]:
             failures.append(f"{name}: pushed form errored {pushed['statuses']}")
-        if ratio < lim["min_ratio"]:
-            failures.append(
-                f"{name}: narrowing not effective: defeated/pushed {ratio:.1f}x < {lim['min_ratio']}x"
-            )
+        # Error durations are not query timings: a timeout must never inflate
+        # the numerator into evidence that narrowing works.
+        if not defeated["errors"] and defeated["rows"] and not pushed["errors"] and pushed["rows"]:
+            ratio = defeated["p50_ms"] / max(pushed["p50_ms"], 0.1)
+            entry["ratio"] = round(ratio, 2)
+            if ratio < lim["min_ratio"]:
+                failures.append(
+                    f"{name}: narrowing not effective: defeated/pushed {ratio:.1f}x < {lim['min_ratio']}x"
+                )
         if pushed["p95_ms"] > lim["max_p95_ms"]:
             failures.append(f"{name}: p95 {pushed['p95_ms']}ms > {lim['max_p95_ms']}ms")
         if entry["rel_c0"] > lim["max_rel_c0"]:

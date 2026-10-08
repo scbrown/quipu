@@ -31,6 +31,12 @@ The gate fails a class when:
    learns to see through `|| false`, so the gate cannot go quietly vacuous.
 3. pushed p95 exceeds `max_p95_ms`, or exceeds `max_rel_c0` times the C0 median.
 
+Every timed defeated response must succeed with valid, nonempty row bindings
+before a ratio is calculated. HTTP errors, timeouts, malformed or empty
+responses fail the class and leave its ratio unset. Error durations cannot
+inflate the numerator. Run `just test-query-perf` for offline healthy and
+failure controls, including a successful differential followed by timed 408s.
+
 `Q7_graph_var_contains` (`GRAPH ?g` plus a filter on `?g`) is not narrowed. It is
 tracked on `aegis-nmouik`, reported with its timings, and fails only if it errors
 or times out. `Q1_status_pred` filters on predicate IRIs. On this fixture,
