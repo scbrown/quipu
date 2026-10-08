@@ -12,6 +12,11 @@ use serde_json::{Value as JsonValue, json};
 
 use super::SharedStore;
 
+// The process allocator, reported by /version below as `jemalloc` (aegis-67p0lj).
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+#[path = "allocator.rs"]
+mod allocator;
+
 pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
     let flag = |name| {
         args.windows(2)

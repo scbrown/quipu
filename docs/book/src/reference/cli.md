@@ -983,3 +983,51 @@ feature).
 ```bash
 quipu migrate-vectors --from sqlite --to lancedb --dry-run --db my.db
 ```
+
+### `quipu hook session-capture` and `quipu hooks`
+
+quipu ships one agent hook: a Stop hook that asks the agent, once per session,
+whether the session produced durable knowledge worth writing as an episode.
+The agent may act or reply `skip`; the hook never blocks a second stop.
+
+```bash
+quipu hooks bundle                      # print the hook bundle (schema st.hook-bundle/1)
+quipu hooks install --harness claude    # merge into ~/.claude/settings.json
+quipu hooks install --harness codex     # merge into $CODEX_HOME/config.toml (default ~/.codex)
+quipu hooks status                      # exit 1 unless every harness has the hook
+quipu hooks uninstall                   # remove only quipu's hook
+```
+
+With no `--harness`, both harnesses are written. `--project` writes
+`./.claude/settings.json` or `./.codex/config.toml` instead. Install is
+idempotent, leaves every other hook in place, and keeps the previous file as
+`<file>.bak-quipu`. When a shantytown registry answers (`st ops hooks list`),
+install and uninstall register the bundle with `st` instead, which renders it
+into every role's settings; pass `--no-st` to write the harness config directly.
+
+The hook itself, `quipu hook session-capture`, reads the Stop-hook JSON on
+stdin and prints at most one response. It always exits 0, and every failure is
+silence rather than a malformed response. Its guards, in order:
+
+1. **Scope.** The crew comes from `GT_CREW`, else from a `.../crew/<name>/...`
+   working directory. An unidentified crew is never interrupted.
+   `QUIPU_HOOK_CREWS` (space-separated, default `*`) narrows the scope.
+2. **Loop guard.** `stop_hook_active: true` means the hook already fired this
+   turn, so it stays silent.
+3. **Once per session.** A `solicited-<session_id>` marker in the state
+   directory. Markers older than two days are reaped.
+4. **Durable denominator.** Each solicitation appends
+   `{ts, session_id, crew}` to `solicit-log.jsonl` before it is sent. If that
+   append fails the hook stays silent, so the log can never undercount.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QUIPU_SERVER` | `http://127.0.0.1:3030` | Server URL named in the message |
+| `QUIPU_HOOK_GROUP` | `default` | Episode `group_id` named in the message |
+| `QUIPU_HOOK_CREWS` | `*` | Crews the hook may interrupt |
+| `QUIPU_HOOK_STATE_DIR` | `~/.quipu-hook` | Markers and `solicit-log.jsonl` |
+| `GT_CREW` | (unset) | The crew name, when the cwd does not carry it |
+
+The message tells the agent that writes need a bearer from `QUIPU_AUTH_TOKEN`
+and to send `X-Quipu-Client: session-capture`. The act rate is
+`episodes whose source carries the session id / lines in solicit-log.jsonl`.
