@@ -266,3 +266,48 @@ fn historical_hybrid_filters_both_branches_and_retains_old_lexical_text() {
         json!(["label"])
     );
 }
+
+#[test]
+fn intermediate_hybrid_enforces_pool_ceiling_without_changing_pure_limits() {
+    use crate::vector::KnowledgeVectorStore;
+    let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().hybrid = true;
+    store.search_config_mut().keyword = true;
+    store.search_config_mut().max_limit = 5000;
+    store.initialize_lexical_index().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        r#"<https://example.org/a> <http://www.w3.org/2000/01/rdf-schema#label> "Memory Beads" ."#
+            .as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let entity = store.lookup("https://example.org/a").unwrap().unwrap();
+    store
+        .embed_entity(entity, "Memory Beads", &[1., 0.], "2026-01-01T00:00:00Z")
+        .unwrap();
+    for limit in [10, 999, 1000] {
+        let out = dispatch_search_fusion(&store, &json!({"query":"Memory", "embedding":[1.,0.], "mode":"hybrid", "alpha":0.5,"limit":limit})).unwrap();
+        assert_eq!(out["count"], 1);
+        assert!(out["candidate_limit"].as_u64().unwrap() <= 1000);
+    }
+    for limit in [1001, 2000] {
+        let err = dispatch_search_fusion(&store, &json!({"query":"Memory", "embedding":[1.,0.], "mode":"hybrid", "alpha":0.5,"limit":limit})).unwrap_err().to_string();
+        assert!(err.contains("1000"), "{err}");
+    }
+    for (alpha, mode) in [(1.0, "semantic"), (0.0, "keyword")] {
+        let mut input = json!({"query":"Memory", "mode":mode, "limit":2000});
+        if alpha == 1.0 {
+            input["embedding"] = json!([1., 0.]);
+        }
+        let pure = dispatch_search_fusion(&store, &input).unwrap();
+        assert_eq!(pure["count"], 1);
+        input["mode"] = json!("hybrid");
+        input["alpha"] = json!(alpha);
+        assert_eq!(dispatch_search_fusion(&store, &input).unwrap(), pure);
+    }
+}

@@ -96,6 +96,9 @@ pub(super) fn dispatch_search_fusion(store: &Store, input: &JsonValue) -> Result
         }
     }
     let limit = config.clamp_limit(input.get("limit").and_then(JsonValue::as_u64));
+    if limit > 1000 {
+        return Err(invalid("intermediate hybrid limit must not exceed 1000"));
+    }
     // Bounded candidate union. Response records this ceiling; it does not claim
     // exhaustive global normalization of either backend.
     let pool = config

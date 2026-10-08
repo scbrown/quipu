@@ -835,7 +835,9 @@ RRF uses `alpha/(rrf_k + semantic_rank) + (1-alpha)/(rrf_k + keyword_rank)`,
 with one-based ranks and zero for a missing branch. Equal fused scores are
 ordered by entity identifier. Candidate lists use the configured oversampling,
 capped at the server result limit and 1000 (the response reports `candidate_limit`);
-normalization is over this bounded pool, not the entire corpus.
+normalization is over this bounded pool, not the entire corpus. Intermediate
+hybrid requests whose effective result limit exceeds 1000 are refused; the pure
+semantic and keyword endpoints retain their configured result limits.
 
 Both branches retain temporal, graph and provenance scopes. Intermediate hybrid
 weights use semantic type inference for both branches (`infer_types: true`);
