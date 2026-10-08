@@ -20,7 +20,7 @@ pub(super) fn ranking_mode(input: &JsonValue) -> Result<bool> {
     }
 }
 
-pub(super) struct RankedMatch {
+pub(crate) struct RankedMatch {
     pub matched: VectorMatch,
     pub score: f64,
     pub demoted: bool,

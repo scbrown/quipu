@@ -835,6 +835,36 @@ no episode to trace). `entity_type` restricts to an rdf:type IRI. See
 > would need a full re-embed backfill to stay coherent — a much larger change than it
 > looks. Documented here rather than "fixed" cheaply and inconsistently.
 
+#### Anchored search
+
+Off unless the server sets `[quipu.search] anchored = true`. An `anchor` sent to
+a server with it off is refused rather than answered unanchored. A request
+without `anchor` is unchanged.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `anchor` | | One entity, as an IRI, a CURIE or an exact `rdfs:label`. Ambiguity or absence is refused, with the candidates named. |
+| `max_hops` | 3 (cap 4) | Neighbourhood radius |
+| `anchor_mode` | `decay` | `decay`: score × `decay`^hops, unreachable × `decay`^(max_hops+1). `sort`: hops first, then score. `filter`: reachable only. |
+| `decay` | 0.5 | Per-hop multiplier, in (0, 1] |
+| `via` | | Traverse only these predicates (replaces the default exclusions) |
+| `direction` | `both` | `out`, `in` or `both` |
+| `explain` | false | Adds one shortest `path` per result |
+
+The neighbourhood is walked with bound single-pattern lookups over current ROOT
+facts (`valid_at` applies). `owl:sameAs` costs no hop. `rdf:type`,
+`rdfs:subClassOf`, PROV links, `distinctFrom`, `mentions` and `inDocument` are
+not traversed. Without that, everything is two hops from everything through a
+class, an activity or a document. A node with more than 150 edges is reached
+but not expanded; the anchor itself is always expanded. The walk stops at 5,000
+nodes. The response's `anchor` block reports `reached`, `hubs_not_expanded`,
+`truncated` and `truncated_at_hop`. A truncated ring is never presented as
+complete.
+
+Each result gains `hops` (null when unreachable) and `text_score` (the
+unanchored score). The 200 best unanchored candidates are reordered, so an
+entity outside that pool is not added by being near the anchor.
+
 ### `POST /hybrid_search`
 
 Combined SPARQL filter + vector ranking.
