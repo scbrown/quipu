@@ -1,8 +1,9 @@
 # MCP Tools
 
 Quipu exposes its API as MCP (Model Context Protocol) tools for agent
-integration. These tools are available when Quipu runs as a Bobbin subsystem
-or standalone MCP server.
+integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
+`quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
+`knowledge_*` tools, not these.)
 
 The registry (`tool_definitions()`) exposes **46 tools** in a default build, or
 **48** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).

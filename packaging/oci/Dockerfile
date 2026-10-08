@@ -26,7 +26,7 @@ FROM debian:trixie-slim
 LABEL io.modelcontextprotocol.server.name="io.github.scbrown/quipu"
 LABEL org.opencontainers.image.source="https://github.com/scbrown/quipu"
 LABEL org.opencontainers.image.description="Quipu knowledge graph as a local MCP server over stdio"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 COPY --chmod=755 quipu quipu-server /usr/local/bin/
 

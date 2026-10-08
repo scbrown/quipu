@@ -812,7 +812,7 @@ curl -s localhost:3030/search -X POST \
 it narrows to entities whose facts trace (via `prov:wasGeneratedBy → episode →
 groupId`) to a listed group, and it **drops** ungrouped `/knot` facts (they have
 no episode to trace). `entity_type` restricts to an rdf:type IRI. See
-[group-isolation](../../design/group-isolation.md).
+[group-isolation](https://github.com/scbrown/quipu/blob/main/docs/design/group-isolation.md).
 
 > ⚠️ **The `type: A, B` in a result's `text` is NOT valid as `/episode` input.** A
 > multi-typed entity renders as `... type: Feature, Tool, Concept`, and that string
