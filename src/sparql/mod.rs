@@ -32,6 +32,9 @@ mod bind_join;
 #[cfg(test)]
 mod bind_join_tests;
 mod construct;
+mod count_mmap;
+mod count_state;
+mod count_stream;
 mod group;
 mod join;
 mod progress;

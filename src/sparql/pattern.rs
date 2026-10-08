@@ -335,6 +335,11 @@ pub fn eval_pattern_seeded(
             variables,
             aggregates,
         } => {
+            if let Some(result) =
+                super::count_stream::try_evaluate(store, inner, variables, aggregates, ctx, seed)?
+            {
+                return Ok(result);
+            }
             let (rows, _) = eval_pattern_seeded(store, inner, ctx, seed)?;
             Ok(super::group::evaluate(store, rows, variables, aggregates))
         }

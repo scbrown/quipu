@@ -122,8 +122,55 @@ fn eval_triple_pattern_limited(
     ctx: &TemporalContext,
     limit: Option<usize>,
 ) -> Result<Vec<Bindings>> {
+    let mut results = Vec::new();
+    visit_triple_pattern_limited(
+        store,
+        tp,
+        bindings,
+        ctx,
+        limit,
+        false,
+        Some(&mut |row| {
+            results.push(row);
+            Ok(())
+        }),
+    )?;
+    Ok(results)
+}
+
+/// Visit exact matches without retaining their bindings. SQL and canonical
+/// binding rules are shared with the ordinary evaluator.
+pub(super) fn visit_triple_pattern(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    ctx: &TemporalContext,
+    emit: &mut dyn FnMut(Bindings) -> Result<()>,
+) -> Result<usize> {
+    visit_triple_pattern_limited(store, tp, bindings, ctx, None, true, Some(emit))
+}
+
+/// Count a leaf without decoding terms. Caller must prove independent variable
+/// positions, no attachments, no inference and no seed compatibility checks.
+pub(super) fn count_triple_pattern(
+    store: &Store,
+    tp: &TriplePattern,
+    ctx: &TemporalContext,
+) -> Result<usize> {
+    visit_triple_pattern_limited(store, tp, &Bindings::new(), ctx, None, true, None)
+}
+
+fn visit_triple_pattern_limited(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    ctx: &TemporalContext,
+    limit: Option<usize>,
+    streaming: bool,
+    mut emit: Option<&mut dyn FnMut(Bindings) -> Result<()>>,
+) -> Result<usize> {
     if limit == Some(0) {
-        return Ok(vec![]);
+        return Ok(0);
     }
     // Formal default: a constant rdf:type query uses the loaded RDFS class
     // hierarchy. Named graphs remain literal because the hierarchy is rooted
@@ -145,27 +192,57 @@ fn eval_triple_pattern_limited(
     {
         let class_ids = collect_class_and_subclasses(store, class_node.as_str())?;
         if !class_ids.is_empty() {
-            return eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids, ctx, limit);
+            let rows =
+                eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids, ctx, limit)?;
+            let count = rows.len();
+            if let Some(emit) = emit.as_mut() {
+                for row in rows {
+                    emit(row)?;
+                }
+            }
+            return Ok(count);
         }
     }
     // Build SQL query with conditions based on bound values.
     let mut conditions = Vec::new();
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    let direct_refs = super::count_stream::direct_refs() && !store.has_attachments();
 
     // Subject
-    if let Some(iri) = resolve_subject_pattern(store, &tp.subject, bindings)? {
+    let subject_ref = match &tp.subject {
+        TermPattern::Variable(v) => bindings.get(v.as_str()),
+        TermPattern::BlankNode(v) => bindings.get(v.as_str()),
+        _ => None,
+    };
+    if direct_refs
+        && let Some(Value::Ref(id)) = subject_ref
+        && *id >= 0
+    {
+        conditions.push(format!("e = ?{}", sql_params.len() + 1));
+        sql_params.push(Box::new(*id));
+    } else if let Some(iri) = resolve_subject_pattern(store, &tp.subject, bindings)? {
         let ids = store.lookup_all(&iri)?;
         if ids.is_empty() {
-            return Ok(vec![]); // IRI not in dictionary -> no matches
+            return Ok(0); // IRI not in dictionary -> no matches
         }
         conditions.push(sql_id_in("e", &ids, &mut sql_params));
     }
 
     // Predicate
-    if let Some(iri) = resolve_predicate_pattern(store, &tp.predicate, bindings)? {
+    let predicate_ref = match &tp.predicate {
+        NamedNodePattern::Variable(v) => bindings.get(v.as_str()),
+        _ => None,
+    };
+    if direct_refs
+        && let Some(Value::Ref(id)) = predicate_ref
+        && *id >= 0
+    {
+        conditions.push(format!("a = ?{}", sql_params.len() + 1));
+        sql_params.push(Box::new(*id));
+    } else if let Some(iri) = resolve_predicate_pattern(store, &tp.predicate, bindings)? {
         let ids = store.lookup_all(&iri)?;
         if ids.is_empty() {
-            return Ok(vec![]);
+            return Ok(0);
         }
         conditions.push(sql_id_in("a", &ids, &mut sql_params));
     }
@@ -174,6 +251,7 @@ fn eval_triple_pattern_limited(
     if let Some(value) = resolve_object_pattern(store, &tp.object, bindings)? {
         if let Value::Ref(id) = value
             && id != -1
+            && !direct_refs
         {
             let iri = store.resolve(id)?;
             let ids = store.lookup_all(&iri)?;
@@ -302,17 +380,23 @@ fn eval_triple_pattern_limited(
     } else {
         format!("SELECT DISTINCT e, a, v FROM {facts}{where_clause}")
     };
-    let mut stmt = store.prepare(&sql)?;
-
     let param_refs: Vec<&dyn rusqlite::types::ToSql> =
         sql_params.iter().map(std::convert::AsRef::as_ref).collect();
     // The scalar functions read the predicates while this statement steps.
     let _narrows = narrows_active.then(|| {
         super::string_pushdown::Active::install(ctx.string_narrows.clone().unwrap_or_default())
     });
+    if emit.is_none() {
+        return super::count_mmap::scalar(store, || {
+            let mut stmt = store.prepare(&format!("SELECT COUNT(*) FROM ({sql})"))?;
+            let count: i64 = stmt.query_row(param_refs.as_slice(), |row| row.get(0))?;
+            Ok(count as usize)
+        });
+    }
+    let mut stmt = store.prepare(&sql)?;
     let mut rows = stmt.query(param_refs.as_slice())?;
 
-    let mut results = Vec::new();
+    let mut count = 0;
     // SQL DISTINCT sees raw ids, so aliases survive it. Dedup the canonical
     // triple key in O(n): comparing each completed binding against the whole
     // result vector made an unbound production scan quadratic (aegis-h7rtt).
@@ -330,8 +414,12 @@ fn eval_triple_pattern_limited(
         } else {
             None
         };
-        let canonical_key = (e_id, a_id, v.to_bytes(), g_id);
-        if !canonical_rows.insert(canonical_key) {
+        // Without attached dictionaries SQL DISTINCT already deduplicates the
+        // exact canonical triple. Retaining a second set would make a streaming
+        // scan grow with the whole graph again.
+        if (!streaming || store.has_attachments())
+            && !canonical_rows.insert((e_id, a_id, v.to_bytes(), g_id))
+        {
             continue;
         }
         let matched = MatchedRow {
@@ -341,14 +429,15 @@ fn eval_triple_pattern_limited(
             g_id,
         };
         if let Some(row) = bind_row(store, tp, bindings, matched, bind_graph_var.as_deref())? {
-            results.push(row);
-            if limit.is_some_and(|cap| results.len() >= cap) {
+            emit.as_mut().expect("binding visitor was checked above")(row)?;
+            count += 1;
+            if limit.is_some_and(|cap| count >= cap) {
                 break;
             }
         }
     }
 
-    Ok(results)
+    Ok(count)
 }
 
 /// Turn one matched `(e, a, v, g)` row into extended bindings, or `None` when
@@ -390,7 +479,19 @@ fn bind_row(
     // Bind subject variable (or blank node used as join variable).
     match &tp.subject {
         TermPattern::Variable(var) => {
-            let e_iri = store.resolve(e_id)?;
+            let e_iri = if super::count_stream::direct_refs() && !store.has_attachments() {
+                if !bind_var(
+                    &mut new_bindings,
+                    var.as_str(),
+                    Value::Ref(e_id),
+                    &mut compatible,
+                ) {
+                    return Ok(None);
+                }
+                return bind_remaining_row(store, tp, new_bindings, a_id, v, g_id, bind_graph_var);
+            } else {
+                store.resolve(e_id)?
+            };
             // A blank-node subject binds as the SAME kind of value the object
             // position gives it (a Ref), so `?x :p ?y . ?y a :c` joins when ?y
             // is a blank node. It used to bind as Value::Str("_:y") here while
@@ -421,13 +522,30 @@ fn bind_row(
         _ => {}
     }
 
+    bind_remaining_row(store, tp, new_bindings, a_id, v, g_id, bind_graph_var)
+}
+
+fn bind_remaining_row(
+    store: &Store,
+    tp: &TriplePattern,
+    mut new_bindings: Bindings,
+    a_id: i64,
+    v: Value,
+    g_id: Option<i64>,
+    bind_graph_var: Option<&str>,
+) -> Result<Option<Bindings>> {
+    let mut compatible = true;
     // Bind predicate variable.
     if let NamedNodePattern::Variable(var) = &tp.predicate {
-        let a_iri = store.resolve(a_id)?;
-        let a_val = if let Some(term_id) = store.lookup(&a_iri)? {
-            Value::Ref(term_id)
+        let a_val = if super::count_stream::direct_refs() && !store.has_attachments() {
+            Value::Ref(a_id)
         } else {
-            Value::Str(a_iri)
+            let a_iri = store.resolve(a_id)?;
+            if let Some(term_id) = store.lookup(&a_iri)? {
+                Value::Ref(term_id)
+            } else {
+                Value::Str(a_iri)
+            }
         };
         if !bind_var(&mut new_bindings, var.as_str(), a_val, &mut compatible) {
             return Ok(None);
