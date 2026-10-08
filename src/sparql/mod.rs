@@ -43,6 +43,7 @@ mod join;
 mod progress;
 mod sql_in;
 pub mod triple;
+mod triple_bind;
 pub mod values;
 
 use std::collections::HashMap;
