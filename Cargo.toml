@@ -151,13 +151,6 @@ tempfile = "3"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 
-# The server's global allocator (aegis-67p0lj). glibc malloc kept freed
-# transients resident in its per-thread arenas: production quipu-server held
-# >=93% of its heap as free-but-retained memory (3.3G free vs 0.24G used) and
-# was recycled 9x a day at the memory ceiling. jemalloc returns freed pages.
-# Native, non-MSVC only; the bin opts in, the library never changes allocator.
-[target.'cfg(all(not(target_arch = "wasm32"), not(target_env = "msvc")))'.dependencies]
-tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 # getrandom's wasm backends are opt-in (docs/design/wasm-support.md §4.4): the
 # 0.3 series needs its `wasm_js` feature (plus the `getrandom_backend` cfg the
 # §4.4 build line carries), and `ring` gates its own getrandom-0.2 JS entropy
@@ -165,6 +158,14 @@ tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_
 # already has — nothing new ships natively.
 getrandom = { version = "0.3", features = ["wasm_js"] }
 ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
+
+# The server's global allocator (aegis-67p0lj). glibc malloc kept freed
+# transients resident in its per-thread arenas: production quipu-server held
+# >=93% of its heap as free-but-retained memory (3.3G free vs 0.24G used) and
+# was recycled 9x a day at the memory ceiling. jemalloc returns freed pages.
+# Native, non-MSVC only; the bin opts in, the library never changes allocator.
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_env = "msvc")))'.dependencies]
+tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [features]
 default = ["shacl"]
