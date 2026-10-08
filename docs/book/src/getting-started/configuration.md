@@ -64,6 +64,7 @@ stops being read.
 | `server.read_only` | `false` | Refuse all write endpoints |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
+| `server.update_full_copy_max_facts` | `250000` | Facts an unsliceable `/update` (open subject AND open predicate) may copy before it is refused with advice; 0 = unbounded |
 | `events.retention_days` | unset (keep forever) | Prune events older than N days, never past any registered consumer's committed offset |
 | `labels.min_freshness` | unset | Graph-label floor: refuse results staler than this |
 | `labels.min_trust_rank` / `labels.min_trust_chain` | unset | Trust floors on the query path |
