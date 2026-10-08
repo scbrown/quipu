@@ -347,7 +347,7 @@ pub(super) fn apply_update_attributed(
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
     // The write gates /knot enforces, on what this update asserts, before any
     // term is interned or any transaction begins (aegis-1hfyk5).
-    super::update_gates::enforce(
+    update_gates::enforce(
         &store,
         after.difference(&before),
         attribution.actor.as_deref(),
@@ -508,6 +508,10 @@ fn graph_id(
     ids.insert(graph.clone(), id);
     Ok(id)
 }
+
+// Write gates (aegis-1hfyk5); declared here because server.rs is at the size cap.
+#[path = "update_gates.rs"]
+mod update_gates;
 
 #[cfg(test)]
 #[path = "update_bench.rs"]

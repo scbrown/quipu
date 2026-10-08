@@ -61,8 +61,6 @@ mod tools;
 mod update;
 #[path = "server/update_eval.rs"]
 mod update_eval;
-#[path = "server/update_gates.rs"]
-mod update_gates;
 #[path = "server/update_slice.rs"]
 mod update_slice;
 #[path = "server/wal_maintenance.rs"]

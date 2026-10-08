@@ -20,7 +20,7 @@ use std::fmt::Write as _;
 
 use oxigraph::model::{GraphName, Quad};
 
-use super::base::AppError;
+use super::super::base::AppError;
 
 /// Refuse the update if what it asserts fails the vocabulary or the loaded
 /// shapes. `Ok(())` means it may be transacted.
