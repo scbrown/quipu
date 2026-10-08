@@ -983,3 +983,92 @@ mod directive_traceability_emit {
         );
     }
 }
+
+// -- Write provenance at commit (aegis-7zp4rc) ----------------------------
+
+/// The value of one `quipu_write_provenance_total` series, or 0 when absent.
+fn provenance_series(client: &str, endpoint: &str, class: &str) -> u64 {
+    let text = crate::metrics::metrics().render(0, 0, 0, None);
+    let key = format!(
+        "quipu_write_provenance_total{{client=\"{client}\",endpoint=\"{endpoint}\",provenance=\"{class}\"}} "
+    );
+    text.lines()
+        .find_map(|l| l.strip_prefix(&key))
+        .map_or(0, |n| n.parse().unwrap())
+}
+
+fn missing_series(client: &str, field: &str) -> u64 {
+    let text = crate::metrics::metrics().render(0, 0, 0, None);
+    let key =
+        format!("quipu_write_provenance_missing_total{{client=\"{client}\",field=\"{field}\"}} ");
+    text.lines()
+        .find_map(|l| l.strip_prefix(&key))
+        .map_or(0, |n| n.parse().unwrap())
+}
+
+/// One count per COMMITTED transaction under the request's class; a refused
+/// write counts nothing, and neither does the verdict the refusal records on
+/// the same thread; an unscoped write is not a request write.
+#[test]
+fn write_provenance_counts_committed_request_writes_only() {
+    use crate::write_provenance::{RequestProvenance, scoped};
+    use std::sync::Arc;
+    // A client label no other test uses: provenance is thread-scoped, so other
+    // tests' writes cannot reach these series.
+    const CLIENT: &str = "test-7zp4rc";
+    let mut store = Store::open_in_memory().unwrap();
+    define_require_label_policy(&mut store);
+    let complete = Arc::new(RequestProvenance::classify(
+        CLIENT,
+        "/knot",
+        [Some("ian"), Some("cron"), Some("host-a"), None, None],
+    ));
+    let absent = Arc::new(RequestProvenance::classify(CLIENT, "/knot", [None; 5]));
+
+    // A committed write counts once, under its class.
+    let ok = vec![assert_datum(
+        &store,
+        "http://ex/x1",
+        "http://ex/p",
+        Value::Str("v".into()),
+    )];
+    scoped(Some(complete.clone()), || {
+        store.transact(&ok, RTS, None, None).unwrap()
+    });
+    assert_eq!(provenance_series(CLIENT, "/knot", "complete"), 1);
+
+    // A refused write counts nothing, though its verdict commits on this thread.
+    let bad = unlabelled_doc(&store);
+    scoped(Some(complete), || {
+        assert!(store.transact(&bad, RTS, None, None).is_err());
+    });
+    assert_eq!(
+        provenance_series(CLIENT, "/knot", "complete"),
+        1,
+        "refusal counted"
+    );
+
+    // Absent declares nothing and names every required field.
+    let ok2 = vec![assert_datum(
+        &store,
+        "http://ex/x2",
+        "http://ex/p",
+        Value::Str("w".into()),
+    )];
+    scoped(Some(absent), || {
+        store.transact(&ok2, RTS, None, None).unwrap()
+    });
+    assert_eq!(provenance_series(CLIENT, "/knot", "absent"), 1);
+    assert_eq!(missing_series(CLIENT, "host"), 1);
+
+    // No request scope: not a request write, not counted under any client.
+    let ok3 = vec![assert_datum(
+        &store,
+        "http://ex/x3",
+        "http://ex/p",
+        Value::Str("z".into()),
+    )];
+    store.transact(&ok3, RTS, None, None).unwrap();
+    assert_eq!(provenance_series(CLIENT, "/knot", "complete"), 1);
+    assert_eq!(provenance_series(CLIENT, "/knot", "absent"), 1);
+}

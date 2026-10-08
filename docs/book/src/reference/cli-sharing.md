@@ -239,6 +239,57 @@ and records a decision** rather than guessing.
 Exit `2` is a distinct code precisely so a script can tell "needs a decision"
 from "went wrong".
 
+### Resolving conflicts: emit, propose, decide, apply
+
+```text
+quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
+```
+
+The same split as `quipu align`: a merge that cannot auto-merge is finished by a
+person, with the evidence in front of them.
+
+1. **Emit.** `--emit-decisions` writes one row per conflict to a JSON file and
+   changes nothing. Each row has the slot (`subject`, `predicate`,
+   `max_count`), the `base` / `ours` / `theirs` values, and each side's
+   provenance: ROOT's current facts with their `valid_from`, transaction, actor
+   and source; the incoming and base shares' id, `created_at`, producer store
+   and whether they are attested. For a person reading it, each row also has a
+   `kind` (`max_count_exceeded` or `delete_replace`) and a `rule` in words
+   ("sh:maxCount 1 on status: ours and theirs together hold 2 values"), and the
+   file carries `labels`: one `rdfs:label` per IRI it mentions. The file is bound
+   to ROOT's graph hash and the incoming share id.
+2. **Propose (agent).** `--propose` also fills each row's `proposal` (`choose`
+   plus `evidence`) from mechanical evidence: a side unchanged from base, the
+   newer side, an attested share. It never sets `decision`.
+3. **Decide (operator, or any tool that edits the file).** A tool may also set
+   `decided_by` and `decided_at` per row; apply echoes them back. They are a
+   claim made by that tool. The attested record is the transaction's reviewer
+   and the decisions file's hash. Set each row's `decision` to
+   `{"choose": "ours"}`, `{"choose": "theirs"}`, `{"choose": "base"}`, or
+   `{"values": ["\"an edited value\""]}` (N-Triples terms).
+4. **Apply.** `--decisions` commits the clean part of the merge plus every
+   decided slot in **one** transaction. Its source records both parents, the
+   reviewer and the SHA-256 of the decisions file, and the output lists each
+   applied row.
+
+Apply refuses, and writes nothing, when:
+
+| Refusal | Why |
+|---|---|
+| a row has no `decision` | nothing is guessed |
+| ROOT or the incoming share changed since the emit | the decisions were made against other data; emit again |
+| the conflicts differ from the file's rows | same reason |
+| a decision has more values than the slot's `sh:maxCount` | it would re-create the conflict |
+| a value is not an RDF term | it cannot be stored |
+| the file has a field merge-decisions/v1 does not define | apply would drop it while the file's hash still covered it |
+
+`--dry-run` runs every check above and reports the counts that apply would
+assert and retract, without writing anything. A CI check uses it to validate a
+decided file before merge.
+
+Plain `quipu merge` without these flags behaves as before.
+
 ## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 
 ```text

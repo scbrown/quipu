@@ -38,6 +38,8 @@ An embeddable Rust library and server for building knowledge graphs with:
   structured agent-friendly feedback
 - **Hybrid search** — SPARQL + vector similarity in a single query
 - **Episode ingestion** — structured write path for agent-extracted knowledge
+- **Bulk import + promote** — load or migrate a whole dataset validated in a
+  staging graph, then admit it in one transaction ([guide](recipes/bulk-loads.md))
 - **Graph projection** — materialize subgraphs into petgraph for centrality,
   components, shortest-path algorithms
 - **"SQLite energy"** — single process, no server required
