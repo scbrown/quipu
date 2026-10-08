@@ -292,6 +292,10 @@ fn routes_in_server_source() -> Vec<String> {
     let sources = [
         ("server.rs", include_str!("../server.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        (
+            "server/merge_decisions.rs",
+            include_str!("../server/merge_decisions.rs"),
+        ),
         ("server/assets.rs", include_str!("../server/assets.rs")),
         (
             "server/graph_store.rs",

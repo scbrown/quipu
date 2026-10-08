@@ -1,9 +1,7 @@
 # Why Quipu
 
-This page holds the long form that used to open the README: sharing, a tour,
-the comparison, the full feature list, the architecture and the feature matrix.
-The README now leads with installing it and a three-command first success
-([the caboodle-stack README standard](https://github.com/scbrown/caboodle/blob/main/docs/stack/README-STANDARD.md)).
+Quipu stores structured knowledge, validates writes against your rules, and
+lets agents query and share that knowledge through its CLI, REST API and MCP server.
 
 ## Sharing & Federation
 
@@ -179,7 +177,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup, and `POST /query` with `"federated": true` fans out through the federated provider, reporting which members answered. Remotes carry declared trust labels at the federation edge, so a federated answer composes the labels of every member that contributed rather than silently inheriting the caller's. Federation config is read-side only: adding a remote never turns it into an outbound replication target or bypasses the share scrub/import boundary.
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
-- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 46 MCP tools for agent integration (48 with the `owl` feature).
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 48 MCP tools for agent integration (50 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. Version discovery is `git_only = true`: the baseline comes from this repository's tags, never the unrelated `quipu` crate on crates.io. CI runs fmt, clippy, tests, and markdown lint on every push. `/version` also reports the deployed git SHA, which matters because a deployment can legitimately sit AHEAD of the newest tag — the SHA, not the version string, identifies what is actually running.
 
@@ -302,7 +300,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
               │                │                │
         ┌─────┴─────┐   ┌─────┴─────┐   ┌──────┴──────┐
         │ MCP Tools  │   │ REST API  │   │  Rust API   │
-        │ (46 tools) │   │ + Web UI  │   │  (crate)    │
+        │ (48 tools) │   │ + Web UI  │   │  (crate)    │
         └─────┬─────┘   └─────┬─────┘   └──────┬──────┘
               └────────────────┼────────────────┘
                                │
@@ -331,7 +329,7 @@ Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
 Through Quipu's own MCP server (`quipu mcp`, or `quipu-server` at `/mcp`),
-agents get 46 MCP tools (48 with the `owl` feature). The two most
+agents get 48 MCP tools (50 with the `owl` feature). The two most
 commonly used for knowledge-aware context:
 
 **`quipu_context`** — unified knowledge discovery. Bobbin merges the result
@@ -454,7 +452,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Graph explorer | ✅ | Canvas + Barnes-Hut layout, one `POST /graph` payload, no CDN |
 | Web components | ✅ | Embeddable `<quipu-*>` elements |
 | Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
-| MCP tools (46; 48 with `owl`) | ✅ | Agent integration |
+| MCP tools (48; 50 with `owl`) | ✅ | Agent integration |
 | Python bindings | ✅ | `quipu-client` under `python/` — REST client, stdlib-only |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |

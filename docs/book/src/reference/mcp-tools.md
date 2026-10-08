@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **46 tools** in a default build, or
-**48** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
+**50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -121,6 +121,34 @@ These are three separate tools rather than one with a `mode` because an MCP clie
 a tool by its annotation. A moded tool would carry a single, necessarily destructive
 annotation, and every read-only call — including `propose`, the entry point — would be
 refused under a no-approval policy.
+
+### `quipu_merge_decisions`
+
+**READ.** Lists the conflicts of merging an incoming share into ROOT: one row per slot
+with the `base` / `ours` / `theirs` values, the slot's `max_count`, and each side's
+provenance. The rows are bound to ROOT's graph hash and the incoming share id. With
+`propose: true`, each row also gets a mechanical `proposal` (`choose` plus `evidence`).
+It never sets a `decision` and writes nothing.
+
+`incoming` and `base` are shares **inline**, in the shape `/import` takes (`manifest`,
+`export_ntriples`, `shapes_turtle`). Both are verified by hash, and `base` must be the
+incoming share's `parent_share`. A server path is never accepted. REST:
+`POST /merge/decisions`. CLI: `quipu merge <share-dir> --emit-decisions <file> [--propose]`.
+
+### `quipu_merge_apply`
+
+**WRITE.** Finishes the merge from the decisions file with each row's `decision` set
+(`{"choose": "ours"|"theirs"|"base"}` or `{"values": [<N-Triples terms>]}`). It commits
+the clean part of the merge plus every decided slot in one transaction. The
+transaction's source records both parents, the `reviewer`, and the SHA-256 of the
+decisions.
+
+It refuses, and writes nothing, on an undecided row, stale decisions (ROOT or the share
+moved since they were emitted), more values than the slot's `sh:maxCount`, or a value
+that is not an RDF term. It also refuses a field merge-decisions/v1 does not
+define. `dry_run: true` runs every check and returns the counts it would write,
+without writing. REST: `POST /merge/apply`. CLI: `quipu merge <share-dir>
+--decisions <file> --reviewer <who> [--dry-run]`.
 
 ### `quipu_knot`
 
@@ -313,8 +341,8 @@ Two properties worth knowing before using it:
 
 - **`planned: 0` is a real answer.** It means the named source owns no live
   facts. `quipu_knot` reports `replaced: true, count: 0` both for a retraction
-  that removed nothing and for one that emptied a graph, so this question
-  previously had no answer.
+  that deletes nothing and for one that empties a graph. Read `planned`
+  to distinguish those cases.
 - **Re-keying order is retract FIRST, then re-promote.** The store dedups an
   identical triple to one row carrying one source, and the existence check
   ignores the transaction source — so asserting canonically first is skipped as
@@ -360,6 +388,11 @@ so zero results are distinguishable from an unembedded store — see
 Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
 See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
 exceptions, temporal behavior, and bounded candidate recall.
+
+**Anchored search** (`anchor`, `max_hops`, `anchor_mode`, `decay`, `via`,
+`direction`, `explain`) roots the search on one entity and ranks by hop
+distance. It is off unless the server sets `[quipu.search] anchored = true`. See
+[anchored search](./rest-api.md#anchored-search).
 
 ### `quipu_hybrid_search`
 

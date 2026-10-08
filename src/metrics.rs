@@ -25,6 +25,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 pub(crate) mod attestation;
+pub(crate) mod write_provenance;
 pub mod writes;
 
 /// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
@@ -225,6 +226,7 @@ fn request_key<V>(
 pub struct Metrics {
     attestation: attestation::AttestationMetrics,
     writes: writes::WriteMetrics,
+    write_provenance: write_provenance::WriteProvenanceMetrics,
     /// (endpoint template, status) -> request count.
     requests: Mutex<BTreeMap<(String, u16), u64>>,
     /// endpoint template -> duration histogram.
@@ -379,6 +381,16 @@ impl Metrics {
         self.sample_rss();
     }
 
+    /// Count one committed write transaction under its request's declared
+    /// provenance (aegis-7zp4rc). Called at commit, so a refused or rolled-back
+    /// request is never counted.
+    pub fn observe_write_provenance(
+        &self,
+        provenance: &crate::write_provenance::RequestProvenance,
+    ) {
+        self.write_provenance.observe(provenance);
+    }
+
     /// Update the RSS high-water mark from the current process RSS.
     pub fn sample_rss(&self) {
         let (rss, _vsz) = process_memory();
@@ -417,6 +429,7 @@ impl Metrics {
         let mut out = String::new();
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
+        self.write_provenance.render(&mut out);
 
         out.push_str(
             "# HELP quipu_http_requests_total Requests served, by route template and status.\n\

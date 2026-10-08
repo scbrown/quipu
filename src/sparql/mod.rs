@@ -22,6 +22,9 @@ pub mod rdfs;
 pub mod rdfs_closure;
 #[cfg(test)]
 mod rdfs_closure_tests;
+pub mod string_pushdown;
+#[cfg(test)]
+mod string_pushdown_tests;
 #[cfg(test)]
 mod tests;
 
@@ -235,6 +238,10 @@ pub struct TemporalContext {
     ///
     /// A regime must be a SUPERSET of the default answer, never a subset.
     pub entails_rdfs: bool,
+    /// String FILTERs pushed into the scan of the BGP being evaluated
+    /// (aegis-tl2q4j). Set only by a `Filter` directly over a BGP; `None` on
+    /// every other path.
+    pub string_narrows: Option<std::sync::Arc<Vec<string_pushdown::StringNarrow>>>,
 }
 
 /// Execute a SPARQL query against the store (current state).
