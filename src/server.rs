@@ -26,6 +26,8 @@ mod auth;
 mod base;
 #[path = "server/entity.rs"]
 mod entity;
+#[path = "server/feed.rs"]
+mod feed;
 #[path = "server/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "server/graph_store.rs"]
@@ -57,6 +59,8 @@ mod tests;
 mod tools;
 #[path = "server/update.rs"]
 mod update;
+#[path = "server/update_eval.rs"]
+mod update_eval;
 #[path = "server/update_slice.rs"]
 mod update_slice;
 #[path = "server/wal_maintenance.rs"]
@@ -64,10 +68,10 @@ mod wal_maintenance;
 
 use base::{health, metrics_handler, print_usage, stats, version};
 use entity::{
-    changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
-    entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
-    reconcile_handler, spotlight_handler, transactions,
+    entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
+    entity_turtle_suffix, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
 };
+use feed::{changes_get, events_commit, events_get, transactions};
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use publication::{export, share_payload};
 #[cfg(test)]

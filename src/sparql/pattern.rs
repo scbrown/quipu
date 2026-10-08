@@ -14,6 +14,7 @@ use crate::store::Store;
 use crate::types::Value;
 
 use super::aggregate::eval_aggregate;
+use super::bind_join::try_values_bind_join;
 use super::filter::eval_filter;
 use super::triple::eval_bgp as eval_bgp_inner;
 use super::values::eval_values;
@@ -114,6 +115,10 @@ pub fn eval_pattern_seeded(
         } => eval_values(store, variables, bindings, seed),
 
         GraphPattern::Join { left, right } => {
+            // aegis-roth88: a small VALUES table seeds the other side per row.
+            if let Some(done) = try_values_bind_join(store, left, right, ctx, seed)? {
+                return Ok(done);
+            }
             let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
             let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
             let joined = join_rows(&left_rows, &right_rows, ctx)?;
@@ -129,8 +134,11 @@ pub fn eval_pattern_seeded(
         GraphPattern::Filter { expr, inner } => {
             // aegis-o3l46b: seed `?v` from a top-level `FILTER(?v = <iri>)`.
             let pushed = super::filter_pushdown::seed_iri_equalities(store, expr, inner, seed)?;
-            let (rows, vars) =
-                eval_pattern_seeded(store, inner, ctx, pushed.as_ref().unwrap_or(seed))?;
+            let inner_seed = pushed.as_ref().unwrap_or(seed);
+            // aegis-tl2q4j: narrow the scan by the filter's string tests.
+            let narrowed = super::string_pushdown::narrowed(expr, inner, inner_seed, ctx);
+            let inner_ctx = narrowed.as_ref().unwrap_or(ctx);
+            let (rows, vars) = eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?;
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {
                 // A pure-Rust filter over pre-materialized rows touches
@@ -427,6 +435,16 @@ pub fn eval_pattern_seeded(
         GraphPattern::Graph { name, inner } => {
             if let NamedNodePattern::Variable(variable) = name {
                 let graph_var = variable.as_str().to_string();
+                // A seed binding the graph variable to anything but a stored term
+                // (an IRI absent from the dictionary, a literal) names no graph:
+                // the row has no solution. Treating it as unbound would scan every
+                // graph and overwrite ?g (aegis-roth88, wu's review of quipu#429).
+                if seed
+                    .get(&graph_var)
+                    .is_some_and(|v| !matches!(v, Value::Ref(_)))
+                {
+                    return Ok((Vec::new(), vec![graph_var]));
+                }
                 let bound_graph = seed.get(&graph_var).and_then(|value| match value {
                     Value::Ref(id) => Some(*id),
                     _ => None,

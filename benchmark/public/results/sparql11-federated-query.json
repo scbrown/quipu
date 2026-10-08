@@ -1,8 +1,8 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 federated query",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "ba9a8e73f6612013ed866e9ebaa8a06b3f051e45",
-  "quipu_version": "quipu 0.11.0\ngit_sha: ba9a8e73f6612013ed866e9ebaa8a06b3f051e45\ngit_dirty: false",
+  "quipu_revision": "214680aff54c0ad30f7d146229e76e51e3e53312",
+  "quipu_version": "quipu 0.11.1\ngit_sha: 214680aff54c0ad30f7d146229e76e51e3e53312\ngit_dirty: false",
   "scope": "all seven Working Group-approved BasicFederatedQuery SERVICE cases",
   "policy": "SERVICE IRIs must match operator-configured remotes; variable endpoints are a deliberate policy deviation",
   "classes": {
@@ -85,6 +85,6 @@
       "diagnostic": ""
     }
   ],
-  "generated_at": "2026-10-07T02:29:31Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/37561917101"
+  "generated_at": "2026-10-08T06:30:53Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/37737418365"
 }

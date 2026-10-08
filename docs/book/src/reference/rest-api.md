@@ -387,6 +387,14 @@ curl -s localhost:3030/episode -X POST \
   }'
 ```
 
+A bare node `type` such as `WebApplication` names a class under the store's
+`base_ns`. To name a class in the public Quechua vocabulary instead, prefix it:
+`"type": "quechua:WorkItem"` asserts
+`<https://scbrown.github.io/quechua/ns#WorkItem>`. The prefix changes only the
+class. The node's own IRI is still minted under `base_ns`. Like any other type, a
+Quechua class is refused until a loaded shape sanctions it. No other prefix is
+accepted.
+
 Set `"replace_snapshot": true` for producers whose payload is the complete
 current state of an inventory. Facts previously asserted by the same episode
 name but absent from the new payload are retracted atomically with the new
@@ -827,6 +835,36 @@ no episode to trace). `entity_type` restricts to an rdf:type IRI. See
 > would need a full re-embed backfill to stay coherent — a much larger change than it
 > looks. Documented here rather than "fixed" cheaply and inconsistently.
 
+#### Anchored search
+
+Off unless the server sets `[quipu.search] anchored = true`. An `anchor` sent to
+a server with it off is refused rather than answered unanchored. A request
+without `anchor` is unchanged.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `anchor` | | One entity, as an IRI, a CURIE or an exact `rdfs:label`. Ambiguity or absence is refused, with the candidates named. |
+| `max_hops` | 3 (cap 4) | Neighbourhood radius |
+| `anchor_mode` | `decay` | `decay`: score × `decay`^hops, unreachable × `decay`^(max_hops+1). `sort`: hops first, then score. `filter`: reachable only. |
+| `decay` | 0.5 | Per-hop multiplier, in (0, 1] |
+| `via` | | Traverse only these predicates (replaces the default exclusions) |
+| `direction` | `both` | `out`, `in` or `both` |
+| `explain` | false | Adds one shortest `path` per result |
+
+The neighbourhood is walked with bound single-pattern lookups over current ROOT
+facts (`valid_at` applies). `owl:sameAs` costs no hop. `rdf:type`,
+`rdfs:subClassOf`, PROV links, `distinctFrom`, `mentions` and `inDocument` are
+not traversed. Without that, everything is two hops from everything through a
+class, an activity or a document. A node with more than 150 edges is reached
+but not expanded; the anchor itself is always expanded. The walk stops at 5,000
+nodes. The response's `anchor` block reports `reached`, `hubs_not_expanded`,
+`truncated` and `truncated_at_hop`. A truncated ring is never presented as
+complete.
+
+Each result gains `hops` (null when unreachable) and `text_score` (the
+unanchored score). The 200 best unanchored candidates are reordered, so an
+entity outside that pool is not added by being near the anchor.
+
 ### `POST /hybrid_search`
 
 Combined SPARQL filter + vector ranking.
@@ -1164,6 +1202,24 @@ folds into `other` rather than creating unbounded Prometheus cardinality:
   store connection;
 - `quipu_store_held_seconds_total{client,endpoint}` — store capacity consumed.
 
+Writers declare structured provenance in five headers: `X-Quipu-Agent`,
+`X-Quipu-Harness`, `X-Quipu-Model`, `X-Quipu-Session` and `X-Quipu-Host`. Their
+values are never metric labels. On write routes the server classifies how
+completely they were declared, and counts each COMMITTED write transaction once,
+at commit. A refused or rolled-back request counts nothing, and commits the
+engine makes on a request's behalf (verdicts, reasoner materialization,
+migration) are not counted as that client's writes:
+
+- `quipu_write_provenance_total{client,endpoint,provenance}` — `provenance` is
+  `complete` (agent, harness and host, plus session and model when the harness
+  is `claude` or `codex`), `partial`, or `absent` (none of the five headers);
+- `quipu_write_provenance_missing_total{client,field}` — commits missing a
+  required field (`agent`, `harness`, `host`, `session`, `model`).
+
+A header that is present but blank counts as missing. Coverage per client is
+`rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
+the process restarts, so use rates rather than raw values.
+
 The server also writes one-line JSON request events to stderr for journald/Loki.
 `request_start` makes a request that never completes visible. `request_complete`
 adds `status`, `duration_ms`, and the actual `auth_outcome`; `/query` responses
@@ -1396,6 +1452,15 @@ The durable graph-change event log (at-least-once delivery; consumers dedup
 by offset).
 
 ### `GET /events`
+
+Feed reads (`/events`, `/changes`, `/transactions`) use the WAL read pool when
+available, so a writer holding the store mutex does not block them. An empty
+read pool falls back to the writer. `POST /events/commit` remains a write.
+The `quipu_store_wait_seconds_total` and `quipu_store_held_seconds_total` metrics
+attribute each feed read to its normalized `X-Quipu-Client` and endpoint,
+including requests that return an error. An event page and its lag gauge are
+separate reads: a concurrent commit may increase the reported lag without
+changing the page's `next_offset` cursor.
 
 Pull a batch of events in offset order.
 

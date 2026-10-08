@@ -292,6 +292,10 @@ fn routes_in_server_source() -> Vec<String> {
     let sources = [
         ("server.rs", include_str!("../server.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        (
+            "server/merge_decisions.rs",
+            include_str!("../server/merge_decisions.rs"),
+        ),
         ("server/assets.rs", include_str!("../server/assets.rs")),
         (
             "server/graph_store.rs",
@@ -313,6 +317,8 @@ fn routes_in_server_source() -> Vec<String> {
         "server/auth.rs",
         "server/base.rs",
         "server/entity.rs",
+        "server/feed.rs",
+        "server/feed_read_pool_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",
         "server/input_fields.rs",
@@ -324,6 +330,9 @@ fn routes_in_server_source() -> Vec<String> {
         "server/tests.rs",
         "server/tools.rs",
         "server/update.rs",
+        // SPARQL Update evaluator with spec DELETE/INSERT order
+        // (aegis-odm5yt), called from update.rs, no routes.
+        "server/update_eval.rs",
         // Parse-guard regression tests (aegis-xcvb5z): test-only, no routes.
         "server/parse_guard_tests.rs",
         // Slice planner for /update (aegis-jm1lcl): pure analysis of the parsed

@@ -447,6 +447,10 @@ impl Store {
     /// drift, or a pooled reader would be a different kind of Store than the
     /// writer.
     fn with_connection(conn: Connection) -> Self {
+        // aegis-tl2q4j: the string-FILTER narrowing functions. A failed
+        // registration cannot answer wrongly: a narrowed query then fails
+        // loudly with "no such function".
+        let _ = crate::sparql::string_pushdown::register(&conn);
         Self {
             conn,
             signing: None,
