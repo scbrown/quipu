@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"/></a>
   <a href="https://github.com/scbrown/quipu/actions/workflows/ci.yml"><img src="https://github.com/scbrown/quipu/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://github.com/scbrown/caboodle"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Part of the caboodle stack"/></a>
   <a href="https://doi.org/10.5281/zenodo.21878428"><img src="https://zenodo.org/badge/1201016929.svg" alt="DOI"/></a>
@@ -122,11 +122,19 @@ Quipu is for.
 | you want to | run |
 |---|---|
 | load Turtle, checked against your shapes | `quipu knot <file.ttl> --shapes <shapes.ttl>` |
+| bulk-load a lot of data at once, validated before it touches your graph | `quipu share --output <dir>` from a scratch store, then `quipu import <dir>` (staged and shape-checked; failures are quarantined), then `quipu import promote <share-id>` (one transaction into ROOT) |
+| migrate or move a dataset between stores | the same three steps: `share`, `import`, `import promote` |
 | ask a SPARQL question | `quipu read '<sparql>'` |
 | see the graph as it was on a date | `quipu read '<sparql>' --valid-at 2026-09-01` |
 | see what depends on an entity | `quipu impact <entity-IRI>` |
 | keep shapes in the store, so every write is checked | `quipu shapes load <name> <shapes.ttl>` |
 | explore it in a browser, or over HTTP | `quipu-server --db <file> --bind 127.0.0.1:3030` |
+
+For a bulk load, a migration or a backfill, use **import + promote**, not
+thousands of `knot` or SPARQL Update writes. `import` validates the whole dataset
+in its own staging graph and never touches ROOT. `promote` then admits it in a
+single transaction, and one fork rollback undoes it. Walkthrough:
+[Bulk loads and migrations](docs/book/src/recipes/bulk-loads.md).
 
 Every command and flag: [CLI reference](docs/book/src/reference/cli.md). The HTTP
 endpoints: [REST API](docs/book/src/reference/rest-api.md).
@@ -137,7 +145,7 @@ Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, an
 `quipu mcp --db store.db` provides stdio using the companion server binary.
 Build both with `cargo build --release --features full`. Protected stdio writes use
 `--mcp-token-file /path/to/private-token`; HTTP writes use the existing bearer policy.
-Quipu defines 46 MCP tools (48 with `owl`), from one shared schema manifest.
+Quipu defines 48 MCP tools (50 with `owl`), from one shared schema manifest.
 Bobbin's `knowledge_*` tools and existing REST-backed proxies remain compatible.
 See the [connection and authentication guide](docs/book/src/reference/mcp-tools.md#connect-directly).
 
@@ -205,4 +213,4 @@ See [RELEASING.md](docs/RELEASING.md) for how a release is cut.
 
 ## 📜 License
 
-[MIT](LICENSE)
+Licensed under the Apache License, Version 2.0 (see [LICENSE](LICENSE)). Releases up to and including quipu-ai v0.11.0 were MIT-licensed and remain available under MIT.

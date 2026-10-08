@@ -131,6 +131,11 @@ pub struct SearchConfig {
     /// output exceeds the cap aborts immediately with a complexity error
     /// naming the limit, usually within milliseconds of going quadratic.
     pub max_join_rows: usize,
+
+    /// Graph-anchored search (`anchor` on `/search`, aegis-rcz5ib.8). OFF by
+    /// default until its evaluation gate passes; an anchored request on a
+    /// server with this off is refused, never silently answered unanchored.
+    pub anchored: bool,
 }
 
 impl Default for SearchConfig {
@@ -143,6 +148,7 @@ impl Default for SearchConfig {
             query_timeout_ms: 30_000,
             request_timeout_ms: 0,
             max_join_rows: 1_000_000,
+            anchored: false,
         }
     }
 }
