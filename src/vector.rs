@@ -121,6 +121,25 @@ pub trait KnowledgeVectorStore {
 // ── SQLite implementation ─────────────────────────────────────────
 
 impl KnowledgeVectorStore for Store {
+    fn text_search(
+        &self,
+        query: &str,
+        limit: usize,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<VectorMatch>> {
+        if self.search_config().keyword {
+            self.keyword_search(query, limit, valid_at, None)
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    fn ensure_fts_index(&self) -> Result<()> {
+        if self.search_config().keyword {
+            self.initialize_lexical_index()?;
+        }
+        Ok(())
+    }
     fn embed_entity(
         &self,
         entity_id: i64,

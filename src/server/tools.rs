@@ -163,7 +163,10 @@ macro_rules! embed_handler {
             read_blocking(move || {
                 let original = i.clone();
                 let mut i = i;
-                if i.get("embedding").is_none() {
+                if i.get("embedding").is_none()
+                    && !(stringify!($name) == "search"
+                        && i.get("mode").and_then(JsonValue::as_str) == Some("keyword"))
+                {
                     if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {
                         // The handle's startup copy: never the writer lock, which a
                         // long write can hold for minutes (aegis-hzh9rz).
