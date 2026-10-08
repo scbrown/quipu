@@ -1202,6 +1202,24 @@ folds into `other` rather than creating unbounded Prometheus cardinality:
   store connection;
 - `quipu_store_held_seconds_total{client,endpoint}` — store capacity consumed.
 
+Writers declare structured provenance in five headers: `X-Quipu-Agent`,
+`X-Quipu-Harness`, `X-Quipu-Model`, `X-Quipu-Session` and `X-Quipu-Host`. Their
+values are never metric labels. On write routes the server classifies how
+completely they were declared, and counts each COMMITTED write transaction once,
+at commit. A refused or rolled-back request counts nothing, and commits the
+engine makes on a request's behalf (verdicts, reasoner materialization,
+migration) are not counted as that client's writes:
+
+- `quipu_write_provenance_total{client,endpoint,provenance}` — `provenance` is
+  `complete` (agent, harness and host, plus session and model when the harness
+  is `claude` or `codex`), `partial`, or `absent` (none of the five headers);
+- `quipu_write_provenance_missing_total{client,field}` — commits missing a
+  required field (`agent`, `harness`, `host`, `session`, `model`).
+
+A header that is present but blank counts as missing. Coverage per client is
+`rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
+the process restarts, so use rates rather than raw values.
+
 The server also writes one-line JSON request events to stderr for journald/Loki.
 `request_start` makes a request that never completes visible. `request_complete`
 adds `status`, `duration_ms`, and the actual `auth_outcome`; `/query` responses
