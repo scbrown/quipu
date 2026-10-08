@@ -164,7 +164,7 @@ macro_rules! embed_handler {
                 let original = i.clone();
                 let mut i = i;
                 let no_embed = if stringify!($name) == "search" {
-                    let config = s.vector_read().search_config().clone();
+                    let config = &s.search_config;
                     let configured_mode = if config.mode == "hybrid" && !config.hybrid {
                         "semantic"
                     } else {

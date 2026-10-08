@@ -1022,6 +1022,7 @@ pub(super) fn pooled_handle_with_provider(
     let handle = super::StoreHandle {
         graph_metrics: super::graph_metrics::GraphMetrics::new(&path),
         embedding_provider: store.embedding_provider(),
+        search_config: store.search_config().clone(),
         writer: parking_lot::FairMutex::new(store),
         vector_reads_pooled: true,
         federation: quipu::config::FederationConfig::default(),

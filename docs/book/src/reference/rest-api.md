@@ -834,7 +834,10 @@ Both branches retain temporal, graph and provenance scopes. Intermediate hybrid
 weights use semantic type inference for both branches (`infer_types: true`);
 asserted-only hybrid type scopes are refused until both branches support them.
 Content and anchor reranking are not yet composed with intermediate fusion.
-Query text is required; an optional embedding supplies the semantic branch only.
+Intermediate weights require query text; an optional embedding supplies the
+semantic branch. Endpoints retain their pure modes' input requirements and
+restrictions (keyword rejects embeddings; semantic permits an embedding without
+query text).
 Empty/punctuation-only lexical expressions are refused as in keyword mode.
 
 `explain: true` adds raw BM25, cosine, fused score, branch ranks, actual matched
