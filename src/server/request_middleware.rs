@@ -101,20 +101,34 @@ async fn log_request_with_sequence(
     );
     // Log before dispatch so a request that never completes is still visible.
     let id = sequence.fetch_add(1, Ordering::Relaxed);
+    let declared_host = req
+        .headers()
+        .get("x-quipu-host")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let declared_agent = req
+        .headers()
+        .get("x-quipu-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
     eprintln!(
         "{}",
-        quipu::request_usage::structured_request_log(
-            "request_start",
-            id,
-            &client,
-            &task,
-            method.as_str(),
-            &path,
-            &endpoint,
-            None,
-            None,
-            quipu::request_usage::AuthOutcome::Pending,
-            None,
+        quipu::request_usage::with_declared_attribution(
+            quipu::request_usage::structured_request_log(
+                "request_start",
+                id,
+                &client,
+                &task,
+                method.as_str(),
+                &path,
+                &endpoint,
+                None,
+                None,
+                quipu::request_usage::AuthOutcome::Pending,
+                None,
+            ),
+            declared_host.as_deref(),
+            declared_agent.as_deref()
         )
     );
     let started = std::time::Instant::now();
@@ -129,6 +143,7 @@ async fn log_request_with_sequence(
     let elapsed = started.elapsed().as_secs_f64();
     quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);
     quipu::metrics::metrics().observe_client(&client, &task, &endpoint, elapsed);
+    quipu::metrics::metrics().observe_auth_result(&client, &endpoint, method.as_str(), status);
     let auth = resp
         .extensions()
         .get::<quipu::request_usage::AuthOutcome>()
@@ -140,18 +155,22 @@ async fn log_request_with_sequence(
         .copied();
     eprintln!(
         "{}",
-        quipu::request_usage::structured_request_log(
-            "request_complete",
-            id,
-            &client,
-            &task,
-            method.as_str(),
-            &path,
-            &endpoint,
-            Some(status),
-            Some(started.elapsed().as_millis()),
-            auth,
-            usage,
+        quipu::request_usage::with_declared_attribution(
+            quipu::request_usage::structured_request_log(
+                "request_complete",
+                id,
+                &client,
+                &task,
+                method.as_str(),
+                &path,
+                &endpoint,
+                Some(status),
+                Some(started.elapsed().as_millis()),
+                auth,
+                usage,
+            ),
+            declared_host.as_deref(),
+            declared_agent.as_deref()
         )
     );
     resp
