@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn auth_refusals_distinguish_success_and_probe_methods() {
+    let m = Metrics::default();
+    m.observe_auth_result("worker", "/knot", "POST", 200);
+    m.observe_auth_result("worker", "/knot", "POST", 401);
+    m.observe_auth_result("worker", "/knot", "POST", 403);
+    m.observe_auth_result("link-check", "/knot", "GET", 401);
+    let text = m.render(0, 0, 0, None);
+    assert!(text.contains(
+        "client=\"worker\",endpoint=\"/knot\",method=\"POST\",expected_probe=\"false\"} 1"
+    ));
+    assert!(text.contains(
+        "client=\"link-check\",endpoint=\"/knot\",method=\"GET\",expected_probe=\"false\"} 1"
+    ));
+}
+
+#[test]
+fn auth_refusal_client_and_method_labels_are_bounded_without_losing_counts() {
+    let m = Metrics::default();
+    for i in 0..(MAX_CLIENTS * 4) {
+        m.observe_auth_result(&format!("caller{i}"), "/knot", &format!("METHOD{i}"), 401);
+    }
+    let map = m.auth_refusals.lock().unwrap();
+    assert_eq!(map.len(), MAX_CLIENTS);
+    assert!(map.contains_key(&("other".into(), "/knot".into())));
+    assert!(
+        map.values()
+            .all(|methods| methods.len() == 1 && methods.contains_key(&("OTHER", false)))
+    );
+    assert_eq!(
+        map.values()
+            .map(|methods| methods[&("OTHER", false)])
+            .sum::<u64>(),
+        (MAX_CLIENTS * 4) as u64
+    );
+}
+
+#[test]
 fn client_label_precedence_and_normalisation() {
     // Explicit header wins over User-Agent.
     assert_eq!(
@@ -31,6 +68,24 @@ fn client_label_precedence_and_normalisation() {
     assert_eq!(normalize_task(Some("bad\n task!")), "badtask");
     assert_eq!(normalize_task(Some(&"x".repeat(200))).len(), 64);
     assert_eq!(normalize_task(Some("日本語")), "unattributed");
+}
+
+#[test]
+fn expected_probe_is_narrow_and_survives_caller_overflow() {
+    let m = Metrics::default();
+    for i in 0..MAX_CLIENTS {
+        m.observe_auth_result(&format!("worker{i}"), "/knot", "POST", 200);
+    }
+    m.observe_auth_result("auth-negative-probe", "/episode", "POST", 401);
+    m.observe_auth_result("auth-negative-probe", "/knot", "POST", 401);
+    m.observe_auth_result("aegis-doc-link-check", "/episode", "GET", 401);
+    m.observe_auth_result("aegis-doc-link-check", "/episode", "POST", 401);
+    let map = m.auth_refusals.lock().unwrap();
+    let folded = &map[&("other".into(), "/episode".into())];
+    assert_eq!(folded[&("POST", true)], 1);
+    assert_eq!(folded[&("POST", false)], 1);
+    assert_eq!(folded[&("GET", true)], 1);
+    assert_eq!(map[&("other".into(), "/knot".into())][&("POST", false)], 1);
 }
 
 #[test]
