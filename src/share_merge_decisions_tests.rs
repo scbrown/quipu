@@ -37,7 +37,10 @@ fn set_status(store: &mut Store, value: &str, ts: &str) {
 }
 
 fn store_with_base() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    seed(Store::open_in_memory().unwrap())
+}
+
+fn seed(mut store: Store) -> Store {
     crate::share_scrub::seed_test_catalogue(&mut store);
     store.load_shapes("merge", SHAPES, "2026-10-07").unwrap();
     put(
@@ -54,6 +57,10 @@ fn store_with_base() -> Store {
 
 /// base "open"; theirs "closed" + a new tag "theirs"; ours "blocked" + "ours".
 fn scenario(root: &Path) -> (Store, PathBuf) {
+    scenario_with(root, store_with_base())
+}
+
+fn scenario_with(root: &Path, mut local: Store) -> (Store, PathBuf) {
     let mut source = store_with_base();
     let base = crate::share::share(
         &source,
@@ -77,7 +84,6 @@ fn scenario(root: &Path) -> (Store, PathBuf) {
         },
     )
     .unwrap();
-    let mut local = store_with_base();
     set_status(&mut local, "blocked", "2026-10-07T00:02:00Z");
     put(
         &mut local,
@@ -512,4 +518,65 @@ fn dry_run_reports_what_apply_then_writes_and_writes_nothing() {
         (dry.merge.asserted, dry.merge.retracted),
         (real.merge.asserted, real.merge.retracted)
     );
+}
+
+/// wu [wu-quipu435-review]: a decided value is spliced into one N-Triples
+/// line, so a newline in it must not smuggle a second triple in, either onto
+/// an unrelated subject or into the decided slot past sh:maxCount.
+#[test]
+fn a_value_cannot_smuggle_a_second_triple() {
+    const VICTIM: &str = "https://example.org/victim";
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let emitted = emit(&local, &incoming).unwrap();
+    let before = fact_count(&local);
+    for smuggled in [
+        format!("\"x\" .\n<{VICTIM}> <{TAG}> \"injected\""),
+        format!("\"x\" .\n<{S}> <{STATUS}> \"y\""),
+        format!("\"x\" .\r<{VICTIM}> <{TAG}> \"injected\""),
+    ] {
+        let mut file = emitted.clone();
+        let bytes = decide(
+            &mut file,
+            &Decision::Values {
+                values: vec![smuggled.clone()],
+            },
+        );
+        let err = apply(
+            &mut local,
+            &incoming,
+            &file,
+            &bytes,
+            "r",
+            "2026-10-07T01:00:00Z",
+            None,
+        )
+        .expect_err(&format!("{smuggled:?} must be refused"))
+        .to_string();
+        assert!(err.contains("one RDF term"), "{err}");
+        assert!(values(&local, TAG).iter().all(|v| v != "\"injected\""));
+        assert_eq!(fact_count(&local), before, "a refused apply writes nothing");
+    }
+}
+
+/// wu [wu-quipu435-review] note 1: `/merge/decisions` is served from the READ
+/// pool, whose connections are `SQLITE_OPEN_READ_ONLY`. Emit and propose must
+/// therefore succeed there, and say exactly what the writer says.
+#[test]
+fn decisions_are_emitted_from_a_read_only_connection() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("store.db");
+    let path = path.to_str().unwrap();
+    let (local, incoming) = scenario_with(root.path(), seed(Store::open(path).unwrap()));
+    let input = serde_json::json!({
+        "incoming": inline(&incoming),
+        "base": inline(&root.path().join("base")),
+        "propose": true,
+    });
+    let from_writer = crate::mcp::merge_decisions::tool_merge_decisions(&local, &input).unwrap();
+    let mut reader = Store::open_read_only(path).unwrap();
+    reader.adopt_read_config_from(&local);
+    let from_reader = crate::mcp::merge_decisions::tool_merge_decisions(&reader, &input).unwrap();
+    assert_eq!(from_reader, from_writer);
+    assert!(!from_reader["rows"].as_array().unwrap().is_empty());
 }

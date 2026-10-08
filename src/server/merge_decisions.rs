@@ -17,13 +17,14 @@ pub(crate) fn routes() -> Router<SharedStore> {
         .route("/merge/apply", post(merge_apply))
 }
 
-/// READ: emits (and optionally proposes) decisions; writes nothing.
+/// READ: emits (and optionally proposes) decisions; writes nothing. Served from
+/// the read pool: a full ROOT export must not hold the writer (as `/export`).
 async fn merge_decisions(
     State(store): State<SharedStore>,
     Json(input): Json<JsonValue>,
 ) -> Result<Json<JsonValue>, AppError> {
     blocking(move || {
-        let st = store.lock();
+        let st = store.read();
         Ok(Json(crate::input_fields::annotate(
             "quipu_merge_decisions",
             &input,

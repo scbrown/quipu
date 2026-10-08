@@ -533,7 +533,25 @@ fn plan_pair(
             let line = format!("{} <{}> {} .", r.subject, r.predicate, value);
             let parsed = parse_graph(&line, &format!("row {} value {value}", row.id))
                 .map_err(|e| Error::InvalidValue(format!("{e}; nothing was written")))?;
-            merged.extend(parsed);
+            // The value is spliced into one N-Triples line, so a newline in it
+            // could add triples outside this slot or past sh:maxCount. Exactly
+            // one triple, on this row's subject and predicate, or refuse.
+            let mut triples = parsed.into_iter();
+            let one = match (triples.next(), triples.next()) {
+                (Some(t), None)
+                    if t.subject.to_string() == r.subject
+                        && t.predicate.as_str() == r.predicate =>
+                {
+                    t
+                }
+                _ => {
+                    return Err(Error::InvalidValue(format!(
+                        "row {} value {value:?} is not one RDF term for {} {}; nothing was written",
+                        row.id, r.subject, r.predicate
+                    )));
+                }
+            };
+            merged.insert(one);
         }
         applied.push(AppliedRow {
             id: row.id.clone(),
