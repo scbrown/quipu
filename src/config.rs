@@ -510,6 +510,12 @@ pub struct ServerConfig {
     /// handle per request. Readers are cheap but not free — each is an open
     /// `SQLite` connection with its own page cache.
     pub read_pool_size: usize,
+
+    /// Ceiling on facts copied for one `/update` that cannot be sliced (an
+    /// open subject with an open predicate copies the whole store). Past it
+    /// the update is refused with advice instead of exhausting memory
+    /// (aegis-11rwfs). 0 = unbounded. Default 250000.
+    pub update_full_copy_max_facts: usize,
 }
 
 impl Default for ServerConfig {
@@ -524,6 +530,7 @@ impl Default for ServerConfig {
             read_only: false,
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,
+            update_full_copy_max_facts: 250_000,
         }
     }
 }
