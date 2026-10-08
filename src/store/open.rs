@@ -193,6 +193,7 @@ impl Store {
     }
 
     fn init_with_attachments(conn: Connection, attachments: &[attach::Attachment]) -> Result<Self> {
+        crate::lexical::register(&conn)?;
         // `wal_autocheckpoint` is stated EXPLICITLY rather than left to SQLite's
         // default (aegis-raq1ok). Read the honest caveat before changing it:
         // the deployed store reached a **1.06 GB** WAL against a 5.7 GB
@@ -446,6 +447,9 @@ impl Store {
     /// drift, or a pooled reader would be a different kind of Store than the
     /// writer.
     fn with_connection(conn: Connection) -> Self {
+        // Persistent lexical triggers can be present even when query mode is
+        // off. Register their decoder on every writer and pooled reader.
+        let _ = crate::lexical::register(&conn);
         // aegis-tl2q4j: the string-FILTER narrowing functions. A failed
         // registration cannot answer wrongly: a narrowed query then fails
         // loudly with "no such function".
