@@ -1715,7 +1715,8 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
 
     let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
     let first =
-        super::tools::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50).unwrap();
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
     assert_eq!((first.embedded, first.remaining), (50, 20));
     assert!(
         batches.lock().iter().all(|&n| n <= 32),
@@ -1723,10 +1724,12 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
         batches.lock()
     );
     let second =
-        super::tools::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50).unwrap();
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
     assert_eq!((second.embedded, second.remaining), (20, 0));
     let third =
-        super::tools::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50).unwrap();
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
     assert_eq!(
         (third.embedded, third.remaining),
         (0, 0),
@@ -1738,7 +1741,8 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
         "only the graph's entities are embedded; the ROOT entity is untouched"
     );
     assert!(
-        super::tools::backfill_graph_embeddings(&shared, "urn:test:graph:missing", 50).is_err(),
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:missing", 50)
+            .is_err(),
         "an unknown graph is refused"
     );
 }

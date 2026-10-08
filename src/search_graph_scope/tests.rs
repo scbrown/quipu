@@ -280,3 +280,60 @@ fn default_off_refuses_exposure_while_prepared_named_vectors_stay_out_of_root() 
     assert_eq!(out["count"], 1);
     assert_eq!(out["results"][0]["entity"], "urn:root");
 }
+
+#[test]
+fn deleting_named_facts_cannot_turn_their_vector_into_a_root_hit() {
+    struct Fixed;
+    impl crate::EmbeddingProvider for Fixed {
+        fn embed_text(&self, _: &str) -> crate::Result<Vec<f32>> {
+            Ok(vec![1.0, 0.0])
+        }
+        fn dimension(&self) -> usize {
+            2
+        }
+    }
+    let mut s = fixture();
+    s.set_embedding_provider(std::sync::Arc::new(Fixed));
+    s.embedding_config_mut().auto_embed = true;
+    s.embedding_config_mut().dimension = 2;
+    let named = s.lookup("urn:alpha").unwrap().unwrap();
+    let root = s.lookup("urn:root").unwrap().unwrap();
+    let g = s.registered_graph_id("urn:graph:a").unwrap().unwrap();
+    let a = s
+        .lookup("http://www.w3.org/2000/01/rdf-schema#label")
+        .unwrap()
+        .unwrap();
+    s.transact_to_graph(
+        &[crate::Datum {
+            entity: named,
+            attribute: a,
+            value: crate::Value::Str("prepared named vector".into()),
+            valid_from: AT.into(),
+            valid_to: None,
+            op: crate::Op::Assert,
+        }],
+        AT,
+        None,
+        None,
+        g,
+    )
+    .unwrap();
+    s.vector_store()
+        .embed_entity(root, "root", &[0.5, 0.5], AT)
+        .unwrap();
+    s.search_config_mut().named_graphs = false;
+    let query = json!({"embedding":[1.0,0.0],"verbose":true});
+    let before = crate::tool_search(&s, &query).unwrap();
+    assert_eq!(before["count"], 1);
+    s.conn
+        .execute(
+            "DELETE FROM facts WHERE e=?1 AND g=?2",
+            rusqlite::params![named, g],
+        )
+        .unwrap();
+    let after = crate::tool_search(&s, &query).unwrap();
+    assert_eq!(
+        after["results"], before["results"],
+        "deletion must not admit a previously hidden named vector into ROOT"
+    );
+}

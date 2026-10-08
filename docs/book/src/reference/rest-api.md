@@ -807,6 +807,11 @@ including ROOT entities without vectors. Roll back exposure by disabling
 Reverting to a pre-scope binary after backfill can expose those vectors in
 unscoped search.
 
+A local `named_search_entities` origin cache is created when named vectors are
+prepared. It retains their exclusion from ROOT even if the named facts are
+physically cleaned up. The cache is regenerated with embeddings when a store
+is reconstructed; it is not exported as factual content.
+
 #### Keyword index
 
 Keyword search is off by default (`[quipu.search] keyword = false`). Explicit

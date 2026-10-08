@@ -95,7 +95,7 @@ fn build_entity_text_with_named(store: &Store, entity_id: i64, named: bool) -> R
     // to build no text and was never embedded, which hid whole graphs from
     // search (aegis-rcz5ib.10); fall back to its named-graph facts.
     let mut facts = store.entity_facts(entity_id)?;
-    if facts.is_empty() && named {
+    if facts.is_empty() && named && store.entity_is_named_graph_only(entity_id)? {
         facts = store.entity_facts_in_named_graphs(entity_id)?;
     }
     if facts.is_empty() {
@@ -304,6 +304,7 @@ pub(crate) fn apply_deferred_embed(
         if current != *text {
             continue; // stale — a newer writer owns this entity's embedding
         }
+        store.mark_named_search_embedding(*eid)?;
         vs.embed_entity(*eid, text, emb, &work.timestamp)?;
         written += 1;
     }
@@ -339,6 +340,7 @@ pub(crate) fn auto_embed_entities(
         let embeddings = provider.embed_batch(&texts)?;
 
         for ((eid, text), emb) in chunk.iter().zip(embeddings.iter()) {
+            store.mark_named_search_embedding(*eid)?;
             vs.embed_entity(*eid, text, emb, timestamp)?;
             embedded += 1;
         }

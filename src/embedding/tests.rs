@@ -641,6 +641,7 @@ fn root_text_ignores_the_entitys_named_graph_facts() {
     // ROOT facts define the text of any entity that has them, so adding a
     // named-graph fallback cannot move an existing ROOT vector.
     let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().named_graphs = true;
     ingest_rdf(
         &mut store,
         r#"<http://example.org/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice" ."#

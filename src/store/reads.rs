@@ -480,6 +480,20 @@ impl Store {
         if ever_root {
             return Ok(false);
         }
+        let origins: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='named_search_entities')",
+            [],
+            |r| r.get(0),
+        )?;
+        if origins
+            && self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM named_search_entities WHERE entity_id=?1)",
+                params![entity],
+                |r| r.get::<_, bool>(0),
+            )?
+        {
+            return Ok(true);
+        }
         Ok(self
             .conn
             .query_row(
@@ -489,6 +503,21 @@ impl Store {
             )
             .optional()?
             .is_some())
+    }
+
+    /// Retain the origin of a named-only vector independently of fact cleanup.
+    /// Called before a vector write, so partial failure cannot expose a named
+    /// vector through ROOT. This cache is regenerated with named embeddings.
+    pub fn mark_named_search_embedding(&self, entity: i64) -> Result<()> {
+        if !self.entity_is_named_graph_only(entity)? {
+            return Ok(());
+        }
+        self.conn.execute_batch("CREATE TABLE IF NOT EXISTS named_search_entities(entity_id INTEGER PRIMARY KEY REFERENCES terms(id))")?;
+        self.conn.execute(
+            "INSERT OR IGNORE INTO named_search_entities(entity_id) VALUES(?1)",
+            params![entity],
+        )?;
+        Ok(())
     }
 
     /// Distinct entities with a current asserted fact in graph `g`.

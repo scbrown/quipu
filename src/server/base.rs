@@ -403,3 +403,23 @@ pub(crate) fn apply_owl(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
         }
     }
 }
+
+/// Pure compiled identity; called before any Store or model is opened.
+pub(crate) fn print_compiled_version() {
+    println!("quipu-server {}", env!("CARGO_PKG_VERSION"));
+    println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
+    println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
+}
+
+/// Handle pure identity/help flags before configuration or disk access.
+pub(crate) fn handle_identity_args(args: &[String]) -> bool {
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        print_compiled_version();
+        true
+    } else if args.iter().any(|a| a == "--help" || a == "-h") {
+        print_usage();
+        true
+    } else {
+        false
+    }
+}
