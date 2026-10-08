@@ -32,9 +32,10 @@ cords are entities, knots are facts.
   fails with the rule it broke, so an agent can correct it on the spot.
 - **Nothing is overwritten.** Every fact carries when it was recorded and when
   it was true, so you can query the graph as it was at any moment.
-- **Standard, and measured.** It passes all Working Group–approved W3C SPARQL
-  1.1 Query, Update, Protocol and Results tests, scored alongside other stores
-  in [the conformance report](docs/book/src/benchmarks/conformance.md).
+- **Standard, and scored.** Its SPARQL 1.1 conformance is measured against the
+  Working Group–approved W3C tests, class by class with every exception named,
+  and scored alongside other stores in
+  [the conformance report](docs/book/src/benchmarks/conformance.md).
 
 The long form (sharing between stores, the feature list, the architecture and
 a comparison): [Why Quipu](docs/book/src/why-quipu.md).

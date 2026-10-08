@@ -139,7 +139,7 @@ Facts: 853 | Entities: 127 | Predicates: 34
 | Built-in web UI             | ❌ | ❌ | ✅ |
 | Embeddable (no server)      | ❌ | ❌ | ✅ |
 | SQLite-backed               | ❌ | ❌ | ✅ |
-| Rust / zero dependencies    | ❌ | ❌ | ✅ |
+| Rust, no JVM or Python      | ❌ | ❌ | ✅ |
 
 Traditional RDF stores demand too much ceremony. AI-native stores have no structure.
 Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
