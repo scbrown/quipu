@@ -102,6 +102,8 @@ agents a clear remediation path instead of a dead-end error.
   future OWL axiom diffs can coexist. The `kind` column disambiguates.
 - Proposals only mutate shape/ontology definitions — they never touch the EAVT
   fact store directly.
-- There is no default approver: accept and reject refuse a request without
-  `decided_by`, so every decision names who made it. A capability-based
+- Over MCP and REST there is no default approver: accept and reject refuse a
+  request without `decided_by`. The `quipu propose accept|reject` CLI records
+  every decision as `cli-user` and takes no approver argument, so a CLI
+  decision does not name a person. A capability-based
   authorization system (`quipu.schema.approve`) is a future concern.
