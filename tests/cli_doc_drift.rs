@@ -218,7 +218,7 @@ fn the_sharing_reference_page_matches_the_help_text_flags() {
 
 /// Pages whose citations must resolve.
 const CITING_PAGES: &[&str] = &[
-    "docs/book/src/sharing/README.md",
+    "docs/book/src/sharing/index.md",
     "docs/book/src/reference/cli-sharing.md",
 ];
 

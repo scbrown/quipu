@@ -1,6 +1,6 @@
 # CLI: sharing, import and legacy packs
 
-Reference for the commands behind [Sharing & Federation](../sharing/README.md).
+Reference for the commands behind [Sharing & Federation](../sharing/index.md).
 Every flag here is checked against `quipu --help` by `tests/cli_doc_drift.rs`, so
 this page cannot quietly fall behind the binary.
 
@@ -14,7 +14,7 @@ interchange format.
 
 ## `quipu share` — produce a share
 
-Prerequisite: [load the identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+Prerequisite: [load the identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share)
 and the shapes governing your data. The default destination is outward.
 An empty block-tier catalogue exits 2 (cannot verify); a matching identifier
 exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this check.
@@ -209,7 +209,7 @@ quipu import promote <share-id> [--actor <id>] [--db <path>]
 
 The second, separate verb. Nothing reaches ROOT because a file arrived; it
 reaches ROOT because someone ran this. Keeping admission in its own command is
-the point rather than an inconvenience — see the [primitive](../sharing/README.md).
+the point rather than an inconvenience — see the [primitive](../sharing/index.md).
 
 ## `quipu status` — has this share diverged?
 
