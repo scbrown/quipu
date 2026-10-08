@@ -22,6 +22,13 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "entity_type": { "type": "string", "description": "Optional: restrict to entities of this rdf:type IRI" },
                     "ranking": { "type": "string", "enum": ["content", "semantic"], "default": "semantic", "description": "Content ranking demotes repository artifacts lacking explanatory content; semantic returns raw cosine order." }
                     ,"verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
+                    ,"anchor": { "type": "string", "description": "Root the search on ONE entity (IRI, CURIE or exact label; ambiguity is refused, never guessed) and rank by hop distance from it. Requires [quipu.search] anchored = true on the server." }
+                    ,"max_hops": { "type": "integer", "description": "Anchor neighbourhood radius (default 3, server cap 4)." }
+                    ,"anchor_mode": { "type": "string", "enum": ["decay", "sort", "filter"], "description": "decay (default): score x decay^hops; sort: hops first; filter: only reachable results." }
+                    ,"decay": { "type": "number", "description": "Per-hop multiplier in (0, 1] for decay mode (default 0.5)." }
+                    ,"via": { "type": "array", "items": { "type": "string" }, "description": "Traverse only these predicate IRIs (replaces the default exclusions)." }
+                    ,"direction": { "type": "string", "enum": ["both", "out", "in"], "description": "Edge direction to traverse (default both)." }
+                    ,"explain": { "type": "boolean", "description": "Add one shortest path from the anchor to each result." }
                 }
             }
         }),
