@@ -251,7 +251,7 @@ fn visit_triple_pattern_limited(
     if let Some(value) = resolve_object_pattern(store, &tp.object, bindings)? {
         if let Value::Ref(id) = value
             && id != -1
-            && !direct_refs
+            && (!direct_refs || id < 0)
         {
             let iri = store.resolve(id)?;
             let ids = store.lookup_all(&iri)?;

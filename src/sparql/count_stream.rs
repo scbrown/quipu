@@ -357,7 +357,8 @@ fn stable(expr: &Expression) -> bool {
         Expression::UnaryPlus(a) | Expression::UnaryMinus(a) | Expression::Not(a) => stable(a),
         Expression::If(a, b, c) => stable(a) && stable(b) && stable(c),
         Expression::FunctionCall(
-            Function::StrDt
+            Function::Str
+            | Function::StrDt
             | Function::Year
             | Function::Month
             | Function::Day

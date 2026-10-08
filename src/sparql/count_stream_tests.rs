@@ -286,11 +286,11 @@ fn paired_mean_count_preserves_types_invalid_and_empty_inputs() {
         "SELECT (AVG(?n) AS ?mean) (COUNT(?n) AS ?n) WHERE { ex:f ex:n ?n }",
         "SELECT (AVG(DISTINCT ?n) AS ?mean) (COUNT(?n) AS ?n) WHERE { ex:f ex:n ?n }",
         "SELECT (AVG(?n) AS ?mean) (COUNT(?n) AS ?n) WHERE { ex:missing ex:n ?n }",
-        "SELECT (AVG(YEAR(STRDT(?created, xsd:dateTime))) AS ?mean) (COUNT(YEAR(STRDT(?created, xsd:dateTime))) AS ?n) WHERE { ?s ex:created ?created }",
+        "SELECT (AVG(YEAR(STRDT(STR(?created), xsd:dateTime))) AS ?mean) (COUNT(YEAR(STRDT(STR(?created), xsd:dateTime))) AS ?n) WHERE { ?s ex:created ?created }",
     ] {
         compare(&store, q, &TemporalContext::default(), true);
     }
-    let positive=super::super::query(&store,&format!("{PREFIX}SELECT (AVG(YEAR(STRDT(?created, xsd:dateTime))) AS ?mean) (COUNT(YEAR(STRDT(?created, xsd:dateTime))) AS ?n) WHERE {{ ?s ex:created ?created }}")).unwrap();
+    let positive=super::super::query(&store,&format!("{PREFIX}SELECT (AVG(YEAR(STRDT(STR(?created), xsd:dateTime))) AS ?mean) (COUNT(YEAR(STRDT(STR(?created), xsd:dateTime))) AS ?n) WHERE {{ ?s ex:created ?created }}")).unwrap();
     assert_eq!(positive.rows()[0]["n"], Value::Int(2));
     assert!(positive.rows()[0].contains_key("mean"));
     seed(&mut store, 0, r#"ex:f ex:n "not numeric" ."#);
