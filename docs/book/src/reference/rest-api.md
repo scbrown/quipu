@@ -98,6 +98,13 @@ Authorization: Bearer <token>
 Reads — `/query`, `/search`, entity lookups, `/health`, `/version` — need no
 credential and answer normally.
 
+A bearer refusal returns HTTP 401 with a JSON `reason` of
+`missing_or_invalid_bearer_token`, `credential_type: "bearer"`, the endpoint,
+and provisioning guidance. Clients should configure a matching
+`QUIPU_AUTH_TOKEN` or `QUIPU_AUTH_TOKEN_FILE`; retrying an absent or rejected
+credential does not repair it. Signed authentication is available only on
+signed-write routes with a registered, unexpired identity and write scope.
+
 ### Additive named credentials
 
 `[quipu.server].crew_credentials_file` optionally points to a local JSON registry
@@ -1226,6 +1233,18 @@ including pending requests, cancelled requests and metrics scrapes. It has no
 labels and resets when the process restarts. Use it to measure arrival rate:
 `quipu_http_requests_total` and `quipu_http_client_requests_total` count completed
 responses, so low completion rates alone do not establish low traffic.
+
+`quipu_http_auth_refusals_total{client,endpoint,method,expected_probe}` counts
+completed HTTP 401 responses, including protected GET requests. Observed
+successful requests initialize the corresponding counter at zero. Methods
+are bounded to GET, POST, HEAD and OTHER; routes use templates and caller
+overflow folds into `other`. `expected_probe` is operational attribution,
+not an authenticated identity: it is true for the designated link-check GET
+caller and the designated negative-auth POST caller on `/episode` or `/shapes`.
+Exclude these controls when measuring unexpected authentication failures,
+and retain a separate check that the metric is being scraped. A newly seen
+counter can start above zero, so an increase-only alert may miss its first
+refusal.
 
 Before the first successful refresh, graph-size gauges are omitted and
 `quipu_graph_counts_ready` is zero. A failed refresh retains the last successful
