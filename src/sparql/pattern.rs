@@ -103,7 +103,12 @@ pub fn eval_pattern_seeded(
         });
     }
     match pattern {
-        GraphPattern::Bgp { patterns } => eval_bgp_inner(store, patterns, ctx, seed),
+        GraphPattern::Bgp { patterns } => {
+            match super::status_pushdown::constant_candidates(store, patterns, ctx, seed)? {
+                Some(projected) => Ok(projected),
+                None => eval_bgp_inner(store, patterns, ctx, seed),
+            }
+        }
 
         // quipu #51: `VALUES` is an inline relation — a literal table of rows.
         // It is a leaf like a BGP, so it merges with the seed and joins with

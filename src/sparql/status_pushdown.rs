@@ -10,7 +10,7 @@
 
 use rusqlite::functions::FunctionFlags;
 use spargebra::algebra::{Expression, Function, GraphPattern};
-use spargebra::term::{NamedNodePattern, TermPattern};
+use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use super::pattern_util::Bindings;
 use super::{GraphScope, TemporalContext};
@@ -208,4 +208,94 @@ pub fn candidates(
         bindings.push(binding);
     }
     Ok(Some((bindings, vec![plan.subject.to_string()])))
+}
+
+/// Project subjects of one fixed predicate/object in a current named graph.
+///
+/// The same fact's ROWID proves predicate membership without reading the wide
+/// fact table. Every other context keeps the ordinary triple evaluator.
+///
+/// # Errors
+/// Propagates dictionary, SQL, value decoding and query-budget errors.
+pub fn constant_candidates(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    if !seed.is_empty()
+        || !store.attachments().is_empty()
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
+        || ctx.row_limit.is_some()
+        || ctx.string_narrows.is_some()
+        || ctx.entails_rdfs
+    {
+        return Ok(None);
+    }
+    let GraphScope::Named(graphs) = &ctx.graph else {
+        return Ok(None);
+    };
+    let [graph] = graphs.as_slice() else {
+        return Ok(None);
+    };
+    if *graph == 0 {
+        return Ok(None);
+    }
+    let [pattern] = patterns else {
+        return Ok(None);
+    };
+    let (TermPattern::Variable(subject), NamedNodePattern::NamedNode(predicate)) =
+        (&pattern.subject, &pattern.predicate)
+    else {
+        return Ok(None);
+    };
+    if !matches!(
+        pattern.object,
+        TermPattern::NamedNode(_) | TermPattern::Literal(_)
+    ) {
+        return Ok(None);
+    }
+    let Some(predicate) = store.lookup(predicate.as_str())? else {
+        return Ok(None);
+    };
+    let Some(object) = super::pattern_util::resolve_object_pattern(store, &pattern.object, seed)?
+    else {
+        return Ok(None);
+    };
+    if object == Value::Ref(-1) {
+        return Ok(None);
+    }
+    let indexes: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN
+            ('idx_active_vge','idx_current_aev')",
+        [],
+        |row| row.get(0),
+    )?;
+    if indexes != 2 {
+        return Ok(None);
+    }
+    let mut statement = store.prepare(
+        "SELECT DISTINCT value_fact.e FROM facts AS value_fact INDEXED BY idx_active_vge
+        WHERE value_fact.v=?1 AND value_fact.g=?2
+        AND value_fact.op=1 AND value_fact.valid_to IS NULL
+        AND EXISTS (SELECT 1 FROM facts AS predicate_fact INDEXED BY idx_current_aev
+            WHERE predicate_fact.a=?3 AND predicate_fact.e=value_fact.e
+            AND predicate_fact.v=?1 AND predicate_fact.rowid=value_fact.rowid
+            AND predicate_fact.op=1 AND predicate_fact.valid_to IS NULL)",
+    )?;
+    let mut rows = statement.query(rusqlite::params![object.to_bytes(), graph, predicate])?;
+    let mut bindings = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    while let Some(row) = rows.next()? {
+        super::pattern_util::check_eval_budget(ctx, bindings.len(), bindings.len())?;
+        let subject_id = store.canonical_id(row.get(0)?)?;
+        if !seen.insert(subject_id) {
+            continue;
+        }
+        let mut binding = Bindings::new();
+        binding.insert(subject.as_str().to_string(), Value::Ref(subject_id));
+        bindings.push(binding);
+    }
+    Ok(Some((bindings, vec![subject.as_str().to_string()])))
 }

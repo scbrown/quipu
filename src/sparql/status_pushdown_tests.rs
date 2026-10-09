@@ -7,7 +7,7 @@ use spargebra::term::{NamedNode, NamedNodePattern, TermPattern, TriplePattern, V
 use super::filter::eval_filter;
 use super::pattern::eval_pattern_seeded;
 use super::pattern_util::Bindings;
-use super::status_pushdown::candidates;
+use super::status_pushdown::{candidates, constant_candidates};
 use super::{GraphScope, TemporalContext, query};
 use crate::rdf::ingest_rdf_to_graph;
 use crate::store::Store;
@@ -286,6 +286,16 @@ fn status_pushdown_composed_aliases_use_exact_fallback() {
         graph: GraphScope::Named(s.lookup_all(&format!("{EX}g")).unwrap()),
         ..TemporalContext::default()
     };
+    let constant = [TriplePattern {
+        subject: TermPattern::Variable(var("s")),
+        predicate: NamedNodePattern::NamedNode(node(RDF_TYPE)),
+        object: TermPattern::NamedNode(node(&format!("{EX}T"))),
+    }];
+    assert!(
+        constant_candidates(&s, &constant, &ctx, &Bindings::new())
+            .unwrap()
+            .is_none()
+    );
     let (expr, inner) = shape();
     assert!(
         candidates(&s, &expr, &inner, &ctx, &Bindings::new())
@@ -342,6 +352,157 @@ fn status_pushdown_dataset_restrictions_empty_graph_and_missing_index_keep_exact
                 .rows()
                 .len(),
             6
+        );
+    }
+}
+
+fn subject_names(store: &Store, rows: Vec<Bindings>) -> Vec<String> {
+    let mut names = rows
+        .into_iter()
+        .map(|row| match row.get("s").unwrap() {
+            Value::Ref(id) => store.resolve(*id).unwrap(),
+            value => panic!("unexpected subject {value:?}"),
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+#[test]
+fn constant_status_projection_preserves_rdf_terms_and_same_fact_identity() {
+    let s = store();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+        ..TemporalContext::default()
+    };
+    let cases = [
+        (
+            format!("{EX}status"),
+            TermPattern::Literal(spargebra::term::Literal::new_simple_literal("closed")),
+            2,
+        ),
+        (
+            format!("{EX}status"),
+            TermPattern::Literal(
+                spargebra::term::Literal::new_language_tagged_literal("closed", "en").unwrap(),
+            ),
+            1,
+        ),
+        (
+            format!("{EX}status"),
+            TermPattern::Literal(spargebra::term::Literal::new_typed_literal(
+                "7",
+                node("http://www.w3.org/2001/XMLSchema#integer"),
+            )),
+            1,
+        ),
+        (
+            format!("{EX}status"),
+            TermPattern::Literal(spargebra::term::Literal::new_simple_literal("7")),
+            0,
+        ),
+        (
+            format!("{EX}status"),
+            TermPattern::NamedNode(node(&format!("{EX}closed"))),
+            1,
+        ),
+        (
+            RDF_TYPE.into(),
+            TermPattern::NamedNode(node(&format!("{EX}T"))),
+            9,
+        ),
+    ];
+    for (predicate, object, expected) in cases {
+        let patterns = [TriplePattern {
+            subject: TermPattern::Variable(var("s")),
+            predicate: NamedNodePattern::NamedNode(node(&predicate)),
+            object,
+        }];
+        let (projected, _) = constant_candidates(&s, &patterns, &ctx, &Bindings::new())
+            .unwrap()
+            .unwrap();
+        let (original, _) = super::triple::eval_bgp(&s, &patterns, &ctx, &Bindings::new()).unwrap();
+        let projected = subject_names(&s, projected);
+        assert_eq!(
+            projected.len(),
+            expected,
+            "nonempty or term-distinction control"
+        );
+        assert_eq!(projected, subject_names(&s, original));
+    }
+}
+
+#[test]
+fn constant_status_projection_retains_unsupported_contexts_and_missing_index_fallback() {
+    let patterns = [TriplePattern {
+        subject: TermPattern::Variable(var("s")),
+        predicate: NamedNodePattern::NamedNode(node(&format!("{EX}status"))),
+        object: TermPattern::Literal(spargebra::term::Literal::new_simple_literal("closed")),
+    }];
+    let s = store();
+    let current = TemporalContext {
+        graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+        ..TemporalContext::default()
+    };
+    let (positive, _) = constant_candidates(&s, &patterns, &current, &Bindings::new())
+        .unwrap()
+        .unwrap();
+    assert_eq!(positive.len(), 2);
+    let mut historical = current.clone();
+    historical.valid_at = Some("2026-01-01T00:00:00Z".into());
+    let mut as_of = current.clone();
+    as_of.as_of_tx = Some(1);
+    let mut limited = current.clone();
+    limited.row_limit = Some(1);
+    let mut narrowed = current.clone();
+    narrowed.string_narrows = Some(Default::default());
+    let mut reasoning = current.clone();
+    reasoning.entails_rdfs = true;
+    for context in [
+        TemporalContext::default(),
+        historical,
+        as_of,
+        limited,
+        narrowed,
+        reasoning,
+    ] {
+        assert!(
+            constant_candidates(&s, &patterns, &context, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+    }
+    let seed = Bindings::from([("other".into(), Value::Str("bound".into()))]);
+    assert!(
+        constant_candidates(&s, &patterns, &current, &seed)
+            .unwrap()
+            .is_none()
+    );
+    let mut variable_object = patterns.clone();
+    variable_object[0].object = TermPattern::Variable(var("v"));
+    assert!(
+        constant_candidates(&s, &variable_object, &current, &Bindings::new())
+            .unwrap()
+            .is_none()
+    );
+    for index in ["idx_active_vge", "idx_current_aev"] {
+        let s = store();
+        let current = TemporalContext {
+            graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+            ..TemporalContext::default()
+        };
+        s.conn.execute(&format!("DROP INDEX {index}"), []).unwrap();
+        assert!(
+            constant_candidates(&s, &patterns, &current, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            super::triple::eval_bgp(&s, &patterns, &current, &Bindings::new())
+                .unwrap()
+                .0
+                .len(),
+            2
         );
     }
 }
