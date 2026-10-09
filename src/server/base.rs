@@ -338,6 +338,7 @@ impl IntoResponse for AppError {
             // fault — 408 lets a caller distinguish "narrow your query" from
             // both.
             quipu::Error::QueryTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            quipu::Error::WriteAdmissionTimeout { .. } => StatusCode::SERVICE_UNAVAILABLE,
             // A join explosion is a property of the QUERY (its error names the
             // limit and how to fix the query) — 422: well-formed, unprocessable
             // as written. Distinct from 408 so dashboards can tell "slow" from
@@ -345,6 +346,17 @@ impl IntoResponse for AppError {
             quipu::Error::QueryComplexity { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::BAD_REQUEST,
         };
+        if let quipu::Error::WriteAdmissionTimeout { waited_ms } = &self.0 {
+            return (
+                status,
+                [(axum::http::header::RETRY_AFTER, "1")],
+                axum::Json(json!({
+                    "error": self.0.to_string(), "code": "write_not_started",
+                    "write_started": false, "waited_ms": waited_ms,
+                })),
+            )
+                .into_response();
+        }
         let body = json!({ "error": self.0.to_string() });
         (status, axum::Json(body)).into_response()
     }

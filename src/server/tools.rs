@@ -118,7 +118,7 @@ macro_rules! rw_handler {
                 // guard drops; phase 3 relocks to write vectors. See
                 // finish_deferred_embed.
                 let (out, work) = {
-                    let mut st = s.lock();
+                    let mut st = s.write_lock()?;
                     // A refused signed write stops here, before a tool that
                     // mutates outside a transaction can act (aegis-bys8d1).
                     quipu::transaction_auth::refuse_if_refused()?;
