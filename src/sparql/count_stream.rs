@@ -43,6 +43,11 @@ fn supported(pattern: &GraphPattern) -> bool {
         | GraphPattern::Filter { inner, .. }
         | GraphPattern::Extend { inner, .. } => supported(inner),
         GraphPattern::Union { left, right } => supported(left) && supported(right),
+        GraphPattern::LeftJoin {
+            left,
+            right,
+            expression,
+        } => supported(left) && super::count_optional::recognized(left, right, expression.as_ref()),
         // Seeding is equivalent to compatibility joining only for positive
         // BGP/GRAPH/JOIN operands, not for BIND, OPTIONAL or local filters.
         GraphPattern::Join { left, right } => {
@@ -52,7 +57,11 @@ fn supported(pattern: &GraphPattern) -> bool {
     }
 }
 
-fn graph_context(store: &Store, iri: &str, ctx: &TemporalContext) -> Result<TemporalContext> {
+pub(super) fn graph_context(
+    store: &Store,
+    iri: &str,
+    ctx: &TemporalContext,
+) -> Result<TemporalContext> {
     let mut ids = store.lookup_all(iri)?;
     if let Some(visible) = &ctx.named_dataset {
         ids.retain(|id| visible.contains(id));
@@ -109,7 +118,7 @@ fn bgp_sql(
     }
 }
 
-fn visit(
+pub(super) fn visit(
     store: &Store,
     pattern: &GraphPattern,
     ctx: &TemporalContext,
@@ -141,6 +150,24 @@ fn visit(
                     joined += 1;
                     emit(row)
                 })
+            })
+        }
+        GraphPattern::LeftJoin {
+            left,
+            right,
+            expression,
+        } => {
+            let mut emitted = 0;
+            visit(store, left, ctx, seed, &mut |row| {
+                super::count_optional::visit(
+                    store,
+                    right,
+                    expression.as_ref(),
+                    ctx,
+                    &row,
+                    &mut emitted,
+                    emit,
+                )
             })
         }
         GraphPattern::Filter { expr, inner } => {
@@ -218,6 +245,7 @@ pub(super) fn try_evaluate(
     if !count
         || ctx.row_limit.is_some()
         || !supported(inner)
+        || !super::count_optional::allowed(store, inner, ctx, seed)?
         || aggregates.iter().any(|(_, agg)| !match agg {
             AggregateExpression::CountSolutions { distinct: false } => true,
             AggregateExpression::FunctionCall {

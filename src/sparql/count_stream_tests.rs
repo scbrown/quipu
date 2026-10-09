@@ -356,3 +356,58 @@ fn covering_scalar_count_keeps_same_fact_currentness_and_missing_index_fallback(
         true,
     );
 }
+
+#[test]
+fn fresh_property_optional_preserves_numeric_default_bags_and_group_order() {
+    let mut store = fixture();
+    let graph = store.lookup("http://example.org/board").unwrap().unwrap();
+    seed(
+        &mut store,
+        graph,
+        r#"ex:a ex:priority 1, 2 . ex:alias ex:priority 3 . ex:lang ex:priority -1 . ex:tomb ex:priority "2" . ex:b ex:priority 0.5 . ex:numeric ex:priority 256 . _:extra a ex:Issue ; ex:id "extra" ; ex:priority 0 ."#,
+    );
+    let body = r#"GRAPH ex:board { ?s a ex:Issue ; ex:id ?id OPTIONAL { ?s ex:priority ?raw FILTER(sameTerm(?raw - ?raw,0) && sameTerm(?raw,?raw+0) && ?raw>=0 && ?raw<=255) } BIND(COALESCE(?raw,2) AS ?priority) FILTER(isLiteral(?id) && sameTerm(?id,STR(?id))) }"#;
+    for q in [
+        format!("SELECT (COUNT(DISTINCT ?id) AS ?n) WHERE {{ {body} }}"),
+        format!(
+            "SELECT ?priority (COUNT(*) AS ?n) (COUNT(DISTINCT ?id) AS ?distinct) WHERE {{ {body} }} GROUP BY ?priority"
+        ),
+        format!("SELECT (COUNT(?raw) AS ?n) WHERE {{ {body} }}"),
+    ] {
+        compare(&store, &q, &TemporalContext::default(), true);
+    }
+    let q = format!("{PREFIX}SELECT (COUNT(?raw) AS ?n) WHERE {{ {body} }}");
+    let positive = super::super::query(&store, &q).unwrap();
+    assert_eq!(
+        positive.rows()[0]["n"],
+        Value::Int(4),
+        "two valid priorities plus alias and blank subject; invalids leave OPTIONAL unbound"
+    );
+    // OPTIONAL succeeds several times or not at all; COALESCE defaults only
+    // unmatched parents, and a shared external right object forbids seeding.
+    for q in [
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue ; ex:id ?id OPTIONAL { ?s ex:priority ?raw FILTER(?id=\"same\") } } }",
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue ; ex:id ?raw OPTIONAL { ?s ex:priority ?raw } } }",
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue OPTIONAL { ?s ex:priority ?raw . ?s ex:id ?id } } }",
+        "SELECT (COUNT(*) AS ?n) WHERE { ?s a ex:Issue OPTIONAL { ?s ex:priority ?raw } }",
+    ] {
+        compare(&store, q, &TemporalContext::default(), false);
+    }
+    for ctx in [
+        TemporalContext {
+            valid_at: Some(TS.into()),
+            ..TemporalContext::default()
+        },
+        TemporalContext {
+            as_of_tx: Some(1),
+            ..TemporalContext::default()
+        },
+    ] {
+        compare(
+            &store,
+            &format!("SELECT (COUNT(*) AS ?n) WHERE {{ {body} }}"),
+            &ctx,
+            false,
+        );
+    }
+}
