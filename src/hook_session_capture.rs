@@ -243,7 +243,12 @@ legitimate outcome, not a failure.
 If yes, capture it as a Quipu episode in group {group}: POST {server}/episode. Writes require a \
 bearer token: send Authorization: Bearer $QUIPU_AUTH_TOKEN from your environment, and never print \
 the token. Reads such as /search stay open. Send the header X-Quipu-Client: session-capture on every \
-call so this traffic is attributable. Three rules:
+call so this traffic is attributable. A client label and free-text source are not structured
+write provenance. Prefer the installed graph-extract writer, which adds provenance automatically.
+For direct HTTP, use an environment-based provenance formatter and merge X-Quipu-Agent,
+X-Quipu-Harness, X-Quipu-Model, X-Quipu-Session and X-Quipu-Host into the request headers before
+POSTing. Never type or guess these values. If the writer cannot derive them, keep capture pending
+and record the missing fields; do not send an unattributable write. Three rules:
 
 1. SEARCH BEFORE YOU MINT. POST {server}/search with {{\"query\":\"<your concept>\"}} and REUSE the \
 existing node's exact name if one matches. Do not create a second node for a concept that already \

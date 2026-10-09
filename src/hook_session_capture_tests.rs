@@ -41,6 +41,20 @@ fn happy_path_blocks_once_with_the_payload_in_reason() {
     assert!(reason.contains("group test-group"));
     assert!(reason.contains("(s1)"), "session id is named");
     assert!(reason.contains("X-Quipu-Client: session-capture"));
+    for header in [
+        "X-Quipu-Agent",
+        "X-Quipu-Harness",
+        "X-Quipu-Model",
+        "X-Quipu-Session",
+        "X-Quipu-Host",
+    ] {
+        assert!(
+            reason.contains(header),
+            "structured provenance requirement missing: {header}"
+        );
+    }
+    assert!(reason.contains("Never type or guess"));
+    assert!(reason.contains("keep capture pending"));
     assert!(reason.contains("/propose"));
     assert_eq!(back["systemMessage"], NOTE);
     assert!(tmp.path().join("solicited-s1").exists());
