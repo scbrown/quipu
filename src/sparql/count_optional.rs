@@ -25,24 +25,89 @@ fn local(expr: &Expression, subject: &str, object: &str) -> bool {
         Expression::Not(a) | Expression::UnaryPlus(a) | Expression::UnaryMinus(a) => {
             local(a, subject, object)
         }
-        Expression::FunctionCall(
-            Function::IsNumeric | Function::IsLiteral | Function::IsIri | Function::Str,
-            args,
-        ) => args.iter().all(|a| local(a, subject, object)),
+        Expression::Bound(v) => v.as_str() == subject || v.as_str() == object,
+        Expression::If(a, b, c) => {
+            local(a, subject, object) && local(b, subject, object) && local(c, subject, object)
+        }
+        Expression::In(a, values) => {
+            local(a, subject, object) && values.iter().all(|a| local(a, subject, object))
+        }
+        Expression::Coalesce(values) => values.iter().all(|a| local(a, subject, object)),
+        Expression::FunctionCall(function, args) if pure(function) => {
+            args.iter().all(|a| local(a, subject, object))
+        }
         _ => false,
     }
 }
+// Explicit deterministic builtins: volatile, custom and future functions
+// remain unsupported rather than acquiring substitution semantics silently.
+fn pure(function: &Function) -> bool {
+    matches!(
+        function,
+        Function::Str
+            | Function::Lang
+            | Function::LangMatches
+            | Function::Datatype
+            | Function::Iri
+            | Function::Abs
+            | Function::Ceil
+            | Function::Floor
+            | Function::Round
+            | Function::Concat
+            | Function::SubStr
+            | Function::StrLen
+            | Function::Replace
+            | Function::UCase
+            | Function::LCase
+            | Function::EncodeForUri
+            | Function::Contains
+            | Function::StrStarts
+            | Function::StrEnds
+            | Function::StrBefore
+            | Function::StrAfter
+            | Function::Year
+            | Function::Month
+            | Function::Day
+            | Function::Hours
+            | Function::Minutes
+            | Function::Seconds
+            | Function::Timezone
+            | Function::Tz
+            | Function::Md5
+            | Function::Sha1
+            | Function::Sha256
+            | Function::Sha384
+            | Function::Sha512
+            | Function::StrLang
+            | Function::StrDt
+            | Function::IsIri
+            | Function::IsBlank
+            | Function::IsLiteral
+            | Function::IsNumeric
+            | Function::Regex
+    )
+}
 fn binds(pattern: &GraphPattern, variable: &str, mandatory: bool) -> bool {
     match pattern {
-        GraphPattern::Bgp { patterns } => patterns
-            .iter()
-            .any(|p| triple_pattern_vars(p).iter().any(|v| v == variable)),
+        GraphPattern::Bgp { patterns } => patterns.iter().any(|p| {
+            if mandatory {
+                matches!(&p.subject,TermPattern::Variable(v) if v.as_str()==variable)
+            } else {
+                triple_pattern_vars(p).iter().any(|v| v == variable)
+            }
+        }),
         GraphPattern::Graph { inner, .. } | GraphPattern::Filter { inner, .. } => {
             binds(inner, variable, mandatory)
         }
         GraphPattern::Extend {
             inner, variable: v, ..
-        } => (!mandatory && v.as_str() == variable) || binds(inner, variable, mandatory),
+        } => {
+            if mandatory && v.as_str() == variable {
+                false
+            } else {
+                (!mandatory && v.as_str() == variable) || binds(inner, variable, mandatory)
+            }
+        }
         GraphPattern::Join { left, right } => {
             binds(left, variable, mandatory) || binds(right, variable, mandatory)
         }
@@ -64,12 +129,11 @@ fn shape<'a>(
     right: &'a GraphPattern,
     expression: Option<&Expression>,
 ) -> Option<(&'a str, &'a str)> {
-    let (inner, guard) = if let GraphPattern::Filter { inner, expr } = right {
-        (inner.as_ref(), Some(expr))
-    } else {
-        (right, None)
-    };
-    let GraphPattern::Bgp { patterns } = inner else {
+    // A join-condition FILTER sees compatible rows, just as the old left
+    // join does. An embedded right FILTER is evaluated independently and can
+    // fail on unrelated rows; retain that error path by declining it.
+    let expression = expression?;
+    let GraphPattern::Bgp { patterns } = right else {
         return None;
     };
     let [tp] = patterns.as_slice() else {
@@ -84,15 +148,11 @@ fn shape<'a>(
         return None;
     };
     let (subject, object) = (subject.as_str(), object.as_str());
-    if (guard.is_none() && expression.is_none())
-        || subject == object
+    if subject == object
         || predicate.as_str() == crate::namespace::RDF_TYPE
         || !binds(left, subject, true)
         || binds(left, object, false)
-        || guard
-            .into_iter()
-            .chain(expression)
-            .any(|e| !local(e, subject, object))
+        || !local(expression, subject, object)
     {
         return None;
     }

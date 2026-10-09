@@ -390,6 +390,7 @@ fn fresh_property_optional_preserves_numeric_default_bags_and_group_order() {
         "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue ; ex:id ?raw OPTIONAL { ?s ex:priority ?raw } } }",
         "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue OPTIONAL { ?s ex:priority ?raw . ?s ex:id ?id } } }",
         "SELECT (COUNT(*) AS ?n) WHERE { ?s a ex:Issue OPTIONAL { ?s ex:priority ?raw } }",
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?x ex:id ?s OPTIONAL { ?s ex:priority ?raw FILTER(isNumeric(?raw)) } } }",
     ] {
         compare(&store, q, &TemporalContext::default(), false);
     }
@@ -410,4 +411,105 @@ fn fresh_property_optional_preserves_numeric_default_bags_and_group_order() {
             false,
         );
     }
+}
+
+#[test]
+fn fresh_optional_local_string_filters_preserve_principals_and_default() {
+    let mut store = fixture();
+    let graph = store.lookup("http://example.org/board").unwrap().unwrap();
+    seed(
+        &mut store,
+        graph,
+        r#"ex:a ex:owner <http://example.org/principal/alice> . ex:alias ex:owner "alice" . ex:b ex:owner <http://example.org/foreign> . ex:lang ex:owner "alice"@en . ex:tomb ex:owner "" . ex:numeric ex:owner 7 ."#,
+    );
+    let body = r#"GRAPH ex:board { ?s a ex:Issue ; ex:id ?id OPTIONAL { ?s ex:owner ?raw FILTER((isIRI(?raw) && STRSTARTS(STR(?raw),"http://example.org/principal/")) || (isLiteral(?raw) && sameTerm(?raw,STR(?raw)))) } BIND(COALESCE(STR(?raw),"") AS ?owner) }"#;
+    for q in [
+        format!("SELECT ?owner (COUNT(DISTINCT ?id) AS ?n) WHERE {{ {body} }} GROUP BY ?owner"),
+        format!("SELECT (COUNT(?raw) AS ?n) WHERE {{ {body} }}"),
+    ] {
+        compare(&store, &q, &TemporalContext::default(), true);
+    }
+    let q = format!("{PREFIX}SELECT (COUNT(?raw) AS ?n) WHERE {{ {body} }}");
+    assert_eq!(
+        super::super::query(&store, &q).unwrap().rows()[0]["n"],
+        Value::Int(3),
+        "principalIRI/plain/empty pass; foreignIRI/lang/numeric fail the local guard"
+    );
+    for guard in [
+        "RAND()>0.5",
+        "NOW()=NOW()",
+        "STRUUID()=STRUUID()",
+        "BOUND(?id)",
+        "EXISTS { ?s ex:id ?id }",
+    ] {
+        compare(
+            &store,
+            &format!(
+                "SELECT (COUNT(*) AS ?n) WHERE {{ GRAPH ex:board {{ ?s a ex:Issue OPTIONAL {{ ?s ex:owner ?raw FILTER({guard}) }} }} }}"
+            ),
+            &TemporalContext::default(),
+            false,
+        );
+    }
+}
+
+#[test]
+fn optional_unknown_custom_filter_preserves_original_error_path() {
+    let store = fixture();
+    let text = format!(
+        "{PREFIX}SELECT (COUNT(*) AS ?n) WHERE {{ GRAPH ex:board {{ ?s a ex:Issue OPTIONAL {{ ?s ex:id ?raw FILTER(<http://example.org/custom>(?raw)) }} }} }}"
+    );
+    let Query::Select { pattern, .. } = super::super::sparql_parser().parse_query(&text).unwrap()
+    else {
+        panic!()
+    };
+    let (inner, variables, aggregates) = group(&pattern);
+    assert!(
+        super::try_evaluate(
+            &store,
+            inner,
+            variables,
+            aggregates,
+            &TemporalContext::default(),
+            &Bindings::new()
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(
+        super::super::query(&store, &text)
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported FILTER function")
+    );
+}
+
+#[test]
+fn two_fresh_optional_plain_fields_preserve_preference_empty_and_multiplicity() {
+    let mut store = fixture();
+    let graph = store.lookup("http://example.org/board").unwrap().unwrap();
+    seed(
+        &mut store,
+        graph,
+        r#"ex:a ex:name "preferred" ; rdfs:label "fallback" . ex:alias rdfs:label "fallback" . ex:b ex:name "ignored"@en ; rdfs:label "fallback" . ex:lang ex:name 1 ; rdfs:label "fallthrough" . ex:tomb ex:name "" ; rdfs:label "fallback" . ex:numeric ex:name "one", "two" ; rdfs:label "y", "z" ."#,
+    );
+    let body = r#"GRAPH ex:board { ?s a ex:Issue ; ex:id ?id OPTIONAL { ?s ex:name ?name FILTER(isLiteral(?name) && sameTerm(?name,STR(?name))) } OPTIONAL { ?s rdfs:label ?label FILTER(isLiteral(?label) && sameTerm(?label,STR(?label))) } BIND(COALESCE(?name,?label,"") AS ?title) }"#;
+    for q in [
+        format!(
+            "SELECT ?title (COUNT(*) AS ?n) (COUNT(DISTINCT ?id) AS ?ids) WHERE {{ {body} }} GROUP BY ?title"
+        ),
+        format!(
+            "SELECT (COUNT(DISTINCT ?id) AS ?n) WHERE {{ {body} FILTER(CONTAINS(?title,\"fallback\")) }}"
+        ),
+    ] {
+        compare(&store, &q, &TemporalContext::default(), true);
+    }
+    let q = format!(
+        "{PREFIX}SELECT (COUNT(DISTINCT ?id) AS ?n) WHERE {{ {body} FILTER(CONTAINS(?title,\"fallback\")) }}"
+    );
+    assert_eq!(
+        super::super::query(&store, &q).unwrap().rows()[0]["n"],
+        Value::Int(2),
+        "rdfs-only and ignored-language name use fallback; preferred/empty names do not"
+    );
 }
