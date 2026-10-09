@@ -7,7 +7,9 @@ use spargebra::term::{NamedNode, NamedNodePattern, TermPattern, TriplePattern, V
 use super::filter::eval_filter;
 use super::pattern::eval_pattern_seeded;
 use super::pattern_util::Bindings;
-use super::status_pushdown::{candidates, constant_candidates, filtered_property_candidates};
+use super::status_pushdown::{
+    candidates, constant_candidates, filtered_property_candidates, metadata_candidates,
+};
 use super::{GraphScope, TemporalContext, query};
 use crate::rdf::ingest_rdf_to_graph;
 use crate::store::Store;
@@ -293,6 +295,16 @@ fn status_pushdown_composed_aliases_use_exact_fallback() {
     }];
     assert!(
         constant_candidates(&s, &constant, &ctx, &Bindings::new())
+            .unwrap()
+            .is_none()
+    );
+    let metadata = [TriplePattern {
+        subject: TermPattern::NamedNode(node(&format!("{EX}shared"))),
+        predicate: NamedNodePattern::NamedNode(node(RDF_TYPE)),
+        object: TermPattern::Variable(var("o")),
+    }];
+    assert!(
+        metadata_candidates(&s, &metadata, &ctx, &Bindings::new())
             .unwrap()
             .is_none()
     );
@@ -688,6 +700,125 @@ fn local_notin_projection_rejects_outer_arbitrary_and_unsupported_contexts() {
         assert_eq!(
             accepted(&s, original, &expr, &context),
             vec![format!("{EX}number")]
+        );
+    }
+}
+
+#[test]
+fn fixed_metadata_projection_preserves_outer_bindings_and_exact_values() {
+    let s = store();
+    let subject = s.lookup(&format!("{EX}mixed")).unwrap().unwrap();
+    let predicate = s.lookup(&format!("{EX}status")).unwrap().unwrap();
+    let context = TemporalContext {
+        graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+        ..TemporalContext::default()
+    };
+    let patterns = [TriplePattern {
+        subject: TermPattern::NamedNode(node(&format!("{EX}mixed"))),
+        predicate: NamedNodePattern::NamedNode(node(&format!("{EX}status"))),
+        object: TermPattern::Variable(var("o")),
+    }];
+    let seed = Bindings::from([
+        ("s".into(), Value::Ref(subject)),
+        ("p".into(), Value::Ref(predicate)),
+        ("outer".into(), Value::Str("retained".into())),
+    ]);
+    let (mut projected, vars) = metadata_candidates(&s, &patterns, &context, &seed)
+        .unwrap()
+        .unwrap();
+    let (mut original, original_vars) =
+        super::triple::eval_bgp(&s, &patterns, &context, &seed).unwrap();
+    assert_eq!(vars, original_vars);
+    assert_eq!(projected.len(), 2, "plain and language terms are distinct");
+    assert!(projected.iter().all(|row| {
+        seed.iter()
+            .all(|(name, value)| row.get(name) == Some(value))
+    }));
+    projected.sort_by_key(|row| format!("{:?}", row.get("o").unwrap()));
+    original.sort_by_key(|row| format!("{:?}", row.get("o").unwrap()));
+    assert_eq!(projected, original);
+    let actual = query(&s, &format!("SELECT ?s ?p ?o WHERE {{ BIND(<{EX}mixed> AS ?s) BIND(<{EX}status> AS ?p) GRAPH <{EX}g> {{ <{EX}mixed> <{EX}status> ?o }} }}")).unwrap();
+    assert_eq!(actual.rows().len(), 2);
+}
+
+#[test]
+fn fixed_metadata_projection_keeps_graph_currentness_and_fallback_guards() {
+    let s = store();
+    let context = TemporalContext {
+        graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+        ..TemporalContext::default()
+    };
+    let patterns = [TriplePattern {
+        subject: TermPattern::NamedNode(node(&format!("{EX}absent"))),
+        predicate: NamedNodePattern::NamedNode(node(&format!("{EX}status"))),
+        object: TermPattern::Variable(var("o")),
+    }];
+    assert!(
+        metadata_candidates(&s, &patterns, &context, &Bindings::new())
+            .unwrap()
+            .unwrap()
+            .0
+            .is_empty(),
+        "the same subject's value in another graph must not leak"
+    );
+    let bound = Bindings::from([("o".into(), Value::Str("closed".into()))]);
+    assert!(
+        metadata_candidates(&s, &patterns, &context, &bound)
+            .unwrap()
+            .is_none()
+    );
+    let mut variable_subject = patterns.clone();
+    variable_subject[0].subject = TermPattern::Variable(var("s"));
+    let mut variable_predicate = patterns.clone();
+    variable_predicate[0].predicate = NamedNodePattern::Variable(var("p"));
+    for unsupported in [variable_subject, variable_predicate] {
+        assert!(
+            metadata_candidates(&s, &unsupported, &context, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+    }
+    let mut temporal = context.clone();
+    temporal.valid_at = Some("2026-01-01T00:00:00Z".into());
+    let mut historical = context.clone();
+    historical.as_of_tx = Some(1);
+    let mut limited = context.clone();
+    limited.row_limit = Some(1);
+    let mut narrowed = context.clone();
+    narrowed.string_narrows = Some(Default::default());
+    let mut reasoning = context.clone();
+    reasoning.entails_rdfs = true;
+    for unsupported in [
+        TemporalContext::default(),
+        temporal,
+        historical,
+        limited,
+        narrowed,
+        reasoning,
+    ] {
+        assert!(
+            metadata_candidates(&s, &patterns, &unsupported, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+    }
+    for index in ["idx_current_aev", "idx_current_g"] {
+        let s = store();
+        let context = TemporalContext {
+            graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+            ..TemporalContext::default()
+        };
+        s.conn.execute(&format!("DROP INDEX {index}"), []).unwrap();
+        assert!(
+            metadata_candidates(&s, &patterns, &context, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            super::triple::eval_bgp(&s, &patterns, &context, &Bindings::new())
+                .unwrap()
+                .0
+                .is_empty()
         );
     }
 }

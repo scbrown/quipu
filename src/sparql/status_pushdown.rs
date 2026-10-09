@@ -412,3 +412,86 @@ pub fn filtered_property_candidates(
         vec![subject.as_str().to_string(), object.as_str().to_string()],
     )))
 }
+
+/// Read a fixed subject/property's fresh object, preserving outer bindings.
+///
+/// # Errors
+/// Propagates dictionary, SQL, packed-value and query-budget errors.
+pub fn metadata_candidates(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    if !store.attachments().is_empty()
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
+        || ctx.row_limit.is_some()
+        || ctx.string_narrows.is_some()
+        || ctx.entails_rdfs
+    {
+        return Ok(None);
+    }
+    let GraphScope::Named(graphs) = &ctx.graph else {
+        return Ok(None);
+    };
+    let [graph] = graphs.as_slice() else {
+        return Ok(None);
+    };
+    if *graph == 0 {
+        return Ok(None);
+    }
+    let [pattern] = patterns else {
+        return Ok(None);
+    };
+    let (
+        TermPattern::NamedNode(subject),
+        NamedNodePattern::NamedNode(predicate),
+        TermPattern::Variable(object),
+    ) = (&pattern.subject, &pattern.predicate, &pattern.object)
+    else {
+        return Ok(None);
+    };
+    if seed.contains_key(object.as_str()) {
+        return Ok(None);
+    }
+    let subjects = store.lookup_all(subject.as_str())?;
+    let predicates = store.lookup_all(predicate.as_str())?;
+    let ([subject], [predicate]) = (subjects.as_slice(), predicates.as_slice()) else {
+        return Ok(None);
+    };
+    let indexes: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN
+            ('idx_current_aev','idx_current_g')",
+        [],
+        |row| row.get(0),
+    )?;
+    if indexes != 2 {
+        return Ok(None);
+    }
+    let mut statement = store.prepare(
+        "SELECT DISTINCT property.v FROM facts AS property INDEXED BY idx_current_aev
+        WHERE property.a=?1 AND property.e=?2 AND property.op=1 AND property.valid_to IS NULL
+        AND EXISTS (SELECT 1 FROM facts AS graph_fact INDEXED BY idx_current_g
+            WHERE graph_fact.g=?3 AND graph_fact.rowid=property.rowid
+            AND graph_fact.op=1 AND graph_fact.valid_to IS NULL)",
+    )?;
+    let mut rows = statement.query(rusqlite::params![predicate, subject, graph])?;
+    let mut bindings = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    while let Some(row) = rows.next()? {
+        super::pattern_util::check_eval_budget(ctx, bindings.len(), bindings.len())?;
+        let bytes: Vec<u8> = row.get(0)?;
+        let value = match Value::from_bytes(&bytes)? {
+            Value::Ref(id) => Value::Ref(store.canonical_id(id)?),
+            value => value,
+        };
+        if !seen.insert(value.to_bytes()) {
+            continue;
+        }
+        let mut binding = seed.clone();
+        binding.insert(object.as_str().to_string(), value);
+        bindings.push(binding);
+    }
+    Ok(Some((bindings, vec![object.as_str().to_string()])))
+}

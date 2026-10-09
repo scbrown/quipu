@@ -106,7 +106,12 @@ pub fn eval_pattern_seeded(
         GraphPattern::Bgp { patterns } => {
             match super::status_pushdown::constant_candidates(store, patterns, ctx, seed)? {
                 Some(projected) => Ok(projected),
-                None => eval_bgp_inner(store, patterns, ctx, seed),
+                None => {
+                    match super::status_pushdown::metadata_candidates(store, patterns, ctx, seed)? {
+                        Some(projected) => Ok(projected),
+                        None => eval_bgp_inner(store, patterns, ctx, seed),
+                    }
+                }
             }
         }
 
