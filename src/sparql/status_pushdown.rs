@@ -183,8 +183,9 @@ pub fn candidates(
     let mut stmt = store.prepare(
         "SELECT DISTINCT t.e FROM facts AS t INDEXED BY idx_active_vge
         WHERE t.v=?2 AND t.g=?3 AND t.op=1 AND t.valid_to IS NULL
-        AND t.rowid IN (SELECT rowid FROM facts INDEXED BY idx_current_aev
-            WHERE a=?1 AND v=?2 AND op=1 AND valid_to IS NULL)
+        AND EXISTS (SELECT 1 FROM facts AS typed INDEXED BY idx_current_aev
+            WHERE typed.a=?1 AND typed.e=t.e AND typed.v=?2
+            AND typed.rowid=t.rowid AND typed.op=1 AND typed.valid_to IS NULL)
         AND NOT EXISTS (SELECT 1 FROM facts AS p INDEXED BY idx_current_aev
             WHERE p.e=t.e AND p.a=?4 AND p.op=1 AND p.valid_to IS NULL
             AND quipu_plain_literal(p.v) AND p.rowid IN
