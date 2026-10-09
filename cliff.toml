@@ -50,6 +50,8 @@ commit_preprocessors = [
     # Preserve receiver-diagnostics commits without rewriting published history.
     { pattern = '(?m)^Log observed transport peer and request provenance gaps$', replace = "fix(server): log observed transport peer and request provenance gaps" },
     { pattern = '(?m)^Bind conformance ledgers to receiver diagnostics source$', replace = "docs(conformance): bind conformance ledgers to receiver diagnostics source" },
+    # Retain the queued-write diagnostics entry without rewriting published history.
+    { pattern = '(?m)^Distinguish queued unrun writes from query timeouts$', replace = "fix(server): distinguish queued unrun writes from query timeouts" },
     # Preserve the FILTER integration evidence entry without rewriting history.
     { pattern = '(?m)^Refresh conformance evidence for FILTER error integration$', replace = "docs(conformance): refresh conformance evidence for FILTER error integration" },
     # Repair the merged #282 subject without rewriting history. Keep this exact
