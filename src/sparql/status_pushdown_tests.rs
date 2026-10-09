@@ -7,7 +7,7 @@ use spargebra::term::{NamedNode, NamedNodePattern, TermPattern, TriplePattern, V
 use super::filter::eval_filter;
 use super::pattern::eval_pattern_seeded;
 use super::pattern_util::Bindings;
-use super::status_pushdown::{candidates, constant_candidates};
+use super::status_pushdown::{candidates, constant_candidates, filtered_property_candidates};
 use super::{GraphScope, TemporalContext, query};
 use crate::rdf::ingest_rdf_to_graph;
 use crate::store::Store;
@@ -503,6 +503,191 @@ fn constant_status_projection_retains_unsupported_contexts_and_missing_index_fal
                 .0
                 .len(),
             2
+        );
+    }
+}
+
+fn not_in_shape() -> (Expression, GraphPattern) {
+    let inner = GraphPattern::Bgp {
+        patterns: vec![TriplePattern {
+            subject: TermPattern::Variable(var("s")),
+            predicate: NamedNodePattern::NamedNode(node(&format!("{EX}status"))),
+            object: TermPattern::Variable(var("v")),
+        }],
+    };
+    let expr = Expression::And(
+        Box::new(Expression::FunctionCall(
+            Function::IsLiteral,
+            vec![expression_var("v")],
+        )),
+        Box::new(Expression::Not(Box::new(Expression::In(
+            Box::new(Expression::FunctionCall(
+                Function::Str,
+                vec![expression_var("v")],
+            )),
+            vec![
+                Expression::Literal(spargebra::term::Literal::new_simple_literal("closed")),
+                Expression::Literal(spargebra::term::Literal::new_simple_literal("open")),
+            ],
+        )))),
+    );
+    (expr, inner)
+}
+
+#[test]
+fn local_notin_projection_keeps_original_filter_rdf_terms_bags_and_graphs() {
+    let mut s = store();
+    let graph = s.lookup(&format!("{EX}g")).unwrap().unwrap();
+    let body = format!(
+        "<{EX}wild> <{EX}status> \"novel\" .\n<{EX}wild> <{EX}status> \"novel\"@fr .\n<{EX}wrong_predicate> <{EX}other_property> \"novel\" .\n"
+    );
+    ingest_rdf_to_graph(
+        &mut s,
+        body.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-01-02T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let other_graph = s.lookup(&format!("{EX}other")).unwrap().unwrap();
+    let body = format!("<{EX}wrong_graph> <{EX}status> \"novel\" .\n");
+    ingest_rdf_to_graph(
+        &mut s,
+        body.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-01-02T00:00:00Z",
+        None,
+        None,
+        other_graph,
+    )
+    .unwrap();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let (expr, inner) = not_in_shape();
+    let (projected, _) = filtered_property_candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+        .unwrap()
+        .unwrap();
+    assert!(
+        projected
+            .iter()
+            .all(|row| row.contains_key("s") && row.contains_key("v"))
+    );
+    let GraphPattern::Bgp { patterns } = &inner else {
+        panic!("fixture is not BGP");
+    };
+    let (original, _) = super::triple::eval_bgp(&s, patterns, &ctx, &Bindings::new()).unwrap();
+    let projected = accepted(&s, projected, &expr, &ctx);
+    assert_eq!(
+        projected,
+        vec![
+            format!("{EX}number"),
+            format!("{EX}wild"),
+            format!("{EX}wild")
+        ],
+        "numeric lexical value and two distinct literal terms must survive as a bag"
+    );
+    assert_eq!(projected, accepted(&s, original, &expr, &ctx));
+    let response = query(&s, &format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}status> ?v FILTER(isLiteral(?v) && STR(?v) NOT IN (\"closed\", \"open\")) }} }} ORDER BY STR(?s)")).unwrap();
+    assert_eq!(response.rows().len(), 3);
+}
+
+#[test]
+fn local_notin_projection_rejects_outer_arbitrary_and_unsupported_contexts() {
+    let s = store();
+    let (expr, inner) = not_in_shape();
+    let current = TemporalContext {
+        graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+        ..TemporalContext::default()
+    };
+    assert!(
+        filtered_property_candidates(&s, &expr, &inner, &current, &Bindings::new())
+            .unwrap()
+            .is_some()
+    );
+    let arbitrary = Expression::FunctionCall(
+        Function::Custom(node(&format!("{EX}unknown_function"))),
+        vec![expression_var("v")],
+    );
+    let outer = Expression::And(
+        Box::new(Expression::FunctionCall(
+            Function::IsLiteral,
+            vec![expression_var("v")],
+        )),
+        Box::new(Expression::Not(Box::new(Expression::In(
+            Box::new(Expression::FunctionCall(
+                Function::Str,
+                vec![expression_var("v")],
+            )),
+            vec![expression_var("outside")],
+        )))),
+    );
+    for rejected in [
+        arbitrary,
+        outer,
+        Expression::Exists(Box::new(inner.clone())),
+    ] {
+        assert!(
+            filtered_property_candidates(&s, &rejected, &inner, &current, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+    }
+    let mut temporal = current.clone();
+    temporal.valid_at = Some("2026-01-01T00:00:00Z".into());
+    let mut historical = current.clone();
+    historical.as_of_tx = Some(1);
+    let mut limited = current.clone();
+    limited.row_limit = Some(1);
+    let mut narrowed = current.clone();
+    narrowed.string_narrows = Some(Default::default());
+    let mut reasoning = current.clone();
+    reasoning.entails_rdfs = true;
+    for context in [
+        TemporalContext::default(),
+        temporal,
+        historical,
+        limited,
+        narrowed,
+        reasoning,
+    ] {
+        assert!(
+            filtered_property_candidates(&s, &expr, &inner, &context, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+    }
+    let seed = Bindings::from([("other".into(), Value::Str("bound".into()))]);
+    assert!(
+        filtered_property_candidates(&s, &expr, &inner, &current, &seed)
+            .unwrap()
+            .is_none()
+    );
+    for index in ["idx_current_aev", "idx_current_g"] {
+        let s = store();
+        let context = TemporalContext {
+            graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+            ..TemporalContext::default()
+        };
+        s.conn.execute(&format!("DROP INDEX {index}"), []).unwrap();
+        assert!(
+            filtered_property_candidates(&s, &expr, &inner, &context, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+        let GraphPattern::Bgp { patterns } = &inner else {
+            panic!("fixture is not BGP");
+        };
+        let (original, _) =
+            super::triple::eval_bgp(&s, patterns, &context, &Bindings::new()).unwrap();
+        assert_eq!(
+            accepted(&s, original, &expr, &context),
+            vec![format!("{EX}number")]
         );
     }
 }

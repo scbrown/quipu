@@ -52,6 +52,25 @@ fn plain_guard(expr: &Expression, name: &str) -> bool {
         || (is_literal(b, name) && identity_string(a, name)))
 }
 
+fn literal_not_in(expr: &Expression, name: &str) -> bool {
+    let Expression::Not(negated) = expr else {
+        return false;
+    };
+    let Expression::In(value, choices) = negated.as_ref() else {
+        return false;
+    };
+    str_of(value, name)
+        && choices
+            .iter()
+            .all(|choice| matches!(choice, Expression::Literal(_)))
+}
+
+fn local_literal_not_in(expr: &Expression, name: &str) -> bool {
+    matches!(expr, Expression::And(a, b)
+        if (is_literal(a, name) && literal_not_in(b, name))
+        || (is_literal(b, name) && literal_not_in(a, name)))
+}
+
 fn plan<'a>(expr: &'a Expression, inner: &'a GraphPattern) -> Option<Plan<'a>> {
     let GraphPattern::Bgp { patterns } = inner else {
         return None;
@@ -298,4 +317,98 @@ pub fn constant_candidates(
         bindings.push(binding);
     }
     Ok(Some((bindings, vec![subject.as_str().to_string()])))
+}
+
+/// Project one property's bindings for a local literal/STR NOT IN filter.
+///
+/// Both variables remain bound and the original FILTER still runs. Admission
+/// excludes arbitrary expressions, outer variables and every unsupported scope.
+///
+/// # Errors
+/// Propagates dictionary, SQL, value decoding and query-budget errors.
+pub fn filtered_property_candidates(
+    store: &Store,
+    expr: &Expression,
+    inner: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    if !seed.is_empty()
+        || !store.attachments().is_empty()
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
+        || ctx.row_limit.is_some()
+        || ctx.string_narrows.is_some()
+        || ctx.entails_rdfs
+    {
+        return Ok(None);
+    }
+    let GraphScope::Named(graphs) = &ctx.graph else {
+        return Ok(None);
+    };
+    let [graph] = graphs.as_slice() else {
+        return Ok(None);
+    };
+    if *graph == 0 {
+        return Ok(None);
+    }
+    let GraphPattern::Bgp { patterns } = inner else {
+        return Ok(None);
+    };
+    let [pattern] = patterns.as_slice() else {
+        return Ok(None);
+    };
+    let (
+        TermPattern::Variable(subject),
+        NamedNodePattern::NamedNode(predicate),
+        TermPattern::Variable(object),
+    ) = (&pattern.subject, &pattern.predicate, &pattern.object)
+    else {
+        return Ok(None);
+    };
+    if subject == object || !local_literal_not_in(expr, object.as_str()) {
+        return Ok(None);
+    }
+    let Some(predicate) = store.lookup(predicate.as_str())? else {
+        return Ok(None);
+    };
+    let indexes: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN
+            ('idx_current_aev','idx_current_g')",
+        [],
+        |row| row.get(0),
+    )?;
+    if indexes != 2 {
+        return Ok(None);
+    }
+    let mut statement = store.prepare(
+        "SELECT DISTINCT property.e, property.v FROM facts AS property INDEXED BY idx_current_aev
+        WHERE property.a=?1 AND property.op=1 AND property.valid_to IS NULL
+        AND EXISTS (SELECT 1 FROM facts AS graph_fact INDEXED BY idx_current_g
+            WHERE graph_fact.g=?2 AND graph_fact.rowid=property.rowid
+            AND graph_fact.op=1 AND graph_fact.valid_to IS NULL)",
+    )?;
+    let mut rows = statement.query(rusqlite::params![predicate, graph])?;
+    let mut bindings = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    while let Some(row) = rows.next()? {
+        super::pattern_util::check_eval_budget(ctx, bindings.len(), bindings.len())?;
+        let subject_id = store.canonical_id(row.get(0)?)?;
+        let bytes: Vec<u8> = row.get(1)?;
+        let value = match Value::from_bytes(&bytes)? {
+            Value::Ref(id) => Value::Ref(store.canonical_id(id)?),
+            value => value,
+        };
+        if !seen.insert((subject_id, value.to_bytes())) {
+            continue;
+        }
+        let mut binding = Bindings::new();
+        binding.insert(subject.as_str().to_string(), Value::Ref(subject_id));
+        binding.insert(object.as_str().to_string(), value);
+        bindings.push(binding);
+    }
+    Ok(Some((
+        bindings,
+        vec![subject.as_str().to_string(), object.as_str().to_string()],
+    )))
 }

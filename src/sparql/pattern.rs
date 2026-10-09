@@ -146,7 +146,12 @@ pub fn eval_pattern_seeded(
                 store, expr, inner, inner_ctx, inner_seed,
             )? {
                 Some(candidates) => candidates,
-                None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                None => match super::status_pushdown::filtered_property_candidates(
+                    store, expr, inner, inner_ctx, inner_seed,
+                )? {
+                    Some(projected) => projected,
+                    None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                },
             };
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {
