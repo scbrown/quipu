@@ -173,7 +173,7 @@ pub fn candidates(
     // without the indexes retain the exact ordinary evaluator.
     let indexes: i64 = store.conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN
-            ('idx_active_vge','idx_current_aev','idx_geav')",
+            ('idx_active_vge','idx_current_aev','idx_current_g')",
         [],
         |r| r.get(0),
     )?;
@@ -188,9 +188,10 @@ pub fn candidates(
             AND typed.rowid=t.rowid AND typed.op=1 AND typed.valid_to IS NULL)
         AND NOT EXISTS (SELECT 1 FROM facts AS p INDEXED BY idx_current_aev
             WHERE p.e=t.e AND p.a=?4 AND p.op=1 AND p.valid_to IS NULL
-            AND quipu_plain_literal(p.v) AND p.rowid IN
-                (SELECT rowid FROM facts AS gp INDEXED BY idx_geav
-                    WHERE gp.g=?3 AND gp.e=t.e AND gp.a=?4))",
+            AND quipu_plain_literal(p.v) AND EXISTS
+                (SELECT 1 FROM facts AS gp INDEXED BY idx_current_g
+                    WHERE gp.g=?3 AND gp.rowid=p.rowid
+                    AND gp.op=1 AND gp.valid_to IS NULL))",
     )?;
     let mut rows = stmt.query(rusqlite::params![
         rdf_type,

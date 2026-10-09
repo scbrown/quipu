@@ -323,22 +323,25 @@ fn status_pushdown_dataset_restrictions_empty_graph_and_missing_index_keep_exact
     assert!(excluded.rows().is_empty());
     let empty = query(&s, &format!("SELECT ?s WHERE {{ GRAPH <{EX}not-interned> {{ ?s a <{EX}T> FILTER NOT EXISTS {{ ?s <{EX}status> ?v FILTER(isLiteral(?v) && sameTerm(?v, STR(?v))) }} }} }}")).unwrap();
     assert!(empty.rows().is_empty());
-    s.conn.execute("DROP INDEX idx_active_vge", []).unwrap();
-    let ctx = TemporalContext {
-        graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
-        ..TemporalContext::default()
-    };
-    let (expr, inner) = shape();
-    assert!(
-        candidates(&s, &expr, &inner, &ctx, &Bindings::new())
-            .unwrap()
-            .is_none()
-    );
-    assert_eq!(
-        query(&s, &format!("SELECT ?s WHERE {{ {body} }}"))
-            .unwrap()
-            .rows()
-            .len(),
-        6
-    );
+    for index in ["idx_active_vge", "idx_current_aev", "idx_current_g"] {
+        let s = store();
+        s.conn.execute(&format!("DROP INDEX {index}"), []).unwrap();
+        let ctx = TemporalContext {
+            graph: GraphScope::Named(vec![s.lookup(&format!("{EX}g")).unwrap().unwrap()]),
+            ..TemporalContext::default()
+        };
+        let (expr, inner) = shape();
+        assert!(
+            candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            query(&s, &format!("SELECT ?s WHERE {{ {body} }}"))
+                .unwrap()
+                .rows()
+                .len(),
+            6
+        );
+    }
 }
