@@ -10,8 +10,8 @@ quipu compose ./operations-pack ./repository-pack \
   --shapes-from ./operations-pack --db composed.db > composition.json
 ```
 
-The command returns JSON and exits 0 for a conforming union, 2 for a retained,
-nonconforming union, or 1 for a refusal. Exit 2 means the composition is available
+The command returns JSON and exits 0 for an admitted union, 2 for a retained,
+quarantined union, or 1 for a refusal. Exit 2 means the composition is available
 for inspection in quarantine, not that no data was written. Integrity and
 shape-selection errors refuse the whole operation. Internal shares require
 explicit `--destination internal`, as on the import path.
@@ -53,11 +53,26 @@ Different bundles are refused with their share IDs and hashes. Explicit selectio
 chooses that pack's complete bundle for this composition. It never silently unions
 conflicting constraints or installs foreign shapes as global policy.
 
-Validation examines the union: another pack can supply a required field. A
-nonconforming union stays in the named inspection dataset and is never promoted to
-ROOT. The report preserves violation counts and counts by source shape, with at
-most 40 individual diagnostics. Types outside the selected authority are reported
-separately as `off_vocabulary` and also quarantine the union.
+Validation examines the union: another pack can supply a required field. Loaded
+local shapes control admission when present, including when an incoming bundle
+declares a conflicting policy. Without local shapes, explicit `--shapes-from`
+selection authorizes that bundle's `quipu:onViolation "emit"` policy. Default
+identical bundles validate the union but do not implicitly authorize emit
+admission. Missing policies mean reject; unknown or conflicting values refuse.
+
+`conforms` retains strict SHACL meaning: any diagnostic, including an advisory
+Violation or Warning, makes it false. Admission uses `blocking` separately.
+Emit-policy diagnostics appear in `advisory_results`; reject-policy Violations
+still quarantine the union. The report records `admission_policy` with its source,
+shape hash and emit authorization. The existing `shapes_authority` field identifies
+the selected input bundle.
+
+The report preserves violation counts and counts by source shape. Its `results`
+preview contains at most 40 diagnostics; when truncated, `complete_results`
+contains every diagnostic and `results_total` records their count. Types outside
+the authoritative vocabulary are reported separately as `off_vocabulary` and
+also quarantine the union. Neither an admitted union nor an emit policy promotes
+data to ROOT or grants foreign content trust.
 
 The snapshot vector remains visible. Different source stores' transaction anchors
 are incomparable. Mixed dates are permitted and reported; composition does not

@@ -65,6 +65,8 @@ pub mod session_attestation;
 #[cfg(feature = "shacl")]
 pub mod shacl;
 #[cfg(feature = "shacl")]
+mod shacl_admission;
+#[cfg(feature = "shacl")]
 pub mod shacl_context;
 pub mod share;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,

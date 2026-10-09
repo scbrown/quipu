@@ -60,13 +60,17 @@ fn scoped_graph(request: &ShareImportRequest) -> Result<String> {
     Ok(lines.into_iter().collect())
 }
 
-fn validate(shapes: &str, data: &str) -> Result<serde_json::Value> {
+fn validate(shapes: &str, data: &str, emit_authorized: bool) -> Result<serde_json::Value> {
     #[cfg(feature = "shacl")]
     {
-        let feedback = crate::shacl::validate_shapes(shapes, data)?;
-        let blocks = feedback.blocks();
-        let mut report =
-            serde_json::to_value(feedback).map_err(|e| Error::Serialization(e.to_string()))?;
+        let feedback = crate::shacl_admission::validate(
+            shapes,
+            data,
+            emit_authorized,
+            crate::shacl::validate_shapes,
+        )?;
+        let blocks = feedback.blocking;
+        let mut report = feedback.report()?;
         let authority = Store::open_in_memory()?;
         authority.load_shapes("composition-authority", shapes, "1970-01-01T00:00:00Z")?;
         let vocabulary = crate::vocabulary::sanctioned(&authority)?;
@@ -91,14 +95,18 @@ fn validate(shapes: &str, data: &str) -> Result<serde_json::Value> {
         }
         report["violations_by_shape"] = serde_json::to_value(counts).unwrap();
         // Keep the full count but bound CLI diagnostics for large snapshots.
-        if let Some(results) = report["results"].as_array_mut() {
-            results.truncate(40);
+        let results = report["results"].as_array().cloned().unwrap_or_default();
+        report["results_total"] = results.len().into();
+        report["results_truncated"] = (results.len() > 40).into();
+        if results.len() > 40 {
+            report["results"] = serde_json::to_value(&results[..40]).unwrap();
+            report["complete_results"] = serde_json::to_value(results).unwrap();
         }
         Ok(report)
     }
     #[cfg(not(feature = "shacl"))]
     {
-        let _ = (shapes, data);
+        let _ = (shapes, data, emit_authorized);
         Err(Error::InvalidValue(
             "composition requires the shacl feature".into(),
         ))
@@ -207,14 +215,39 @@ fn compose_inner(
         .into_iter()
         .map(|line| format!("{line}\n"))
         .collect::<String>();
-    let validation = validate(&chosen.shapes_turtle, &data)?;
+    // Locally loaded governance wins over bundle metadata. With no local
+    // policy, explicit selection authorizes emit; identical bundles alone do not.
+    let local_policy = store.get_combined_shapes()?;
+    let policy_source = if local_policy.is_some() {
+        "local_loaded"
+    } else if authority.is_some() {
+        "explicit_bundle"
+    } else {
+        "default_bundle"
+    };
+    let policy = local_policy.as_deref().unwrap_or(&chosen.shapes_turtle);
+    let emit_authorized = local_policy.is_some() || authority.is_some();
+    let mut validation = validate(policy, &data, emit_authorized)?;
+    validation["admission_policy"] = serde_json::json!({
+        "source": policy_source, "shape_hash": crate::share::sha256(policy.as_bytes()),
+        "emit_authorized": emit_authorized,
+    });
+    if local_policy.is_none() {
+        validation["admission_policy"]["share_id"] = chosen.manifest.share_id.clone().into();
+    }
     let mut identities: Vec<_> = requests
         .iter()
         .map(|r| r.manifest.share_id.as_str())
         .collect();
     identities.sort_unstable();
     identities.dedup();
-    let identity = format!("{}\n{}", identities.join("\n"), chosen.manifest.shapes_hash);
+    let mut identity = format!("{}\n{}", identities.join("\n"), chosen.manifest.shapes_hash);
+    if policy_source != "default_bundle" {
+        identity.push_str(&format!(
+            "\nadmission:{policy_source}:{}",
+            crate::share::sha256(policy.as_bytes())
+        ));
+    }
     let digest = crate::share::sha256(identity.as_bytes());
     let dataset = format!("urn:quipu:composition:{}", &digest[7..]);
     let packs: Vec<_> = requests
@@ -309,3 +342,7 @@ fn compose_inner(
 #[cfg(all(test, feature = "shacl"))]
 #[path = "share_compose_tests.rs"]
 mod tests;
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "share_policy_tests.rs"]
+mod policy_tests;
