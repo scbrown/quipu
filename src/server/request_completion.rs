@@ -10,7 +10,10 @@ pub(super) struct Cancellations(Mutex<BTreeMap<(String, String), u64>>);
 
 impl Cancellations {
     fn observe(&self, client: &str, endpoint: &str) {
-        let mut map = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut map = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // Match the existing attribution budget: 31 named clients plus other.
         // Endpoint labels are route templates supplied by the middleware.
         let known: BTreeSet<&str> = map
@@ -34,7 +37,7 @@ impl Cancellations {
         for ((client, endpoint), count) in self
             .0
             .lock()
-            .unwrap_or_else(|error| error.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             // JSON string escaping also escapes quotes, slashes and newlines in
