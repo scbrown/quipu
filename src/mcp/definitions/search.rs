@@ -14,7 +14,9 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "query": { "type": "string", "description": "Natural language search query (auto-embedded when EmbeddingProvider is attached)" },
+                    "query": { "type": "string", "description": "Natural language ranking query (auto-embedded when EmbeddingProvider is attached)" },
+                    "structured_query": { "type": "string", "description": "Explicit boolean field/phrase/prefix candidate expression. Requires structured=true and SQLite. Candidate selection precedes ranking; default off." },
+                    "filters": { "type": "object", "description": "Equivalent strict AST: {term:string}, {not:expr}, {and:[expr,expr]}, {or:[expr,expr]}. Mutually exclusive with structured_query." },
                     "mode": { "type": "string", "enum": ["semantic", "keyword"], "default": "semantic", "description": "Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true." },
                     "infer_types": { "type": "boolean", "description": "Keyword mode only: type scope includes subclass inference when true; defaults false (asserted full-IRI types only). Type tokens are always asserted; response marks both choices." },
                     "embedding": { "type": "array", "items": { "type": "number" }, "description": "Pre-computed query embedding vector (f32 array). Takes precedence over query." },

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in SQLite structured candidate search with boolean field filters, bounded
+  prefixes/ranges, strict JSON expressions and candidate-before-ranking controls.
+  Default off; unsupported backends and scopes refuse explicitly.
+
 ## [0.11.1] - 2026-10-07
 
 ### Added

@@ -139,6 +139,8 @@ pub struct SearchConfig {
     /// SQLite FTS5 keyword search. Default off; activation creates only empty
     /// schema/triggers. Historical rows require explicit bounded backfill.
     pub keyword: bool,
+    /// Explicit structured candidate filters. SQLite-only, default off.
+    pub structured: bool,
 }
 
 impl Default for SearchConfig {
@@ -153,6 +155,7 @@ impl Default for SearchConfig {
             max_join_rows: 1_000_000,
             anchored: false,
             keyword: false,
+            structured: false,
         }
     }
 }

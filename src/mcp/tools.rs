@@ -11,6 +11,10 @@ pub(crate) mod search;
 mod search_anchor;
 mod search_ranking;
 mod shapes;
+mod structured_candidates;
+mod structured_rank;
+mod structured_search;
+mod structured_syntax;
 mod write;
 
 pub use datasets::tool_datasets;
