@@ -253,30 +253,11 @@ fn value_to_term(store: &Store, val: &Value) -> OxTerm {
     }
 }
 
-/// Canonical-ish xsd:double lexical form (handles the XSD special values and
-/// ensures a non-integer-looking lexeme so the datatype reads honestly).
+/// Preserve the same historical Float lexical meaning as RDF export.
 fn fmt_double(f: f64) -> String {
-    if f.is_nan() {
-        "NaN".to_string()
-    } else if f.is_infinite() {
-        if f > 0.0 {
-            "INF".to_string()
-        } else {
-            "-INF".to_string()
-        }
-    } else {
-        let s = f.to_string();
-        if s.contains(['.', 'e', 'E']) {
-            s
-        } else {
-            format!("{s}.0")
-        }
-    }
+    f.to_string()
 }
 
-/// Build an oxrdf `Triple` from a quipu CONSTRUCT/DESCRIBE `Triple`. Subject and
-/// predicate are already-resolved IRI strings; the object goes through
-/// [`value_to_term`].
 fn triple_to_ox(store: &Store, t: &Triple) -> OxTriple {
     OxTriple::new(
         NamedNode::new_unchecked(t.subject.clone()),
@@ -323,10 +304,10 @@ mod tests {
 
     #[test]
     fn fmt_double_is_honest() {
-        assert_eq!(fmt_double(1.0), "1.0");
+        assert_eq!(fmt_double(1.0), "1");
         assert_eq!(fmt_double(1.5), "1.5");
-        assert_eq!(fmt_double(f64::INFINITY), "INF");
-        assert_eq!(fmt_double(f64::NEG_INFINITY), "-INF");
+        assert_eq!(fmt_double(f64::INFINITY), "inf");
+        assert_eq!(fmt_double(f64::NEG_INFINITY), "-inf");
         assert_eq!(fmt_double(f64::NAN), "NaN");
     }
 

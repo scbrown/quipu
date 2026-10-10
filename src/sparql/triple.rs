@@ -259,9 +259,12 @@ fn visit_triple_pattern_limited(
             let ids = store.lookup_all(&iri)?;
             conditions.push(sql_ref_in(&ids, &mut sql_params));
         } else {
-            let bytes = value.to_bytes();
-            conditions.push(format!("v = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(bytes));
+            let mut placeholders = Vec::new();
+            for bytes in store.literal_aliases(&value, true)? {
+                placeholders.push(format!("?{}", sql_params.len() + 1));
+                sql_params.push(Box::new(bytes));
+            }
+            conditions.push(format!("v IN ({})", placeholders.join(",")));
         }
     }
 
@@ -378,13 +381,16 @@ fn visit_triple_pattern_limited(
     // ROOT-scoped read could not see one even if it composed.
     let facts = store.facts_source();
     let sql = if emit.is_none() {
-        super::count_cover::projection(store, ctx, &conditions)?
-            .unwrap_or_else(|| format!("SELECT DISTINCT e, a, v FROM {facts}{where_clause}"))
+        super::count_cover::projection(store, ctx, &conditions)?.unwrap_or_else(|| {
+            format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
+        })
     } else if want_g {
-        format!("SELECT DISTINCT e, a, v, g FROM {facts}{where_clause}")
+        format!("SELECT e, a, v, g FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v),g")
     } else {
-        format!("SELECT DISTINCT e, a, v FROM {facts}{where_clause}")
+        format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
     };
+    // Group physical aliases by exported term identity, retaining a representative
+    // original value. Scalar COUNT agrees without a second Rust set.
     let param_refs: Vec<&dyn rusqlite::types::ToSql> =
         sql_params.iter().map(std::convert::AsRef::as_ref).collect();
     // The scalar functions read the predicates while this statement steps.
@@ -425,7 +431,7 @@ fn visit_triple_pattern_limited(
         // exact canonical triple. Retaining a second set would make a streaming
         // scan grow with the whole graph again.
         if (!streaming || store.has_attachments())
-            && !canonical_rows.insert((e_id, a_id, v.to_bytes(), g_id))
+            && !canonical_rows.insert((e_id, a_id, v.term_key(), g_id))
         {
             continue;
         }
@@ -526,7 +532,7 @@ pub(super) fn eval_triple_pattern_from_model(
             .collect(),
         (None, None, None) => model.triples(store)?,
     };
-    candidates.sort_unstable_by_key(|l| (l.0, l.1, l.2.to_bytes()));
+    candidates.sort_unstable_by_key(|l| (l.0, l.1, l.2.term_key()));
 
     let mut results = Vec::with_capacity(candidates.len());
     for (e_id, a_id, v) in candidates {

@@ -4666,6 +4666,7 @@ dependencies = [
  "arrow-schema",
  "axum",
  "base64 0.22.1",
+ "bigdecimal",
  "datafrog",
  "flate2",
  "futures",

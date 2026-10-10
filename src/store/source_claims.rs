@@ -20,7 +20,12 @@ impl Store {
 impl Store {
     pub(crate) fn has_fact_claim(&self, e: i64, a: i64, value: &Value, graph: i64) -> Result<bool> {
         let mut stmt = self.prepare("SELECT 1 FROM facts WHERE e=?1 AND a=?2 AND v=?3 AND g=?4 AND op=1 AND valid_to IS NULL LIMIT 1")?;
-        Ok(stmt.exists(params![e, a, value.to_bytes(), graph])?)
+        for bytes in self.literal_aliases(value, false)? {
+            if stmt.exists(params![e, a, bytes, graph])? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn source_has_fact_claim(
@@ -30,13 +35,12 @@ impl Store {
         source: Option<&str>,
     ) -> Result<bool> {
         let mut stmt = self.prepare("SELECT 1 FROM facts f JOIN transactions t ON t.id=f.tx WHERE f.e=?1 AND f.a=?2 AND f.v=?3 AND f.g=?4 AND f.op=1 AND f.valid_to IS NULL AND t.source IS ?5 LIMIT 1")?;
-        Ok(stmt.exists(params![
-            datum.entity,
-            datum.attribute,
-            datum.value.to_bytes(),
-            graph,
-            source
-        ])?)
+        for bytes in self.literal_aliases(&datum.value, false)? {
+            if stmt.exists(params![datum.entity, datum.attribute, bytes, graph, source])? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Write raw audit rows, returning only changes to logical RDF presence.
@@ -70,12 +74,11 @@ impl Store {
             };
             if matches!(datum.op, Op::Assert | Op::Retract) {
                 before
-                    .entry((datum.entity, datum.attribute, datum.value.to_bytes()))
+                    .entry((datum.entity, datum.attribute, datum.value.term_key()))
                     .or_insert_with(|| (datum.clone(), present));
             }
             if datum.op == Op::Retract {
-                {
-                    let bytes = datum.value.to_bytes();
+                for bytes in self.literal_aliases(&datum.value, false)? {
                     let count = close.execute(params![
                         timestamp,
                         datum.entity,
@@ -146,7 +149,7 @@ impl Store {
     ) -> Result<Vec<crate::Fact>> {
         let mut facts = Self::collect_facts(stmt, params)?;
         let mut seen = std::collections::HashSet::new();
-        facts.retain(|f| seen.insert((f.entity, f.attribute, f.value.to_bytes())));
+        facts.retain(|f| seen.insert((f.entity, f.attribute, f.value.term_key())));
         Ok(facts)
     }
 }
