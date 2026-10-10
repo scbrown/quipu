@@ -89,6 +89,7 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - *(sparql)* Preserve typed join order and grouped metadata counts (#478)([4a588eb](https://github.com/scbrown/quipu/commit/4a588eba576da0ed452ff21e3222f57aa1c344f8))
+- *(auth)* Scan compact graph handler in route census (#496)([dfc5da2](https://github.com/scbrown/quipu/commit/dfc5da2b16a767b2a749ee42973e546222d75b18))
 
 ### Perf
 
