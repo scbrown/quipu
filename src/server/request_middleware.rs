@@ -40,8 +40,8 @@ tokio::task_local! {
 }
 
 /// The request's write provenance, to carry across a `spawn_blocking` hop.
-pub(crate) fn request_write_provenance()
--> Option<std::sync::Arc<quipu::write_provenance::RequestProvenance>> {
+pub(crate) fn request_write_provenance(
+) -> Option<std::sync::Arc<quipu::write_provenance::RequestProvenance>> {
     REQUEST_WRITE_PROVENANCE
         .try_with(Clone::clone)
         .ok()
@@ -161,7 +161,14 @@ async fn log_request_with_sequence(
         metrics: quipu::metrics::metrics(),
         cancellations: request_completion::cancellations(),
         emit: Box::new(move |log| {
-            eprintln!("{}", quipu::request_usage::with_request_context(log, peer, completion_provenance.as_deref()));
+            eprintln!(
+                "{}",
+                quipu::request_usage::with_request_context(
+                    log,
+                    peer,
+                    completion_provenance.as_deref()
+                )
+            );
         }),
         finished: false,
     };
