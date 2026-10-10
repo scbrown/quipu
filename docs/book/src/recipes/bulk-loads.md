@@ -45,7 +45,7 @@ quipu share --output share1 --db scratch.db --destination internal
 `share1/` now holds `export.nt` (the canonical facts), `shapes.ttl` and the
 manifests. `--destination internal` is for a migration inside your own
 infrastructure. Without it, `quipu share` runs the outward identifier scrub, which
-needs an [identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share).
+needs an [identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share).
 
 ### 2. Import: stage and validate
 
@@ -146,4 +146,4 @@ target that already held its own data and had the same shapes loaded.
 | fork rollback | `retracted 4000` in one transaction; back to 1 entity |
 
 See also: [CLI: sharing, import and legacy packs](../reference/cli-sharing.md) and
-[Sharing & Federation](../sharing/README.md).
+[Sharing & Federation](../sharing/index.md).

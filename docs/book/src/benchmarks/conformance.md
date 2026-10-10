@@ -29,7 +29,7 @@ You can re-derive every number on this page yourself — the commands are below.
 
 For what Quipu does with a graph once it is correct — handing it to another
 store, and composing another store's without trusting it — see
-[Sharing & Federation](../sharing/README.md). That page states its own claim
+[Sharing & Federation](../sharing/index.md). That page states its own claim
 boundary for `SERVICE`, including the configured-endpoint policy deviation scored below.
 
 ## What was measured

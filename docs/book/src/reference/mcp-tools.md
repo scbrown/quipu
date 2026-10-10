@@ -1,8 +1,9 @@
 # MCP Tools
 
 Quipu exposes its API as MCP (Model Context Protocol) tools for agent
-integration. These tools are available when Quipu runs as a Bobbin subsystem
-or standalone MCP server.
+integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
+`quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
+`knowledge_*` tools, not these.)
 
 The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
 **50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
@@ -340,8 +341,8 @@ Two properties worth knowing before using it:
 
 - **`planned: 0` is a real answer.** It means the named source owns no live
   facts. `quipu_knot` reports `replaced: true, count: 0` both for a retraction
-  that removed nothing and for one that emptied a graph, so this question
-  previously had no answer.
+  that deletes nothing and for one that empties a graph. Read `planned`
+  to distinguish those cases.
 - **Re-keying order is retract FIRST, then re-promote.** The store dedups an
   identical triple to one row carrying one source, and the existence check
   ignores the transaction source — so asserting canonically first is skipped as

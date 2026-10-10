@@ -502,11 +502,8 @@ Two things it does **not** promise, both still on the caller:
 
 #### Edge `relation`: which vocabularies `/episode` can write
 
-`/episode` used to force **every** relation into `aegis:` and then sanitize it, so
-`"relation": "rdfs:subClassOf"` was stored as `aegis:rdfs_subClassOf` — a predicate
-that resembles the intended one, matches nothing, and is inert — behind HTTP 200 with
-a healthy `count`. It no longer does. The policy is now: **represent the caller's
-predicate faithfully, or refuse and say which path to use.** Never silently rewrite it.
+`/episode` represents the caller's predicate faithfully or refuses it with
+an explanation of which path to use. It never silently rewrites a predicate.
 
 | `relation` | Emitted |
 |---|---|
@@ -514,7 +511,7 @@ predicate faithfully, or refuse and say which path to use.** Never silently rewr
 | `owl:sameAs`, `rdfs:seeAlso`, `rdf:*`, `skos:*`, `prov:*`, `quipu:*`, `xsd:*`, `sh:*` | verbatim, in that namespace |
 | `<http://example.org/p>` | verbatim (full IRI in angle brackets) |
 | `foo:bar` (undeclared prefix) | **400**, naming `/set` and the angle-bracket form |
-| `runs on` (would not round-trip sanitization) | **400** — it would be silently renamed |
+| `runs on` (would not round-trip sanitization) | **400** — spaces are not accepted in a bare relation |
 
 The declared prefix set is `KNOWN_PREFIXES` in `src/episode/mod.rs`, kept in lockstep
 with the `@prefix` block `episode_to_turtle` emits.
@@ -985,7 +982,7 @@ curl -s localhost:3030/search -X POST \
 it narrows to entities whose facts trace (via `prov:wasGeneratedBy → episode →
 groupId`) to a listed group, and it **drops** ungrouped `/knot` facts (they have
 no episode to trace). `entity_type` restricts to an rdf:type IRI. See
-[group-isolation](../../design/group-isolation.md).
+[group-isolation](https://github.com/scbrown/quipu/blob/main/docs/design/group-isolation.md).
 
 > ⚠️ **The `type: A, B` in a result's `text` is NOT valid as `/episode` input.** A
 > multi-typed entity renders as `... type: Feature, Tool, Concept`, and that string

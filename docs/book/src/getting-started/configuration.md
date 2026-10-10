@@ -187,17 +187,11 @@ Move existing embeddings across with
 `quipu migrate-vectors --from sqlite --to lancedb`. See
 [LanceDB Vector Backend](../architecture/lancedb.md).
 
-## Not wired into the `quipu` CLI / `quipu-server`
+## Configuration coverage
 
-Nothing, currently — every documented key above is read by the shipped
-binaries. The mechanism is kept rather than deleted: `unwired_warnings()` still
-exists, and any future key that parses but is not acted on must be listed there
-so setting it prints a `warning:` instead of being silently inert.
-
-(Two keys used to sit here. `federation.remotes` was wired in quipu #47 —
-health-checked at startup and queried per-request via `federated: true` on
-`POST /query`, see [Federation](../architecture/federation.md). `vector.backend`
-was wired in quipu-lv7, described just above.)
+Every documented key above is read by the shipped binaries. `unwired_warnings()`
+reports any configured key that parses but is not acted on, so an inert setting
+produces a warning.
 
 ## Priority Order
 
