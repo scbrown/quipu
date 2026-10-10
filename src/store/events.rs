@@ -116,6 +116,19 @@ impl EventRow {
 }
 
 impl Store {
+    /// Register a wake hint at the SQLite outer-commit boundary. A callback
+    /// cannot establish durability (commit itself may still fail). Serving
+    /// consumers must cross the writer barrier, then reread the durable log.
+    /// This does not run on reads or inner savepoint releases.
+    #[cfg(feature = "server")]
+    pub fn set_commit_wake(&self, mut wake: impl FnMut() + Send + 'static) -> Result<()> {
+        self.conn.commit_hook(Some(move || {
+            wake();
+            false
+        }))?;
+        Ok(())
+    }
+
     /// Append this transaction's semantic events. MUST be called inside the
     /// `quipu_transact` savepoint (it is — from `stage_and_guard`), so the
     /// events commit or roll back atomically with the facts they describe.

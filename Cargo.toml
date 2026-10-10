@@ -185,7 +185,7 @@ owl = []
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
 mcp = ["dep:libc", "dep:url", "dep:rmcp", "dep:tower", "dep:axum", "dep:tokio", "dep:tower-http"]
-server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "remote", "jemalloc"]
+server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "dep:futures", "remote", "jemalloc"]
 # quipu-server's global allocator; implied by `server` so every deployed build
 # carries it (aegis-67p0lj). Reported in /version features as `jemalloc`.
 jemalloc = ["dep:tikv-jemallocator"]

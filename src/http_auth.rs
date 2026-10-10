@@ -156,7 +156,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/entity/{iri}/html",
     "/entity_history",
     "/transactions",
-    "/events",  // pull-batch event log read (event-log P1); the commit half is a write
+    "/events", // pull-batch event log read (event-log P1); the commit half is a write
+    "/events/stream", // read-only replay; delivery never commits a consumer ACK
+    "/changes/stream", // read-only transaction replay, including named graphs
     "/changes", // fact-level change feed (quipu-2ae): pull-only, cursor is a tx id
     "/spotlight",
     "/fragments",
