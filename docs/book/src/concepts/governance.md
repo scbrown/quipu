@@ -162,6 +162,7 @@ the judged transaction must change the seal and identity. Otherwise identical
 outcomes can collapse to one verdict with several transaction IDs, and the link
 itself is not authenticated. SHACL checks cardinality and datatype; it does not
 prove that the referenced transaction exists or that the signature binds it.
+
 ## Replaying a refusal: the denial quarantine
 
 A denied write is rolled back, so its verdict survives and the evidence
