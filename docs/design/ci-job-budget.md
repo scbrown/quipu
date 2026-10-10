@@ -25,3 +25,11 @@ The installed CD manifest was also checked: its four required names (`Build`,
 and size checks are combined, never path-skipped; a failing component keeps the
 combined job red. This remains a private candidate awaiting review and observed
 hosted fanout after adoption.
+
+Hosted before snapshot for the current workflow-configuration PR485 materializes
+16 CI jobs, plus one Docs, one Changelog scrub and three Conformance jobs (21
+total). This is an in-progress snapshot: downstream aggregate jobs are not yet
+materialized, so it is not a final workflow fanout count. The pinned YAML model
+counts 18 CI jobs before and 16 after, including both aggregate jobs. The hosted
+after measurement must wait for publication and a completed natural run. The
+snapshot and model must not be conflated.
