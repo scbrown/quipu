@@ -382,15 +382,15 @@ fn visit_triple_pattern_limited(
     let facts = store.facts_source();
     let sql = if emit.is_none() {
         super::count_cover::projection(store, ctx, &conditions)?.unwrap_or_else(|| {
-            format!("SELECT DISTINCT e, a, quipu_term_key(v) AS v FROM {facts}{where_clause}")
+            format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
         })
     } else if want_g {
-        format!("SELECT DISTINCT e, a, quipu_term_key(v) AS v, g FROM {facts}{where_clause}")
+        format!("SELECT e, a, v, g FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v),g")
     } else {
-        format!("SELECT DISTINCT e, a, quipu_term_key(v) AS v FROM {facts}{where_clause}")
+        format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
     };
-    // The projection normalizes physical aliases to exported term identity.
-    // DISTINCT therefore agrees with scalar COUNT without a second Rust set.
+    // Group physical aliases by exported term identity, retaining a representative
+    // original value. Scalar COUNT agrees without a second Rust set.
     let param_refs: Vec<&dyn rusqlite::types::ToSql> =
         sql_params.iter().map(std::convert::AsRef::as_ref).collect();
     // The scalar functions read the predicates while this statement steps.
