@@ -1,223 +1,64 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quipu — Explore this repository's graph</title>
-<meta name="description" content="Quipu's own repository knowledge pack, imported and queried entirely in your browser by the quipu engine compiled to WebAssembly.">
-<!-- Inline: mdbook content-hashes its favicon filenames, so there is no stable
-     path to link, and without this the browser 404s on ./favicon.ico. -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2316213e'/%3E%3Ccircle cx='8' cy='4' r='2' fill='%23e94560'/%3E%3Ccircle cx='4.5' cy='11' r='1.6' fill='%233987e5'/%3E%3Ccircle cx='11.5' cy='11' r='1.6' fill='%23199e70'/%3E%3C/svg%3E">
-<style>
-:root {
-  --bg: #1a1a2e; --bg-surface: #16213e; --bg-elevated: #0f3460;
-  --text: #e0e0e0; --text-muted: #8892a4; --accent: #e94560;
-  --blue: #3987e5; --green: #199e70; --amber: #d9a441;
-  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: var(--bg); color: var(--text); min-height: 100vh;
-  font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-.mono { font-family: var(--mono); }
-.muted { color: var(--text-muted); }
-.bad { color: var(--accent); }
-.warn { color: var(--amber); }
-
-header {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding: 12px 20px; border-bottom: 1px solid var(--bg-elevated);
-  background: var(--bg-surface); position: sticky; top: 0; z-index: 5;
-}
-header h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; }
-header h1 span { color: var(--accent); }
-header .right { margin-left: auto; display: flex; gap: 14px; font-size: 12px; }
-
-.wrap { max-width: 1180px; margin: 0 auto; padding: 22px 20px 60px; }
-.lede { font-size: 15px; max-width: 74ch; margin-bottom: 6px; }
-.lede + .lede { margin-top: 10px; color: var(--text-muted); font-size: 13px; }
-
-#status {
-  margin: 18px 0; padding: 10px 12px; border-left: 3px solid var(--blue);
-  background: var(--bg-surface); font-size: 13px;
-}
-#status.bad { border-left-color: var(--accent); }
-
-section {
-  margin-top: 26px; border: 1px solid var(--bg-elevated);
-  border-radius: 6px; background: var(--bg-surface);
-}
-section > h2 {
-  font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
-  color: var(--text-muted); font-weight: 600;
-  padding: 10px 14px; border-bottom: 1px solid var(--bg-elevated);
-  display: flex; align-items: baseline; gap: 12px;
-}
-section > h2 .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
-section > h2 a { margin-left: auto; font-size: 11px; text-transform: none; letter-spacing: 0; }
-.body { padding: 14px; }
-
-dl#provenance {
-  display: grid; grid-template-columns: minmax(140px, max-content) 1fr;
-  gap: 4px 16px; font-size: 12.5px;
-}
-dl#provenance dt { color: var(--text-muted); }
-dl#provenance dd { word-break: break-all; }
-#shacl-note, #freshness { margin-top: 12px; font-size: 12.5px; color: var(--text-muted); }
-
-.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-.bar-label { width: 190px; flex: none; font-size: 12px; }
-.bar-track { flex: 1; background: var(--bg-elevated); height: 14px; border-radius: 3px; }
-.bar { background: var(--blue); height: 100%; border-radius: 3px; }
-.bar-n { width: 70px; text-align: right; font-size: 12px; color: var(--text-muted); }
-
-.split { display: grid; grid-template-columns: 300px 1fr; gap: 14px; }
-@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
-#file-filter {
-  width: 100%; padding: 6px 8px; margin-bottom: 8px; font-family: var(--mono);
-  font-size: 12px; color: var(--text); background: var(--bg);
-  border: 1px solid var(--bg-elevated); border-radius: 4px;
-}
-#file-list { max-height: 340px; overflow: auto; display: flex; flex-direction: column; }
-button.file {
-  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
-  text-align: left; padding: 3px 6px; font: inherit; font-size: 12px;
-  color: var(--text); background: none; border: 0; border-radius: 3px; cursor: pointer;
-}
-button.file:hover { background: var(--bg-elevated); }
-button.file em { font-style: normal; font-size: 10.5px; color: var(--text-muted); flex: none; }
-button.file span { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; }
-#detail-iri { font-size: 11px; color: var(--text-muted); word-break: break-all; margin-bottom: 8px; }
-#detail-title { font-size: 14px; font-family: var(--mono); }
-
-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-th {
-  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
-  color: var(--text-muted); font-weight: 600; padding: 4px 8px 4px 0;
-  border-bottom: 1px solid var(--bg-elevated);
-}
-td { padding: 3px 8px 3px 0; border-bottom: 1px solid rgba(15, 52, 96, .45); }
-td.num { color: var(--text-muted); width: 44px; }
-.scroll { max-height: 360px; overflow: auto; }
-
-#graph { width: 100%; height: 360px; display: block; background: var(--bg); border-radius: 4px; }
-
-#sparql {
-  width: 100%; min-height: 190px; padding: 10px; font-family: var(--mono); font-size: 12.5px;
-  color: var(--text); background: var(--bg); border: 1px solid var(--bg-elevated);
-  border-radius: 4px; resize: vertical; line-height: 1.5;
-}
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
-button.go, button.canned, #url-load {
-  font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: 4px; cursor: pointer;
-  color: var(--text); background: var(--bg-elevated); border: 1px solid transparent;
-}
-button.go { background: var(--accent); color: #fff; font-weight: 600; }
-button.canned:hover, #url-load:hover { border-color: var(--blue); }
-#sparql-out { margin-top: 10px; max-height: 400px; overflow: auto; }
-#sparql-out pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; }
-
-input.mono, input.val {
-  width: 100%; padding: 4px 7px; font-family: var(--mono); font-size: 12px;
-  color: var(--text); background: var(--bg); border: 1px solid var(--bg-elevated);
-  border-radius: 3px;
-}
-input.val:disabled { color: var(--text-muted); background: transparent; border-color: transparent; }
-td.acts { white-space: nowrap; width: 1%; }
-button.mini {
-  font: inherit; font-size: 11.5px; padding: 3px 9px; margin-left: 6px; cursor: pointer;
-  color: var(--text); background: var(--bg-elevated); border: 1px solid transparent;
-  border-radius: 3px;
-}
-button.mini:hover { border-color: var(--blue); }
-button.mini.danger:hover { border-color: var(--accent); color: var(--accent); }
-button.mini.go { background: var(--accent); color: #fff; font-weight: 600; margin-left: 0; }
-.addrow {
-  display: grid; grid-template-columns: minmax(180px, 2fr) minmax(140px, 2fr) max-content;
-  gap: 8px; align-items: center; margin-top: 12px;
-}
-@media (max-width: 700px) { .addrow { grid-template-columns: 1fr; } }
-p.note { font-size: 11.5px; margin-top: 10px; }
-#edit-note { font-size: 12px; margin-top: 10px; min-height: 1.5em; color: var(--text-muted); }
-#edit-note.bad { color: var(--accent); }
-dl#export-manifest {
-  display: grid; grid-template-columns: minmax(110px, max-content) 1fr;
-  gap: 4px 16px; font-size: 12.5px; margin-bottom: 12px;
-}
-dl#export-manifest dt { color: var(--text-muted); }
-dl#export-manifest dd { word-break: break-all; }
-
-#pr-preview dl {
-  display: grid; grid-template-columns: minmax(110px, max-content) 1fr;
-  gap: 4px 16px; font-size: 12.5px; margin: 12px 0;
-}
-#pr-preview dt { color: var(--text-muted); }
-#pr-preview dd { word-break: break-all; }
-/* The delta is the thing to review before anything opens, so it gets room —
-   but bounded, because a large one belongs in the upload flow anyway. */
-#sw-state.bad { color: var(--accent); }
-pre.recipe {
-  font-size: 12px; background: var(--bg); border: 1px solid var(--bg-elevated);
-  border-radius: 4px; padding: 8px 10px; overflow-x: auto; margin: 10px 0;
-}
-#pr-preview pre {
-  max-height: 320px; overflow: auto; font-size: 12px;
-  background: var(--bg); border: 1px solid var(--bg-elevated);
-  border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all;
-}
-
-#url-input, #file-input {
-  font-family: var(--mono); font-size: 12px; color: var(--text);
-  background: var(--bg); border: 1px solid var(--bg-elevated);
-  border-radius: 4px; padding: 5px 8px;
-}
-#url-input { flex: 1; min-width: 260px; }
-footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width: 78ch; }
-</style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quipu — Explore a knowledge graph</title>
 <link rel="stylesheet" href="./constellation.css">
+<link rel="stylesheet" href="./workbench.css">
 </head>
 <body>
-
-<header>
-  <h1><span>Q</span>UIPU — Explore this repository's graph</h1>
-  <span class="right">
-    <a href="../">Documentation</a>
-    <a href="../sharing/">Sharing &amp; Federation</a>
-    <a href="https://github.com/scbrown/quipu">GitHub</a>
-  </span>
-</header>
-
 <div class="wrap">
-
-  <p class="lede">
-    Every Quipu release ships a knowledge pack of <strong>this repository</strong> — its modules,
-    symbols, documents and sections, plus source-backed contributor stories, decisions and vision, as RDF. This page downloads that pack and opens it with the
-    Quipu engine compiled to WebAssembly. <strong>There is no server.</strong> The store is built
-    in this tab, the SPARQL below runs in this tab, and closing it throws the whole thing away.
-  </p>
-  <p class="lede">
-    It is also the receiving half of Quipu's sharing story, run in front of you rather than
-    described: the manifest is verified against the exact payload bytes, the pack's bundled shapes
-    are <em>adopted</em> as a deliberate act, the graph is imported into a staging graph, and only
-    then promoted. Every number on this page is from a query you can read and re-run.
-  </p>
-
-  <div id="status">Starting the WebAssembly worker…</div>
-
-  <section>
-    <h2>Provenance <span class="note">— what you are actually looking at</span></h2>
-    <div class="body">
-      <dl id="provenance"></dl>
-      <p id="shacl-note"></p>
-      <p id="freshness"></p>
-    </div>
+<header class="top">
+  <a class="mark" href="../">🪢 Quipu</a>
+  <span id="build-chip" class="chip">Loading engine</span>
+  <span id="pack-chip" class="chip">Waiting for a verified pack</span>
+  <nav aria-label="Resources"><a href="../">Docs</a><a href="https://arxiv.org/abs/2608.16813">Paper</a><a href="https://github.com/scbrown/quipu">GitHub</a>
+  <details id="load-menu"><summary>Load another pack</summary><section>
+      <h2>Load a different pack</h2>
+      <div class="body">
+        <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+          Any Quipu share works here, not just this one — that is the point of a portable pack.
+          Point it at a URL, or open a <code class="mono">.qpack.tar.gz</code> from your disk.
+          <strong>GitHub release assets will not load from a URL:</strong> GitHub serves them with
+          no <code class="mono">Access-Control-Allow-Origin</code> header, so the browser refuses
+          them — which is exactly why this site stages its own copy at build time.
+        </p>
+        <div class="row">
+          <input id="url-input" type="url" placeholder="https://example.org/some.qpack.tar.gz">
+          <button id="url-load">Load URL</button>
+        </div>
+        <div class="row"><input id="file-input" type="file" accept=".gz,.tar.gz,.qpack"></div>
+      </div>
+    </section></details>
+  <label class="theme-label">Theme <select id="theme-choice"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></nav>
+</header>
+<div class="hero">
+  <div><h1>A knowledge graph running in this tab.<br><em>Ask it things.</em></h1>
+  <p>Explore Quipu's repository: code, documents and decisions. The engine runs in WebAssembly; queries and edits stay in your browser.</p></div>
+  <section class="cord" aria-label="How this copy was loaded"><h2>How this copy got here</h2>
+  <ol id="load-cord"><li data-step="download"><b>Downloaded</b><span>Waiting</span></li><li data-step="verify"><b>Verified</b><span>Waiting</span></li><li data-step="stage"><b>Staged</b><span>Waiting</span></li><li data-step="promote"><b>Promoted</b><span>Waiting</span></li></ol>
   </section>
-
-  <main hidden>
-    <section id="constellation">
+</div>
+<div id="status" role="status" aria-live="polite">Starting the WebAssembly worker…</div>
+<main hidden>
+<div class="bench">
+  <aside class="pane starters"><h2>Start here</h2><div id="starter-questions"></div>
+  <button id="bad-write" class="bad-control">Try a bad write →</button>
+  <p class="muted" id="validation-summary">Checking this engine's validation capabilities.</p></aside>
+  <div class="pane center">
+  <div class="tabs" role="tablist" aria-label="Workbench"><button id="tab-ask" role="tab" aria-controls="view-ask" aria-selected="true" data-tab="ask">Ask</button><button id="tab-map" role="tab" aria-controls="view-map" aria-selected="false" data-tab="map">Map</button><button id="tab-inside" role="tab" aria-controls="view-inside" aria-selected="false" data-tab="inside">What's inside</button></div>
+  <div id="view-ask" role="tabpanel" aria-labelledby="tab-ask"><section>
+      <h2>SPARQL <span class="note">— against the copy in this tab</span></h2>
+      <div class="body">
+        <div class="row" id="canned" aria-label="Starter questions"></div>
+        <textarea id="sparql" spellcheck="false"></textarea>
+        <div class="row"><button class="go" id="run">Run</button><button id="edit-query">Edit query</button>
+          <span class="muted" style="font-size:12px">
+            Reads only. Nothing you type here leaves your browser.</span></div>
+        <div id="sparql-out"></div>
+      </div>
+    </section><div id="bad-verdict" hidden aria-live="polite"></div></div>
+  <div id="view-map" role="tabpanel" aria-labelledby="tab-map" hidden><section id="constellation">
       <h2>Knowledge constellation <span class="note" id="graph-count"></span>
         <a href="#" id="graph-showq">show the query</a></h2>
       <div class="body">
@@ -240,18 +81,15 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
             <p class="muted graph-hint">Drag to explore · pinch to zoom · tap a star or cluster</p>
             <div id="graph-legend" aria-label="Graph legend"></div>
           </div>
-          <article id="node-card" aria-live="polite" aria-label="Selected node"></article>
+
         </div>
       </div>
-    </section>
-
-    <section>
+    </section></div>
+  <div id="view-inside" role="tabpanel" aria-labelledby="tab-inside" hidden><section>
       <h2>Type distribution <span class="note" id="types-total"></span>
         <a href="#" id="types-showq">show the query</a></h2>
       <div class="body"><div id="types"></div></div>
-    </section>
-
-    <section>
+    </section> <section>
       <h2>Browse modules &amp; documents <a href="#" id="browse-showq">show the query</a></h2>
       <div class="body split">
         <div>
@@ -267,21 +105,10 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
           <div id="detail-body" class="scroll"></div>
         </div>
       </div>
-    </section>
-
-    <section>
-      <h2>SPARQL <span class="note">— against the copy in this tab</span></h2>
-      <div class="body">
-        <div class="row" id="canned"></div>
-        <textarea id="sparql" spellcheck="false"></textarea>
-        <div class="row"><button class="go" id="run">Run</button>
-          <span class="muted" style="font-size:12px">
-            Reads only. Nothing you type here leaves your browser.</span></div>
-        <div id="sparql-out"></div>
-      </div>
-    </section>
-
-    <section>
+    </section></div>
+  </div>
+  <aside class="pane inspector"><h2>Selected node</h2><article id="node-card" aria-live="polite" aria-label="Selected node"><p class="muted">Choose a node in the map or a file inside the pack.</p></article>
+  <details open><summary>Inspect and edit facts</summary><section>
       <h2>Edit the facts <span class="note" id="facts-subject"></span>
         <a href="#" id="facts-showq">show the query</a></h2>
       <div class="body">
@@ -295,20 +122,26 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
         <div id="facts"></div>
         <p id="edit-note"></p>
       </div>
-    </section>
-
-    <section>
+    </section></details>
+  <details id="pack-provenance"><summary>Pack provenance and validation</summary><section>
+    <h2>Provenance <span class="note">— what you are actually looking at</span></h2>
+    <div class="body">
+      <dl id="provenance"></dl>
+      <p id="shacl-note"></p>
+      <p id="freshness"></p>
+    </div>
+  </section></details></aside>
+</div>
+<div class="take">
+  <article class="pane"><h2>Run it locally</h2><p>Install the command-line tool to work with your own graph and query its history.</p><a href="../getting-started/installation.html">Installation guide →</a><a href="../sharing/">Sharing and federation →</a></article>
+  <article class="pane"><section>
       <h2>Take it with you <span class="note" id="edit-count"></span></h2>
       <div class="body">
         <p class="muted" style="font-size:12.5px;margin-bottom:12px">
-          Your edited store exports as a <strong>real share</strong>, built by the same
-          <code class="mono">share_payload</code> the CLI and the REST endpoint use, and declaring
-          the pack it came from as its parent — so the lineage survives the round trip.
-          <code class="mono">quipu import</code> will take it back — extract it first and import
-          the <em>directory</em>, because <code class="mono">quipu import &lt;archive&gt;</code>
-          verifies into a throwaway in-memory store and ignores <code class="mono">--db</code>.
+          Download your graph and edits as a verified share pack, with its history preserved.
+          <a href="../sharing/">See how to import it locally.</a>
         </p>
-        <dl id="export-manifest"></dl>
+        <details><summary>Export manifest</summary><dl id="export-manifest"></dl></details>
         <div class="row">
           <button class="go" id="download-pack">Download .qpack.tar.gz</button>
           <button id="download-nt">Download export.nt</button>
@@ -316,14 +149,8 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
 
         <h3>Propose these edits as a pull request</h3>
         <p class="note">
-          No API and no token. The page turns your edits into a
-          <code class="mono">share-delta/v1</code> delta share &mdash; byte-for-byte the same
-          four files <code class="mono">quipu pack --since</code> writes and
-          <code class="mono">quipu import</code> applies &mdash; and hands them to
-          GitHub&rsquo;s own upload page. <strong>Nothing is sent anywhere by this page.</strong>
-          You review the change here, then GitHub opens the PR when you click its button.
-          All four files must land in the same directory: quipu verifies the manifest, the
-          update against its hash, and the shapes as one artifact.
+          Review your changes here, then download the files and open GitHub to propose them.
+          Upload all four files together. This page sends nothing on your behalf.
         </p>
         <div class="row">
           <button id="pr-prepare">Compute the delta</button>
@@ -331,24 +158,17 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
         </div>
         <div id="pr-preview"></div>
 
-        <h3>Drive this page from an agent</h3>
+        </div></section></article>
+  <article class="pane agent"><h3>Drive this page from an agent</h3>
         <p class="note">
-          This page <em>is</em> the server. <code class="mono">window.quipu</code> exposes the
-          same verbs as a quipu HTTP server and returns the same JSON, because
-          the page and the server call the same functions &mdash; the
-          <code class="mono">inference</code> marker and the <code class="mono">labels</code>
-          key travel unchanged, so client code written against the HTTP API runs here as-is.
-          Same-origin, no CORS, no port, no credential: an agent that wants this store loads
-          the page.
+          An agent can query and edit this copy through <code class="mono">window.quipu</code>.
+          It runs in your browser without a server or credentials.
         </p>
 <pre class="mono recipe">browser_navigate  https://scbrown.github.io/quipu/explore/
 browser_evaluate  await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 5")
-browser_evaluate  await window.quipu.set("urn:x", "rdfs:comment", JSON.stringify("hi"))
 browser_evaluate  await window.quipu.delta()
-
-<span class="muted"># or as HTTP, against this page's own path &mdash; no server anywhere:</span>
-browser_evaluate  await (await fetch("./query", {method:"POST",
-                    body: JSON.stringify({query:"SELECT ?s WHERE { ?s ?p ?o } LIMIT 5"})})).json()</pre>
+ </pre>
+        <details><summary>HTTP routes and engine capabilities</summary>
         <p class="note">
           <strong>The fetch routes are relative to this page</strong> &mdash;
           <code class="mono">./query</code>, not <code class="mono">/query</code>. A service
@@ -365,43 +185,12 @@ browser_evaluate  await (await fetch("./query", {method:"POST",
           <em>rejects</em> with a typed error naming the missing feature &mdash; it never resolves
           to an empty list, because an empty list is indistinguishable from &ldquo;nothing
           matched&rdquo;.
-        </p>
-      </div>
-    </section>
-
-    <section>
-      <h2>Load a different pack</h2>
-      <div class="body">
-        <p class="muted" style="font-size:12.5px;margin-bottom:10px">
-          Any Quipu share works here, not just this one — that is the point of a portable pack.
-          Point it at a URL, or open a <code class="mono">.qpack.tar.gz</code> from your disk.
-          <strong>GitHub release assets will not load from a URL:</strong> GitHub serves them with
-          no <code class="mono">Access-Control-Allow-Origin</code> header, so the browser refuses
-          them — which is exactly why this site stages its own copy at build time.
-        </p>
-        <div class="row">
-          <input id="url-input" type="url" placeholder="https://example.org/some.qpack.tar.gz">
-          <button id="url-load">Load URL</button>
-        </div>
-        <div class="row"><input id="file-input" type="file" accept=".gz,.tar.gz,.qpack"></div>
-      </div>
-    </section>
-
-  </main>
-
-  <footer>
-    <p>
-      Built from <a href="https://github.com/scbrown/quipu/tree/main/wasm/explorer">wasm/explorer</a>
-      and shipped as a release asset. The pack is produced at release time by
-      <code class="mono">scripts/build-repository-share.sh</code> under a CONSTRUCT scope that
-      admits public repository knowledge only. See
-      <a href="../sharing/">Sharing &amp; Federation</a> for what a pack is and how the receiving
-      side decides what to trust.
-    </p>
-  </footer>
-
+        </p></details>
+      </article>
 </div>
-
+</main>
+<footer>Built from <a href="https://github.com/scbrown/quipu/tree/main/wasm/explorer">wasm/explorer</a>. The release pack contains public repository knowledge. <a href="../sharing/">Read how its manifest, shapes and lineage are verified.</a></footer>
+</div>
 <script type="module" src="./explorer.js"></script>
 </body>
 </html>

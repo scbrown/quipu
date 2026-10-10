@@ -1,4 +1,7 @@
 import { createConstellation } from "./constellation.js";
+import { setupWorkbench, loadStarted, loaded } from "./workbench.js";
+
+setupWorkbench();
 
 // UI for the "Explore this repository's graph" page.
 //
@@ -770,11 +773,13 @@ async function runSparql() {
 // ------------------------------------------------------------------- boot
 
 async function loadPack(bytes, source) {
+  loadStarted(bytes.byteLength);
   status(`Verifying and importing ${fmt(bytes.byteLength)} bytes from ${source}…`);
   const t0 = performance.now();
   const report = await ask({ cmd: "load", bytes, source });
   const load = performance.now() - t0;
   renderProvenance(report, source, { load });
+  loaded(report);
   status(`Loaded ${fmt(report.import.triples.accepted)} triples — everything below is a live `
     + `query against this tab's copy.`);
   $("main").hidden = false;

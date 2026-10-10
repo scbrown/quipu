@@ -70,6 +70,13 @@ for shape in "$SOURCE"/shapes/*.ttl; do
   "$QUIPU_BIN" shapes load "$name" "$shape" --db "$DB"
 done
 
+# Carry a reviewed public receiver catalogue and its constraints in the public
+# ROOT scope. The private producer catalogue below remains build-local: never
+# copy it into the public payload or replace its final outward scrub.
+"$QUIPU_BIN" shapes load publication-policy \
+  "$SOURCE/docs/knowledge/publication-policy.shapes.ttl" --db "$DB"
+"$QUIPU_BIN" knot "$SOURCE/docs/knowledge/publication-policy.ttl" --db "$DB"
+
 "$QUIPU_BIN" knot "$PRIVATE/policy.ttl" --graph urn:quipu:private-release-policy --db "$DB"
 
 CONTEXT="$PRIVATE/context.ttl"
@@ -131,6 +138,11 @@ PY
 grep -q 'src%2Fshare_transport\.rs' "$QUERY_JSON"
 
 node "$SOURCE/scripts/verify-contributor-knowledge.mjs" "$QUIPU_BIN" "$FRESH_DB"
+
+# Exercise what ships, with no receiver-side policy injection. Import alone
+# missed a pack that a browser could read but could never export outward.
+python3 "$SOURCE/scripts/verify-repository-share-receiver.py" \
+  "$QUIPU_BIN" "$OUTPUT" "$FRESH_DB" "$PRIVATE"
 
 wc -c "$OUTPUT"/*
 wc -l "$OUTPUT/export.nt"
