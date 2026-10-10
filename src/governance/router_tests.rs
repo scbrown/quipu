@@ -880,3 +880,99 @@ fn the_cited_request_iri_is_the_minted_one() {
         "the offered IRI must be the minted request's: {iri}"
     );
 }
+
+// ---- S1 (aegis-kzt0ql.9.1): the registry answers as-of the signature ----
+
+const LATER: &str = "2026-02-01T00:00:00Z";
+
+/// Close `key` on `by`'s registration for `policy` at `at`, and register `next`
+/// on the same registration: rotation as close-then-insert.
+fn rotate(store: &mut Store, by: &str, policy: &str, key: &str, next: &str, at: &str) {
+    let iri = format!(
+        "http://ex/reg_{by}_{}",
+        policy.replace(['/', ':', '#'], "_")
+    );
+    let entity = store.lookup(&iri).unwrap().unwrap();
+    let pk = store
+        .lookup(&format!("{DEFAULT_BASE_NS}publicKey"))
+        .unwrap();
+    store
+        .retract_triples(
+            entity,
+            pk,
+            Some(&Value::Str(key.into())),
+            at,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+    let datum = Datum {
+        entity,
+        attribute: pk.unwrap(),
+        value: Value::Str(next.into()),
+        valid_from: at.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store.transact(&[datum], at, None, None).unwrap();
+}
+
+#[test]
+fn s1_an_approval_recorded_before_a_rotation_still_rules() {
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    let old = keypair();
+    let old_hex = crate::signing::public_key_hex(&old);
+    register_decider(&mut store, "stiwi", POLICY, &old_hex);
+    let sig = crate::signing::sign_hex(&old, &decision_message(&hash, "approve", "stiwi"));
+    write_decision(&mut store, "approve", "stiwi", &hash, Some(&sig));
+    assert!(
+        resolve(&store, POLICY, TARGET, NOW)
+            .unwrap()
+            .unwrap()
+            .permits()
+    );
+
+    let new = keypair();
+    rotate(
+        &mut store,
+        "stiwi",
+        POLICY,
+        &old_hex,
+        &crate::signing::public_key_hex(&new),
+        LATER,
+    );
+    assert_eq!(
+        resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap(),
+        Ruling::Approved { by: "stiwi".into() },
+        "rotating a key must not void approvals it signed while it was registered"
+    );
+}
+
+#[test]
+fn s1_a_decision_signed_with_the_old_key_after_rotation_is_ignored() {
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    let old = keypair();
+    let old_hex = crate::signing::public_key_hex(&old);
+    register_decider(&mut store, "stiwi", POLICY, &old_hex);
+    let new = keypair();
+    rotate(
+        &mut store,
+        "stiwi",
+        POLICY,
+        &old_hex,
+        &crate::signing::public_key_hex(&new),
+        LATER,
+    );
+    // Written after the rotation, with the key that was just closed.
+    let sig = crate::signing::sign_hex(&old, &decision_message(&hash, "approve", "stiwi"));
+    write_decision(&mut store, "approve", "stiwi", &hash, Some(&sig));
+    assert!(
+        !resolve(&store, POLICY, TARGET, NOW)
+            .unwrap()
+            .unwrap()
+            .permits()
+    );
+}

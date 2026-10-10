@@ -6,8 +6,12 @@ pub mod attach;
 /// verifier. Native only: `session_attestation` is itself `cfg(not(wasm32))`.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod attestation;
+mod batches;
 pub mod changes;
 pub mod datasets;
+pub mod demotions;
+#[cfg(test)]
+mod demotions_tests;
 pub mod events;
 pub mod forks;
 pub mod freeze;
@@ -20,6 +24,7 @@ pub mod labels;
 pub mod labels_advisory;
 mod migrate;
 mod open;
+pub(crate) use open::open_file_immutable;
 pub mod ops;
 pub mod overlays;
 pub mod push;
@@ -37,6 +42,7 @@ mod set;
 mod settings;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod snapshot_upload;
+mod source_claims;
 pub mod source_tag;
 #[cfg(test)]
 mod source_tap_tests;

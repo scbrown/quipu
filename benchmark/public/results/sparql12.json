@@ -1,0 +1,2482 @@
+{
+  "benchmark": "W3C SPARQL 1.2 query tests (all dawgt:Proposed at the pinned revision)",
+  "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
+  "quipu_revision": "4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4",
+  "scope": "cases needing RDF 1.2 grammar or terms are enumerated, not run; the rest are run",
+  "totals": {
+    "all": {
+      "cases": 269,
+      "failed": 3,
+      "unsupported": 263,
+      "passed": 3
+    },
+    "parts": {
+      "codepoint-escapes": {
+        "cases": 14,
+        "unsupported": 14
+      },
+      "eval-triple-terms": {
+        "cases": 41,
+        "unsupported": 41
+      },
+      "expression": {
+        "cases": 5,
+        "failed": 1,
+        "unsupported": 4
+      },
+      "grouping": {
+        "cases": 2,
+        "failed": 2
+      },
+      "lang-basedir": {
+        "cases": 11,
+        "unsupported": 11
+      },
+      "rdf11": {
+        "cases": 3,
+        "passed": 3
+      },
+      "syntax": {
+        "cases": 6,
+        "unsupported": 6
+      },
+      "syntax-triple-terms-negative": {
+        "cases": 65,
+        "unsupported": 65
+      },
+      "syntax-triple-terms-positive": {
+        "cases": 113,
+        "unsupported": 113
+      },
+      "version": {
+        "cases": 9,
+        "unsupported": 9
+      }
+    }
+  },
+  "results": [
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/grouping/manifest.ttl",
+      "id": ":group01",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/grouping/manifest.ttl",
+      "id": ":select-variable-reuse",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "failed",
+      "diagnostic": "query error: SPARQL parse error: error at 5:1: expected one of The SELECT contains an expression with a variable that is unbound, [_]"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-01-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-02-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-03-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-04-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-05",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-06",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-07",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-08",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":codepoint-esc-09",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":surrogate-esc-01-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":surrogate-esc-02-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":surrogate-esc-03-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":surrogate-esc-04-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/codepoint-escapes/manifest.ttl",
+      "id": ":surrogate-esc-05-bad",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":alternate-path-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":alternate-path-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":alternate-path-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-anonreifier-alternate-path",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-anonreifier-list-predicate",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-anonreifier-oneOrMore",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-anonreifier-optional",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-anonreifier-path-on-start",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-anonreifier-path",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-anonreifier-variable-path",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-reifier-list-predicate",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-reifier-oneOrMore",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-reifier-optional",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-reifier-path-on-start",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-reifier-path",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-reifier-reifier-alternate-path",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":annotated-reifier-variable-path",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bind-anonreified",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bind-reified",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bindbnode-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bindbnode-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bindbnode-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bnode-predicate-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bnode-predicate-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":bnode-predicate-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":list-anonreifier-01",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":list-anonreifier-02",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":list-reifier-01",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":list-reifier-02",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":list-tripleterm-01",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":list-tripleterm-02",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":nested-annotated-path-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":nested-annotated-path-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-object-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-object-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-object-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-predicate-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-predicate-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-predicate-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-subject-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-subject-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-list-subject-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-path-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-path-bind-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-path-bind-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-path-bind-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-path-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-path-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-variable-path-anonreifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-variable-path-reifier",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":quoted-variable-path-tripleterm",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":syntax-update-anonreifier-01",
+      "kind": "NegativeUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":syntax-update-anonreifier-02",
+      "kind": "NegativeUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-separate-01",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-separate-02",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-separate-03",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-separate-04",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-separate-05",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-separate-06",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-subject-01",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-subject-02",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-subject-03",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-subject-04",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-subject-05",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-negative/manifest.ttl",
+      "id": ":tripleterm-subject-06",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-05",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-07",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-08",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-09",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-multiple-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-multiple-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-multiple-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-anonreifier-multiple-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-05",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-07",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-08",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-09",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-05",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-07",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-08",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-09",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":annotation-reifier-multiple-10",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-07",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-08",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-09",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-10",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-11",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-12",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-anonreifier-13",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-07",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-08",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-09",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-10",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-11",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-12",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-reifier-13",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-tripleterm-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-tripleterm-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-tripleterm-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-tripleterm-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-tripleterm-05",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-tripleterm-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":basic-tripleterm-07",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-anonreifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-anonreifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-anonreifier-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-reifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-reifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-reifier-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-tripleterm-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-tripleterm-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":bnode-tripleterm-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":compound-all",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":compound-anonreifier",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":compound-reifier",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":compound-tripleterm",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":compound-tripleterm-subject",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":expr-tripleterm-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":expr-tripleterm-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":expr-tripleterm-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":expr-tripleterm-05",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":expr-tripleterm-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":inside-anonreifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":inside-anonreifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":inside-reifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":inside-reifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":inside-tripleterm-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":inside-tripleterm-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":nested-anonreifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":nested-anonreifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":nested-reifier-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":nested-reifier-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":nested-tripleterm-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":nested-tripleterm-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":subject-tripleterm",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-anonreifier-01",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-anonreifier-02",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-anonreifier-03",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-anonreifier-04",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-anonreifier-05",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-anonreifier-06",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-01",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-02",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-03",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-04",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-05",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-06",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-07",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-reifier-08",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-tripleterm-01",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-tripleterm-03",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-tripleterm-04",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax-triple-terms-positive/manifest.ttl",
+      "id": ":update-tripleterm-05",
+      "kind": "PositiveUpdateSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":results-tripleterms-1j",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":results-tripleterms-1x",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":results-reifiedtriples-1j",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":results-reifiedtriples-1x",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-2",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-3",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-4",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-5",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-6",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-7",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-8",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":basic-9",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-1",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-2",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-3",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-3-nomatch",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-4",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-5",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-6",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-7",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-8",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-8-nomatch",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-9",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-10",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":pattern-11",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":construct-1",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":construct-2",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":construct-3",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":construct-4",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":construct-5",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":graphs-1",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":graphs-2",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":expr-1",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":expr-2",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":op-1",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":op-2",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":order-1",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":order-2",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":update-1",
+      "kind": "UpdateEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":update-2",
+      "kind": "UpdateEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/eval-triple-terms/manifest.ttl",
+      "id": ":update-3",
+      "kind": "UpdateEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/expression/manifest.ttl",
+      "id": ":not-not",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/expression/manifest.ttl",
+      "id": ":triple-on-literals",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/expression/manifest.ttl",
+      "id": ":triple-on-str-literals",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/expression/manifest.ttl",
+      "id": ":triple-on-triple-terms",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/expression/manifest.ttl",
+      "id": ":triple-on-undefs",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk)"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":haslang",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":haslangdir",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":lang",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":langdir",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":langdir-literal",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":langdir-literal-invalid",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":strlang",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":strlangdir",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":datatype",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":concat",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/lang-basedir/manifest.ttl",
+      "id": ":contains",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "RDF 1.2 base direction (rdf:dirLangString) is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/rdf11/manifest.ttl",
+      "id": ":langstring-datatype",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/rdf11/manifest.ttl",
+      "id": ":plain-string-datatype",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/rdf11/manifest.ttl",
+      "id": ":plain-string-same",
+      "kind": "QueryEvaluationTest",
+      "approval": "Proposed",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-01",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-02",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-03",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-04",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-05",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-06",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-bad-01",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-bad-02",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/version/manifest.ttl",
+      "id": ":version-bad-03",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "the SPARQL 1.2 VERSION declaration is not implemented"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax/manifest.ttl",
+      "id": ":nested-aggregate-functions",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax/manifest.ttl",
+      "id": ":duplicated-values-variable",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax/manifest.ttl",
+      "id": ":group-by-scope-1",
+      "kind": "PositiveSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax/manifest.ttl",
+      "id": ":group-by-scope-bad-1",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax/manifest.ttl",
+      "id": ":group-by-scope-bad-2",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
+    },
+    {
+      "class": "sparql12",
+      "manifest": "sparql/sparql12/syntax/manifest.ttl",
+      "id": ":group-by-scope-bad-3",
+      "kind": "NegativeSyntaxTest",
+      "approval": "Proposed",
+      "status": "unsupported",
+      "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
+    }
+  ],
+  "generated_at": "2026-10-08T20:21:25Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/37837741337"
+}

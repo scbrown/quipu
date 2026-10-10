@@ -12,15 +12,22 @@ use serde_json::{Value as JsonValue, json};
 
 use super::SharedStore;
 
+// The process allocator, reported by /version below as `jemalloc` (aegis-67p0lj).
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+#[path = "allocator.rs"]
+mod allocator;
+
 pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
     let flag = |name| {
         args.windows(2)
             .find(|window| window[0] == name)
             .map(|window| window[1].as_str())
     };
-    quipu::QuipuConfig::load(std::path::Path::new("."))
+    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
         .with_db_override(flag("--db"))
-        .with_bind_override(flag("--bind"))
+        .with_bind_override(flag("--bind"));
+    super::update::update_full::set_max_facts(config.server.update_full_copy_max_facts);
+    config
 }
 
 /// quipu #47: report the configured federation remotes at startup, and prove
@@ -52,6 +59,17 @@ pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::Qui
             eprintln!("error: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+pub(crate) fn apply_search(store: &mut quipu::Store, config: &quipu::SearchConfig) {
+    store.search_config_mut().clone_from(config);
+    if config.keyword {
+        store.initialize_lexical_index().unwrap_or_else(|e| {
+            eprintln!("error initializing keyword index: {e}");
+            std::process::exit(1);
+        });
+        eprintln!("keyword index activated; historical backfill is explicit and bounded");
     }
 }
 
@@ -96,7 +114,9 @@ pub(crate) async fn health() -> impl IntoResponse {
 pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
-    let body = store.graph_metrics.render();
+    let mut body = store.graph_metrics.render();
+    super::request_middleware::render_request_starts(&mut body);
+    super::update::render_update_paths(&mut body);
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
@@ -173,10 +193,25 @@ where
     T: Send + 'static,
 {
     let identity = super::auth::request_identity();
-    match tokio::task::spawn_blocking(move || quipu::transaction_auth::with_identity(identity, f))
-        .await
+    let kind = super::request_middleware::request_write_kind();
+    let provenance = super::request_middleware::request_write_provenance();
+    // On a deep stack: request work parses and walks caller-supplied SPARQL,
+    // whose recursion follows its structure, and the pool's default stack
+    // aborted the process on a few kilobytes of nesting (aegis-xcvb5z). The
+    // structural bound in `sparql_structure` keeps requests inside this stack;
+    // the stack keeps the bound's margin. Identity, write kind and write
+    // provenance are thread-scoped, so they are re-established on the new thread.
+    match tokio::task::spawn_blocking(move || {
+        quipu::sparql_structure::on_deep_stack(move || {
+            quipu::transaction_auth::with_identity(identity, || {
+                quipu::write_provenance::scoped(provenance, || quipu::write_kind::scoped(kind, f))
+            })
+        })
+    })
+    .await
     {
-        Ok(result) => result,
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(AppError(e)),
         // Only reachable if the handler panicked; the mutex is then poisoned and
         // the process is not going to recover on its own either way.
         Err(e) => Err(AppError(quipu::Error::InvalidValue(format!(

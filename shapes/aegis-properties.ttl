@@ -497,6 +497,49 @@ aegis:attests a rdf:Property ;
     rdfs:domain aegis:VerifierRegistration ;
     rdfs:comment "What this registration vouches for — a compact policy id string or a governed subject IRI such as a workflow definition. Human-authored, and the root of trust: nothing in the automated path may mint one, or the chain verifies only against itself." .
 
+# ── Filesystem collections (aegis-1v555n) ─────────────────────────
+aegis:inExport a owl:ObjectProperty ;
+    rdfs:label "in export" ;
+    rdfs:comment "The NFS export a FileCollection was crawled from. The collection's relativePath is relative to that export's root, so the pair locates it without touching the filesystem." .
+
+aegis:parentCollection a owl:ObjectProperty ;
+    rdfs:label "parent collection" ;
+    rdfs:comment "The enclosing FileCollection, e.g. a season's show or an album's artist. Its counts and extensions include this collection's, because every aggregate covers the whole subtree." .
+
+aegis:relativePath a owl:DatatypeProperty ;
+    rdfs:label "relative path" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Path of a FileCollection relative to its export's root, with no leading slash. Stable across re-crawls, so it keys the collection's identity together with the export." .
+
+aegis:fileCount a owl:DatatypeProperty ;
+    rdfs:label "file count" ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Number of regular files in the collection's whole subtree at the time of the crawl. Symlinks are not followed, so a link to elsewhere is not double counted." .
+
+aegis:byteCount a owl:DatatypeProperty ;
+    rdfs:label "byte count" ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Total size in bytes of the regular files in the collection's subtree at crawl time (apparent size from stat, not blocks used on the pool)." .
+
+aegis:newestMtime a owl:DatatypeProperty ;
+    rdfs:label "newest mtime" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The most recent modification time of any file in the subtree, as UTC YYYY-MM-DDTHH:MM:SSZ. Answers when a collection last changed without listing it." .
+
+aegis:hasExtension a owl:DatatypeProperty ;
+    rdfs:label "has extension" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A lower-cased file extension, with its leading dot, present anywhere in the collection's subtree. Multi-valued. It is what lets a query find the collection holding .z64 files without a crawl." .
+
+aegis:extensionCounts a owl:DatatypeProperty ;
+    rdfs:label "extension counts" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Compact histogram of the subtree's extensions, as .ext=count pairs separated by spaces, largest first. A summary for readers; hasExtension is the queryable form." .
+
+aegis:leadFor a owl:ObjectProperty ;
+    rdfs:label "lead for" ;
+    rdfs:comment "Pairs a review/design LEAD with the KEEPER whose domain it reviews, 1:1 from both ends. Not reports_to: it routes design and review work, not the stop-event tree (aegis-vj3uet). No rdfs:domain or rdfs:range on purpose: the roles are asserted with aegis:hasRole and checked by LeadForShape, so inference must not type anyone as a lead." .
+
 aegis:publicKey a owl:DatatypeProperty ;
     rdfs:label "public key" ;
     rdfs:domain aegis:VerifierRegistration ;
@@ -648,3 +691,55 @@ aegis:untrustedOrigin a owl:DatatypeProperty ;
     rdfs:domain aegis:ToolClass ;
     rdfs:range xsd:string ;
     rdfs:comment "Where the imported state comes from, in prose, for a reader deciding how much to worry. Free text rather than an enum: an enum would go stale the first time a new integration lands, and a wrong enum value is worse than a sentence." .
+
+# Chaski reactions and firing records. No domains: shared predicates must not
+# re-type other records as reactions merely because they carry a timestamp.
+
+aegis:triggerKind a owl:DatatypeProperty ;
+    rdfs:label "triggerKind" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Whether a reaction is triggered by event-feed activity or by its schedule." .
+
+aegis:eventTypes a owl:DatatypeProperty ;
+    rdfs:label "eventTypes" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Comma-separated event types selecting which feed events trigger a reaction evaluation." .
+
+aegis:condition a owl:DatatypeProperty ;
+    rdfs:label "condition" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A reaction condition expressed as SPARQL SELECT ?focus. Query failure means unknown, not resolution. An adapter may interpret the result as its candidate population." .
+
+aegis:action a owl:DatatypeProperty ;
+    rdfs:label "action" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "An action requested by a reaction: alert, page, bead or webhook. Multiple actions may be requested." .
+
+aegis:enabled a owl:DatatypeProperty ;
+    rdfs:label "enabled" ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether the carrying rule is enabled. Chaski treats omission as enabled; this is a consumer default, not an asserted graph value." .
+
+aegis:eventId a owl:DatatypeProperty ;
+    rdfs:label "eventId" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Stable producer event identity. For a ReactionFiring, derive its IRI from the reaction label and this event ID, preserving the same payload on retries. No domain: events and other records may carry this identity." .
+
+aegis:startedAt a owl:DatatypeProperty ;
+    rdfs:label "startedAt" ;
+    rdfs:range xsd:dateTime ;
+    rdfs:comment "The start instant of an occurrence. For a delivered ReactionFiring, use the frozen event payload observed_at, never retry send time." .
+
+aegis:resolvedAt a owl:DatatypeProperty ;
+    rdfs:label "resolvedAt" ;
+    rdfs:range xsd:dateTime ;
+    rdfs:comment "Resolution instant of an occurrence. For a ReactionFiring this is absent while active and set once on resolution; SHACL cardinality cannot enforce that temporal transition." .
+
+aegis:firedBy a owl:ObjectProperty ;
+    rdfs:label "fired by" ;
+    rdfs:range aegis:Reaction ;
+    rdfs:comment "The Reaction whose transition produced this firing record." .
+
+aegis:focus a owl:ObjectProperty ;
+    rdfs:label "focus" ;
+    rdfs:comment "The IRI that a reaction condition or adapter identified as the focus of a firing. No range class: any IRI may be a focus." .

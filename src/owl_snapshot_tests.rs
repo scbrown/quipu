@@ -371,3 +371,46 @@ fn temporary_snapshot_uses_disk_and_a_bounded_page_cache() {
         .unwrap();
     assert_eq!(cache, -8192);
 }
+
+#[test]
+fn snapshot_does_not_turn_plane_bookkeeping_into_asserted_premises() {
+    let mut live = seed(1);
+    let metadata = live.intern("urn:metadata").unwrap();
+    let type_attr = live
+        .lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        .unwrap()
+        .unwrap();
+    let child = live.lookup("urn:Child").unwrap().unwrap();
+    live.transact_to_graph(
+        &[Datum {
+            entity: metadata,
+            attribute: type_attr,
+            value: Value::Ref(child),
+            valid_from: TS.into(),
+            valid_to: None,
+            op: Op::Assert,
+        }],
+        TS,
+        None,
+        Some(PLANE_SOURCE),
+        0,
+    )
+    .unwrap();
+    let mut plan = snapshot(&live);
+    // The ordinary child remains a positive control, but metadata is not a premise.
+    assert_eq!(plan.remaining(), 1);
+    plan.apply_batch(&mut live).unwrap();
+    plan.finish(&mut live).unwrap();
+    let companion = live.lookup(ROOT_INFERRED_GRAPH_IRI).unwrap().unwrap();
+    let parent = live.lookup("urn:Parent").unwrap().unwrap();
+    let inferred = live.current_facts_in_graph(companion).unwrap();
+    assert!(inferred.iter().any(
+        |f| f.entity == live.lookup("urn:entity:0").unwrap().unwrap()
+            && f.value == Value::Ref(parent)
+    ));
+    assert!(
+        !inferred
+            .iter()
+            .any(|f| f.entity == metadata && f.value == Value::Ref(parent))
+    );
+}

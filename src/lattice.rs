@@ -521,5 +521,13 @@ impl<T: Join + Clone> Composed<T> {
 pub use crate::lattice_fold::{fold_join, fold_meet};
 
 #[cfg(test)]
+#[path = "lattice_props.rs"]
+mod props;
+
+#[cfg(test)]
 #[path = "lattice_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "lattice_evidence_tests.rs"]
+mod evidence_tests;

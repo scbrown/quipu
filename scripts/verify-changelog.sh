@@ -13,6 +13,7 @@
 #
 # Usage:
 #   scripts/verify-changelog.sh                 # verify HEAD's CHANGELOG newest section
+#   scripts/verify-changelog.sh --version X.Y.Z # target the pending release
 #   scripts/verify-changelog.sh --at <ref>      # verify CHANGELOG.md as of <ref> (for tests)
 #   scripts/verify-changelog.sh --range A..B    # override the git-cliff range explicitly
 #
@@ -25,8 +26,12 @@ cd "$REPO_ROOT"
 CLIFF_CONFIG="${CLIFF_CONFIG:-cliff.toml}"
 AT_REF=""
 RANGE_OVERRIDE=""
+TARGET_VERSION=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --version)
+      [[ $# -ge 2 && "$2" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: --version requires x.y.z" >&2; exit 2; }
+      TARGET_VERSION="$2"; shift 2 ;;
     --at) AT_REF="$2"; shift 2 ;;
     --range) RANGE_OVERRIDE="$2"; shift 2 ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \?//'; exit 0 ;;
@@ -46,9 +51,26 @@ else
 fi
 
 # Newest version section = from the first `## [x]` heading to the next one.
-newest_ver="$(printf '%s\n' "$changelog_content" | grep -m1 -oE '^## \[(Unreleased|[0-9]+\.[0-9]+\.[0-9]+)\]' | grep -oE 'Unreleased|[0-9]+\.[0-9]+\.[0-9]+' || true)"
+# Ignore an empty Unreleased placeholder; populated pending notes stay first.
+newest_ver="$(awk '
+  /^## \[(Unreleased|[0-9]+\.[0-9]+\.[0-9]+)\]/ {
+    if (version != "") {
+      if (version != "Unreleased" || populated) { if (!selected) selected = version }
+      else version = ""
+    }
+    if (version == "") { version = $0; sub(/^## \[/, "", version); sub(/\].*$/, "", version) }
+    next
+  }
+  version != "" && /[^[:space:]]/ { populated = 1 }
+  END { print selected ? selected : version }
+' <<<"$changelog_content")"
+newest_ver="${TARGET_VERSION:-$newest_ver}"
 [[ -n "$newest_ver" ]] || { echo "ERROR: no release or Unreleased section found in CHANGELOG.md" >&2; exit 2; }
-newest_section="$(printf '%s\n' "$changelog_content" | awk '/^## \[/{n++} n==1' )"
+newest_section="$(printf '%s\n' "$changelog_content" | awk -v heading="## [${newest_ver}]" '
+  /^## \[/ { active = index($0, heading) == 1; if (active) count++ }
+  active { print }
+  END { if (count != 1) exit 2 }
+')" || { echo "ERROR: expected exactly one ${newest_ver} section" >&2; exit 2; }
 
 # Range = <prev-tag>..<head-of-release>.
 #  - HEAD of range: the historical v<newest_ver> tag when that released section

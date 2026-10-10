@@ -51,7 +51,7 @@
 //! next unverifiable transition.
 
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, PROV, RDF_TYPE};
+use crate::namespace::{DEFAULT_BASE_NS, PROV};
 use crate::store::{Datum, Store};
 use crate::types::Value;
 
@@ -303,45 +303,15 @@ fn read_transition(store: &Store, iri: &str, graph: i64) -> Result<Transition> {
     Ok(out)
 }
 
-/// Every registered public key for `agent`: `aegis:VerifierRegistration`
-/// facts with `aegis:verifier` naming the agent, across EVERY graph — the
-/// identity graph is a named graph of the operator's choosing (see the module
-/// doc for why this is visibility, not trust).
+/// Every public key registered for `agent` NOW: `aegis:VerifierRegistration`
+/// facts with `aegis:verifier` naming the agent, across EVERY graph (the
+/// identity graph is a named graph of the operator's choosing; see the module
+/// doc for why this is visibility, not trust). The gate verifies a transition
+/// in the write that records it, so "now" IS the signing instant (S1): a
+/// closed key and a not-yet-valid one are both absent.
 fn registered_keys(store: &Store, agent: &str) -> Result<Vec<String>> {
-    let (Some(rdf_type), Some(class), Some(verifier), Some(public_key)) = (
-        store.lookup(RDF_TYPE)?,
-        store.lookup(&format!("{DEFAULT_BASE_NS}VerifierRegistration"))?,
-        store.lookup(&format!("{DEFAULT_BASE_NS}verifier"))?,
-        store.lookup(&format!("{DEFAULT_BASE_NS}publicKey"))?,
-    ) else {
-        // A term never interned means no registration can exist yet.
-        return Ok(Vec::new());
-    };
-    let mut stmt = store.prepare(
-        "SELECT pk.v FROM facts t \
-         JOIN facts vr ON vr.e = t.e AND vr.a = ?3 AND vr.v = ?4 \
-              AND vr.op = 1 AND vr.valid_to IS NULL \
-         JOIN facts pk ON pk.e = t.e AND pk.a = ?5 \
-              AND pk.op = 1 AND pk.valid_to IS NULL \
-         WHERE t.a = ?1 AND t.v = ?2 AND t.op = 1 AND t.valid_to IS NULL",
-    )?;
-    let class_bytes = Value::Ref(class).to_bytes();
-    let agent_bytes = Value::Str(agent.to_string()).to_bytes();
-    let raw: Vec<Vec<u8>> = stmt
-        .query_map(
-            rusqlite::params![rdf_type, class_bytes, verifier, agent_bytes, public_key],
-            |row| row.get(0),
-        )?
-        .collect::<std::result::Result<_, _>>()?;
-    let mut keys = Vec::new();
-    for bytes in raw {
-        if let Some(key) = lexical_of(store, &Value::from_bytes(&bytes)?)
-            && !keys.contains(&key)
-        {
-            keys.push(key);
-        }
-    }
-    Ok(keys)
+    use super::verifier_registry::{Scope, Witness};
+    super::verifier_registry::registered_keys(store, agent, None, &Witness::now(), Scope::AllGraphs)
 }
 
 /// The lexical form of a stored value: strings as-is, typed literals by their

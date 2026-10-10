@@ -1535,3 +1535,38 @@ fn a_pack_predating_the_destination_column_reads_as_unknown_not_as_scrubbed() {
     assert_eq!(m.source_graph, "urn:g:pack");
     assert!(m.content_hash.starts_with("sha256:"));
 }
+
+// ── --verify must not write the pack it verifies (aegis-s8jra2) ──────────────
+// verify opened the pack with `Store::open`, which runs schema setup and
+// migrations and commits them. Every verify therefore bumped the SQLite
+// change counter at byte 28 and changed the file's sha256, so a verified
+// published or checked-in pack came back dirty.
+
+#[test]
+fn verify_leaves_the_pack_byte_identical() {
+    let store = producer(0);
+    let out = tmp("verify-bytes");
+    pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+    let before = std::fs::read(&*out).unwrap();
+    let (stored, recomputed, ok) = verify(&out).unwrap();
+    assert!(ok, "stored {stored} != recomputed {recomputed}");
+    assert!(
+        std::fs::read(&*out).unwrap() == before,
+        "verify changed the bytes of the pack it verified"
+    );
+}
+
+#[test]
+fn verify_works_on_a_read_only_pack_file() {
+    let store = producer(0);
+    let out = tmp("verify-ro");
+    pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+    let mut perms = std::fs::metadata(&*out).unwrap().permissions();
+    perms.set_readonly(true);
+    std::fs::set_permissions(&*out, perms.clone()).unwrap();
+    let verdict = verify(&out);
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+    std::fs::set_permissions(&*out, perms).unwrap();
+    assert!(verdict.unwrap().2, "a read-only published pack must verify");
+}

@@ -66,6 +66,7 @@ aegis:DockerImage rdfs:subClassOf obo:BFO_0000002 .
 aegis:Document rdfs:subClassOf obo:BFO_0000002 .
 aegis:FamilyMember rdfs:subClassOf obo:BFO_0000002 .
 aegis:Feature rdfs:subClassOf obo:BFO_0000002 .
+aegis:FileCollection rdfs:subClassOf obo:BFO_0000002 .
 aegis:Formula rdfs:subClassOf obo:BFO_0000002 .
 aegis:GitCommit rdfs:subClassOf obo:BFO_0000002 .
 aegis:GitRepo rdfs:subClassOf obo:BFO_0000002 .
@@ -98,6 +99,10 @@ aegis:Principal rdfs:subClassOf obo:BFO_0000002 .
 aegis:Probe rdfs:subClassOf obo:BFO_0000002 .
 aegis:PublisherAttestation rdfs:subClassOf obo:BFO_0000002 .
 aegis:PushgatewayJob rdfs:subClassOf obo:BFO_0000002 .
+# A reaction is a standing rule; its firing is a durable transition record,
+# distinct from the execution that produced it (like Observation).
+aegis:Reaction rdfs:subClassOf obo:BFO_0000002 .
+aegis:ReactionFiring rdfs:subClassOf obo:BFO_0000002 .
 aegis:Requirement rdfs:subClassOf obo:BFO_0000002 .
 aegis:ResponsibilityDomain rdfs:subClassOf obo:BFO_0000002 .
 aegis:ReverseProxyRoute rdfs:subClassOf obo:BFO_0000002 .
@@ -121,6 +126,10 @@ aegis:ToolClass rdfs:subClassOf obo:BFO_0000002 .
 aegis:TraefikRoute rdfs:subClassOf obo:BFO_0000002 .
 aegis:TraitValue rdfs:subClassOf obo:BFO_0000002 .
 aegis:Transition rdfs:subClassOf obo:BFO_0000002 .
+# A Verification node is the RECORD of one credential check (result, verifiedAt,
+# falsifier), not the act of checking, so it is a continuant like aegis:Observation
+# (aegis-zjpqjr). A run of the check would be an occurrent.
+aegis:Verification rdfs:subClassOf obo:BFO_0000002 .
 aegis:VerifierRegistration rdfs:subClassOf obo:BFO_0000002 .
 aegis:Watchlist rdfs:subClassOf obo:BFO_0000002 .
 # WorkItem is the tracker-agnostic sibling of aegis:Bead, which is already a

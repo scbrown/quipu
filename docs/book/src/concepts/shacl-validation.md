@@ -81,7 +81,44 @@ authorize instances of `urn:example:Task`. The write vocabulary still comes
 from loaded shape sets; add and load a shape targeting the intended class
 before writing its instances. Unknown types continue to be refused.
 
+## Demoted derivation records
+
+`shapes/demoted-derivation.ttl` defines the product evidence schema in
+`http://quipu.local/graph#`, matching the truth-maintenance runtime vocabulary.
+Ship and load this set together with the compatible demotion runtime.
+
+A `DemotedDerivation` is an IRI identifying an `rdf:Statement`. It retains
+exactly one `rdf:subject`, `rdf:predicate`, `rdf:object`, `premiseGraph`,
+`deriverSource`, `promotionTx`, `invalidationTx`, and `prov:invalidatedAtTime`.
+Subject, predicate and premise graph are IRIs; the object may be any RDF term.
+The source is a string, transaction IDs are integers at least one, and the
+invalidation time is an `xsd:dateTime`.
+
+`derivationState` must be exactly one string: `unsupported` or `resolved`.
+Resolution preserves the evidence record. Extra annotations are allowed.
+The shape rejects missing or ambiguous fields and incorrect RDF term kinds.
+It does not establish atomic demotion, deterministic identity, exclusion from
+premise evaluation, or authorization to promote; those are runtime guarantees.
+Loading the shape does not repair data or promote unsupported evidence.
+
 ## Validation in Action
+
+### Recorded text-rule cases
+
+The bundled `aegis-ontology` shapes allow `aegis:mustMatch` and
+`aegis:mustNotMatch` on `TextRule` and `InternalIdentifierPattern`. Each property
+accepts zero or more `xsd:string` values: example text that should trigger the
+rule, or should stay silent, respectively. Existing rules without cases remain
+valid. IRIs, language-tagged strings and numeric literals are not case text.
+
+Schema validity does not establish enforcement readiness. A readiness checker
+must require at least one case of each polarity and execute every case through
+the rule engine against a current projection. Missing cases or indeterminate
+execution must not pass. These text-only examples do not prove path or repository
+exemptions; contextual cases require a separate model. Recording cases does not
+change a rule's enforcement tier.
+
+### Rejected writes
 
 Try to add a Host without a hostname:
 

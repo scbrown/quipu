@@ -25,6 +25,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 pub(crate) mod attestation;
+pub(crate) mod write_provenance;
+pub mod writes;
 
 /// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
 /// on Linux; `(0, 0)` elsewhere. `statm` fields are in pages; on the `x86_64`
@@ -164,6 +166,7 @@ const MAX_TASKS: usize = 128;
 
 type ClientTaskEndpoint = (String, String, String);
 type RequestObservation = (u64, f64);
+type AuthRefusalMethods = BTreeMap<(&'static str, bool), u64>;
 
 fn client_key<V>(
     map: &BTreeMap<(String, String), V>,
@@ -223,8 +226,12 @@ fn request_key<V>(
 #[derive(Default)]
 pub struct Metrics {
     attestation: attestation::AttestationMetrics,
+    writes: writes::WriteMetrics,
+    write_provenance: write_provenance::WriteProvenanceMetrics,
     /// (endpoint template, status) -> request count.
     requests: Mutex<BTreeMap<(String, u16), u64>>,
+    /// Bounded client/route identities, with a fixed method vocabulary.
+    auth_refusals: Mutex<BTreeMap<(String, String), AuthRefusalMethods>>,
     /// endpoint template -> duration histogram.
     durations: Mutex<BTreeMap<String, Hist>>,
     /// /policy/check outcome -> count.
@@ -289,6 +296,31 @@ pub fn metrics() -> &'static Metrics {
 }
 
 impl Metrics {
+    /// Count 401s separately from successful requests, without task/host labels.
+    /// Observed successful methods initialize a zero counter for that series.
+    pub fn observe_auth_result(&self, client: &str, endpoint: &str, method: &str, status: u16) {
+        let method = match method {
+            "GET" => "GET",
+            "POST" => "POST",
+            "HEAD" => "HEAD",
+            _ => "OTHER",
+        };
+        // Probe purpose is operational attribution, not authenticated identity.
+        // Preserve it before caller overflow so known controls stay identifiable.
+        let expected_probe = (client == "aegis-doc-link-check" && method == "GET")
+            || (client == "auth-negative-probe"
+                && matches!(endpoint, "/episode" | "/shapes")
+                && method == "POST");
+        let mut map = self.auth_refusals.lock().unwrap();
+        let key = client_key(&map, client, endpoint);
+        let n = map
+            .entry(key)
+            .or_default()
+            .entry((method, expected_probe))
+            .or_default();
+        *n += u64::from(status == 401);
+    }
+
     /// Record one served request: endpoint template, response status, duration.
     pub fn observe_request(&self, endpoint: &str, status: u16, seconds: f64) {
         *self
@@ -366,11 +398,25 @@ impl Metrics {
             .or_insert(0) += 1;
     }
 
-    /// Record `n` datums committed, and sample RSS into the high-water mark so
+    /// Record one committed write, and sample RSS into the high-water mark so
     /// a burst export's peak is captured even between 15s scrapes (memory telemetry).
-    pub fn observe_write(&self, n: u64) {
-        self.facts_written.fetch_add(n, Ordering::Relaxed);
+    /// `quipu_facts_written_total` keeps counting SUBMITTED datums, unchanged;
+    /// the outcome split is `quipu_write_facts_total` (aegis-gwkd76).
+    pub fn observe_write(&self, counts: &writes::WriteCounts) {
+        self.facts_written
+            .fetch_add(counts.submitted, Ordering::Relaxed);
+        self.writes.observe(counts);
         self.sample_rss();
+    }
+
+    /// Count one committed write transaction under its request's declared
+    /// provenance (aegis-7zp4rc). Called at commit, so a refused or rolled-back
+    /// request is never counted.
+    pub fn observe_write_provenance(
+        &self,
+        provenance: &crate::write_provenance::RequestProvenance,
+    ) {
+        self.write_provenance.observe(provenance);
     }
 
     /// Update the RSS high-water mark from the current process RSS.
@@ -410,6 +456,23 @@ impl Metrics {
     ) -> String {
         let mut out = String::new();
         self.attestation.render(&mut out);
+        self.writes.render(&mut out);
+        self.write_provenance.render(&mut out);
+
+        out.push_str(
+            "# HELP quipu_http_auth_refusals_total HTTP 401 responses by bounded client, route template and method.\n\
+             # TYPE quipu_http_auth_refusals_total counter\n",
+        );
+        for ((client, endpoint), methods) in self.auth_refusals.lock().unwrap().iter() {
+            for ((method, expected_probe), n) in methods {
+                let _ = writeln!(
+                    out,
+                    "quipu_http_auth_refusals_total{{client=\"{}\",endpoint=\"{}\",method=\"{method}\",expected_probe=\"{expected_probe}\"}} {n}",
+                    esc(client),
+                    esc(endpoint),
+                );
+            }
+        }
 
         out.push_str(
             "# HELP quipu_http_requests_total Requests served, by route template and status.\n\
@@ -639,7 +702,7 @@ impl Metrics {
         );
         let _ = writeln!(out, "quipu_process_peak_rss_bytes {peak}");
         out.push_str(
-            "# HELP quipu_facts_written_total Datums committed to the store (correlates RSS with write volume).\n\
+            "# HELP quipu_facts_written_total Datums SUBMITTED to committed transactions, including no-op re-assertions and every internal writer; not net growth (split: quipu_write_facts_total). Resets on restart.\n\
              # TYPE quipu_facts_written_total counter\n",
         );
         let _ = writeln!(

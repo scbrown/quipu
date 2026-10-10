@@ -39,6 +39,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("ontologies", Disposition::Content),
     ("queries", Disposition::Content),
     ("query_params", Disposition::Content),
+    // The stored queries of a staged import, waiting on `import promote`
+    // (aegis-9ofqqs). The staged graph they belong to travels as `graphs` +
+    // `facts`, so the copy can promote it; dropping these would make that
+    // promotion silently lose the share's queries.
+    ("pending_share_queries", Disposition::Content),
     ("datasets", Disposition::Content),
     ("dataset_members", Disposition::Content),
     ("forks", Disposition::Content),
@@ -51,6 +56,14 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // embedding model and config are part of the declared set precisely because
     // regeneration is only reconstruction if the recipe travels.
     ("vectors", Disposition::Regenerated),
+    // Derived ROOT fact text. Rebuild with the pinned FTS5 projection and
+    // bounded search-index backfill, never carry SQLite physical rowids.
+    ("lexical_fts", Disposition::Regenerated),
+    ("lexical_fts_data", Disposition::Regenerated),
+    ("lexical_fts_idx", Disposition::Regenerated),
+    ("lexical_fts_content", Disposition::Regenerated),
+    ("lexical_fts_docsize", Disposition::Regenerated),
+    ("lexical_fts_config", Disposition::Regenerated),
     // -- log ----------------------------------------------------------------
     ("events", Disposition::Log),
     // -- excluded -----------------------------------------------------------
@@ -71,6 +84,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("attestation_nonces", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
+    // Local derived-index cursor/highwater. A reconstructed store has its
+    // own fact rowids and must start a new bounded backfill.
+    ("lexical_progress", Disposition::Excluded),
     // Webhook URLs. Restoring them aims a new store at another store's endpoints.
     ("subscriptions", Disposition::Excluded),
     // `path` is a producer-local filesystem path; restored verbatim it points at

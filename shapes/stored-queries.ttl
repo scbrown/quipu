@@ -1,0 +1,101 @@
+# SHACL shapes for stored queries carried in a share's `queries.ttl`
+# (aegis-fxpbys.2).
+#
+# A share's `queries.ttl` describes each stored query (`quipu_ask`) as RDF so a
+# qpack can ship its competency questions beside its data and shapes. The
+# producer validates the member against these shapes before hashing it, and the
+# importer validates it again before anything reaches the receiver's registry.
+# The Rust side of the contract is `src/share_queries.rs`; this file is compiled
+# into that module, so the shape an importer applies is the one in the repo.
+#
+# The template is DATA. Only SELECT, CONSTRUCT, ASK and DESCRIBE are accepted;
+# `quipu:queryForm` records which, and the importer re-derives it by PARSING the
+# template and refuses any disagreement — the `sh:in` below is the declarative
+# half of that rule, not the whole of it.
+#
+# Both node shapes are CLOSED: a `queries.ttl` is a closed inventory of query
+# descriptions and nothing else. An unknown predicate is refused rather than
+# ignored, so the member cannot carry graph data past the import quarantine.
+
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dct:   <http://purl.org/dc/terms/> .
+@prefix quipu: <https://quipu.dev/ontology/> .
+
+quipu:StoredQuery a rdfs:Class ;
+  rdfs:comment "A named, parameterized, read-only SPARQL query a caller runs by name (quipu_ask)." .
+quipu:QueryParameter a rdfs:Class ;
+  rdfs:comment "One {placeholder} of a stored query's template." .
+
+quipu:StoredQueryShape a sh:NodeShape ;
+  sh:targetClass quipu:StoredQuery ;
+  sh:closed true ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:property [
+    sh:path quipu:queryName ;
+    sh:datatype xsd:string ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+    sh:minLength 1 ;
+  ] ;
+  sh:property [
+    sh:path quipu:sparqlTemplate ;
+    sh:datatype xsd:string ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path quipu:queryForm ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "SELECT" "CONSTRUCT" "ASK" "DESCRIBE" ) ;
+  ] ;
+  sh:property [
+    sh:path dct:description ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path quipu:targetsClass ;
+    sh:nodeKind sh:IRI ;
+  ] ;
+  sh:property [
+    sh:path quipu:parameter ;
+    sh:class quipu:QueryParameter ;
+  ] .
+
+quipu:QueryParameterShape a sh:NodeShape ;
+  sh:targetClass quipu:QueryParameter ;
+  sh:closed true ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:property [
+    sh:path quipu:parameterName ;
+    sh:datatype xsd:string ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+    sh:pattern "^[A-Za-z0-9_]+$" ;
+  ] ;
+  sh:property [
+    sh:path quipu:parameterIndex ;
+    sh:datatype xsd:integer ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+    sh:minInclusive 0 ;
+  ] ;
+  sh:property [
+    sh:path quipu:parameterKind ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "iri" "text" "int" ) ;
+  ] ;
+  sh:property [
+    sh:path quipu:required ;
+    sh:datatype xsd:boolean ;
+    sh:minCount 1 ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path quipu:defaultValue ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:description ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] .

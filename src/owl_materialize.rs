@@ -294,7 +294,7 @@ impl Ontology {
         let rdf_type_id = store.intern(RDF_TYPE)?;
 
         let premises: Vec<Fact> = match seed {
-            None => store.current_facts_in_graphs(&graphs)?,
+            None => store.without_plane_metadata(store.current_facts_in_graphs(&graphs)?)?,
             Some(delta) => {
                 // Dedup scoped by ENTITY, not by attribute. Attribute scoping
                 // looked right and was not: `rdf:type` sits on nearly every
@@ -320,7 +320,7 @@ impl Ontology {
                 // correctness guarantee and is scoped to the candidates. A
                 // preload can only ever be an optimisation, and this one cost
                 // more than it saved.
-                delta.to_vec()
+                store.without_plane_metadata(delta.to_vec())?
             }
         };
         report.premise_facts_read += premises.len();
@@ -445,7 +445,7 @@ impl Ontology {
                 store.current_facts_for_attributes_in_graphs_excluding_sources(
                     &[prop_id],
                     &graphs,
-                    &[],
+                    &[crate::store::inferred::PLANE_SOURCE.to_string()],
                 )?
             } else {
                 Vec::new()
@@ -547,6 +547,7 @@ impl Ontology {
                 identity_facts
                     .extend(store.current_facts_for_attributes_in_graph(&[same_as_id], graph)?);
             }
+            let identity_facts = store.without_plane_metadata(identity_facts)?;
             let mut classes = UnionFind::default();
             for f in &identity_facts {
                 if f.attribute == same_as_id
@@ -585,7 +586,9 @@ impl Ontology {
             let extra_facts = if newly_identified.is_empty() {
                 Vec::new()
             } else {
-                store.current_facts_for_entities_in_graphs(&newly_identified, &graphs)?
+                store.without_plane_metadata(
+                    store.current_facts_for_entities_in_graphs(&newly_identified, &graphs)?,
+                )?
             };
 
             // eq-sym + eq-trans together: every ordered pair within a class.

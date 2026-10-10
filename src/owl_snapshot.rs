@@ -73,10 +73,12 @@ impl Snapshot {
         let mut count = 0;
         for graph in std::iter::once(0).chain(source_companion) {
             let mut stmt = source.conn.prepare(
-                "SELECT e, a, v, valid_from FROM facts \
-                 WHERE g=?1 AND op=1 AND valid_to IS NULL",
+                "SELECT f.e, f.a, f.v, f.valid_from FROM facts f \
+                 WHERE f.g=?1 AND f.op=1 AND f.valid_to IS NULL \
+                 AND NOT EXISTS (SELECT 1 FROM transactions t \
+                                 WHERE t.id=f.tx AND t.source=?2)",
             )?;
-            let mut rows = stmt.query(params![graph])?;
+            let mut rows = stmt.query(params![graph, PLANE_SOURCE])?;
             while let Some(row) = rows.next()? {
                 count += 1;
                 if count > MAX_PREMISES {

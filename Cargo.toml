@@ -1,17 +1,17 @@
 [package]
 name = "quipu-ai"
-version = "0.8.1"
+version = "0.11.1"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/scbrown/quipu"
 keywords = ["knowledge-graph", "rdf", "sparql", "ontology", "ai"]
 categories = ["database", "data-structures"]
 # The published book. `repository` already carries the GitHub URL, so pointing
 # homepage at it too wasted one of the two links crates.io shows.
 homepage = "https://scbrown.github.io/quipu/"
-documentation = "https://docs.rs/quipu"
+documentation = "https://docs.rs/quipu-ai"
 exclude = [
     ".github/",
     ".githooks/",
@@ -99,7 +99,7 @@ tar = "0.4"
 # `serialize` carries the wasm export/import story (quipu-2l5,
 # docs/design/wasm-support.md §6): sqlite3_serialize IS the .db interchange
 # format, on native and wasm alike.
-rusqlite = { version = "0.40", features = ["bundled", "hooks", "serialize"] }
+rusqlite = { version = "0.40", features = ["bundled", "functions", "hooks", "serialize"] }
 thiserror = "2"
 oxrdf = { version = "0.3", features = ["rdfc-10"] }
 oxttl = "0.2"
@@ -110,6 +110,9 @@ md-5 = "0.10"
 sha1 = "0.10"
 sha2 = "0.10"
 hex = "0.4"
+# base64url (WebAuthn wire encoding) and standard base64 (SSHSIG armor) for the
+# hardware verdict schemes. Already in the lock file transitively.
+base64 = "0.22"
 spargebra = "0.4"
 regex = "1"
 rudof_rdf = { version = "0.3.16", optional = true }
@@ -121,7 +124,7 @@ url = { version = "2", optional = true }
 oxigraph = { version = "0.5", default-features = false, optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
 libc = { version = "0.2", optional = true }
-rmcp = { version = "0.12", features = ["server", "transport-io", "transport-streamable-http-server", "axum"], optional = true }
+rmcp = { version = "0.13", features = ["server", "transport-io", "transport-streamable-http-server"], optional = true }
 tower-http = { version = "0.6", features = ["cors", "limit"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 petgraph = "0.7"
@@ -136,11 +139,18 @@ ort = { version = "=2.0.0-rc.11", default-features = false, features = ["std", "
 tokenizers = { version = "0.21", optional = true }
 ndarray = { version = "0.16", optional = true }
 
+# The store-free Git qpack merge (`src/git_merge*.rs`) writes outputs atomically
+# and runs `git merge-file` on temporary copies. Both are filesystem-bound, so the
+# dependency is native-only, like the modules that use it.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tempfile = "3"
+
 # The wasm clock shim (quipu-gsg): `SystemTime::now`/`Instant::now` panic on
 # wasm32-unknown-unknown, so `src/time.rs` reads `js_sys::Date::now()` there.
 # Target-gated — native builds never see it. See docs/design/wasm-support.md §4.4.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
+
 # getrandom's wasm backends are opt-in (docs/design/wasm-support.md §4.4): the
 # 0.3 series needs its `wasm_js` feature (plus the `getrandom_backend` cfg the
 # §4.4 build line carries), and `ring` gates its own getrandom-0.2 JS entropy
@@ -148,6 +158,14 @@ js-sys = "0.3"
 # already has — nothing new ships natively.
 getrandom = { version = "0.3", features = ["wasm_js"] }
 ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
+
+# The server's global allocator (aegis-67p0lj). glibc malloc kept freed
+# transients resident in its per-thread arenas: production quipu-server held
+# >=93% of its heap as free-but-retained memory (3.3G free vs 0.24G used) and
+# was recycled 9x a day at the memory ceiling. jemalloc returns freed pages.
+# Native, non-MSVC only; the bin opts in, the library never changes allocator.
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_env = "msvc")))'.dependencies]
+tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [features]
 default = ["shacl"]
@@ -163,7 +181,10 @@ owl = []
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
 mcp = ["dep:libc", "dep:url", "dep:rmcp", "dep:tower", "dep:axum", "dep:tokio", "dep:tower-http"]
-server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "remote"]
+server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "remote", "jemalloc"]
+# quipu-server's global allocator; implied by `server` so every deployed build
+# carries it (aegis-67p0lj). Reported in /version features as `jemalloc`.
+jemalloc = ["dep:tikv-jemallocator"]
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
 reactive-reasoner = []
@@ -225,8 +246,8 @@ unnested_or_patterns = "warn"
 unused_self = "warn"
 
 [dev-dependencies]
-syn = { version = "2", features = ["full", "visit"] }
 tempfile = "3"
+syn = { version = "2", features = ["full", "visit"] }
 # Dev-only: the label-lattice homomorphism proptest (quipu #66). Already in the
 # lock file transitively, so this pulls no new supply chain and nothing new
 # ships in the binary.
