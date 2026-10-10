@@ -261,6 +261,9 @@ pub fn cmd_load_bundle(args: &[String], db_path: &str) {
 }
 
 pub fn cmd_import(args: &[String], db_path: &str) {
+    if args.get(2).map(String::as_str) == Some("review") {
+        return crate::cli_share_review::run(args, db_path);
+    }
     let timestamp = chrono_now();
     if args.get(2).map(String::as_str) == Some("delta") {
         let parent = args.get(3).unwrap_or_else(|| {

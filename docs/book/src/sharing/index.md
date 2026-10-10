@@ -469,3 +469,48 @@ attempt. Counters reset with the process, so compare increments within one
 `process_start_time_seconds` interval or use reset-aware Prometheus functions.
 A zero or absent verification-success series is not evidence that an import has
 proved authorship; verify a real operation and its corresponding counter delta.
+
+## Quarantine review events
+
+Verified share imports append receiver-local lifecycle events to the existing
+`GET /events` cursor feed: `import.quarantined`, `import.staged`,
+`import.adopted`, `import.promoted`, `import.rejected`, `import.expired`, and
+`import.reopened`. State and its event commit together; identical retries do not
+announce a transition again. Import integrity failures produce no import event.
+`import.adopted` means an earlier quarantine became eligible on re-import after
+local validation; it does not install any bundled shape. Promotion stays explicit.
+
+Events contain the share ID, source, caller and separately claimed actor,
+unknown types, blocking reasons, shapes hash, triple counts, byte size and waiting
+age. Old imports without review metadata gain that metadata when re-imported;
+this is observation time, not a reconstructed historical arrival. Composition
+inspection datasets are separate from the share-import review lifecycle.
+
+The pending registry survives pruning of the event delivery log. Review pages
+are bounded, ordered by share ID and return `has_more` and `next_share_id`.
+Pass the cursor with `--after` to inspect the next page. These local commands
+operate on the receiver selected by `--db`:
+
+```sh
+quipu import review pending --limit 100 --db receiver.db
+quipu import review notify --age-seconds 86400 --route reviewer --db receiver.db
+quipu import review rejected <share-id> --actor alice --reason 'not trusted' --db receiver.db
+quipu import review expired <share-id> --actor alice --reason 'review policy expired' --db receiver.db
+quipu import review reopen <share-id> --actor alice --reason 'reconsider authority' --db receiver.db
+```
+
+`notify` emits `import.review_due` after the explicit threshold, once per share
+for the current threshold/route policy. Changing that policy deliberately permits
+another notice. Consumers poll the existing feed and commit their offsets using
+`POST /events/commit`; they decide whether and how to send a nudge. No timer,
+webhook, external message, or automatic shape adoption is installed. A scheduled
+consumer must page through pending reviews, specify its policy and verify its
+own observed run and delivery. This library/CLI provides the event producer.
+
+Rejection and expiry require an actor and reason and retain quarantine contents.
+They prevent re-import and promotion until an explicit reopening; eligible or
+already promoted packs cannot be closed through the quarantine-review command.
+Receiver-local review metadata stays in the receiver SQLite database across
+restart and event retention. It is excluded from portable packs and fact shares:
+a new receiver records its own decisions. Event offsets follow the existing
+retention/replay contract.

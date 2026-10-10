@@ -116,6 +116,7 @@ pub mod share_mint;
 pub mod share_pack_review;
 mod share_promotion;
 pub mod share_queries;
+pub mod share_review;
 pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;
