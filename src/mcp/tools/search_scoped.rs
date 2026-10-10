@@ -18,9 +18,12 @@ pub(super) fn matches(
                 "narrow the SPARQL scope: more than 1000 candidate rows".into(),
             ));
         }
+        let started = crate::time::Stopwatch::start();
         let mut ids = BTreeSet::new();
         for iri in iris {
+            check_budget(&started)?;
             ids.extend(store.lookup_all(iri)?);
+            check_budget(&started)?;
             if ids.len() > 1000 {
                 return Err(Error::InvalidValue(
                     "narrow the SPARQL scope: more than 1000 entities".into(),
@@ -77,9 +80,41 @@ pub(super) fn candidates(
     Ok(iris)
 }
 
+fn check_budget(started: &crate::time::Stopwatch) -> Result<()> {
+    let deadline = crate::time::request_deadline();
+    if deadline.is_some_and(|dl| dl.passed()) {
+        Err(Error::QueryTimeout {
+            elapsed_ms: started.elapsed_ms(),
+            limit_ms: deadline
+                .map(|dl| dl.millis_from(started))
+                .unwrap_or_default(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scoped_lookup_refuses_expired_admission_budget() {
+        let store = Store::open_in_memory().unwrap();
+        let _guard =
+            crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(0)));
+        assert!(matches!(
+            matches(
+                &store,
+                &[1.0],
+                1,
+                None,
+                None,
+                Some(&["http://example.org/unknown".into()])
+            ),
+            Err(Error::QueryTimeout { .. })
+        ));
+    }
 
     #[test]
     fn scoped_matches_include_composed_iri_alias_ids() {

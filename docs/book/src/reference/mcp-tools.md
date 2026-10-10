@@ -455,6 +455,9 @@ the SQLite scoped path accepts up to 16,384 dimensions. An empty eligible scope
 returns no results. SPARQL candidates use the requested valid time and a bounded
 query budget. Unscoped ranking and delegated backend ranking retain their
 existing implementation; candidate-before-top-K is a SQLite guarantee.
+Scoring reads the local SQLite vector table, including rows keyed by composed
+alias IDs; it does not scan vector tables in attachments. The candidate, scoring,
+and text reads do not provide one snapshot across concurrent writes.
 
 ### `quipu_graph`
 
