@@ -92,7 +92,7 @@ read models.
 
 On 2026-10-10, the known discrepancy was accepted into the measured baseline
 under the existing `min-input-term-conformance-discrepancy` ruling. Actual
-derivation run [38061483792](https://github.com/scbrown/quipu/actions/runs/38061483792)
+derivation run [38061733123](https://github.com/scbrown/quipu/actions/runs/38061733123)
 reports 167/168 query-evaluation passes and keeps this case failed. Its original
 revision stamp is retained. The pinned fixture, strict comparator and MIN
 input-term semantics are unchanged. This accepts the disclosed difference; it

@@ -37,8 +37,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `37e3f7d401924ef77ca4c0efdc7d3e61c18306d9` |
-| Quipu revision (syntax) | `37e3f7d401924ef77ca4c0efdc7d3e61c18306d9` |
+| Quipu revision (evaluation) | `dfa66635fd4ed6d5641292d5b7f79ed225b038e6` |
+| Quipu revision (syntax) | `dfa66635fd4ed6d5641292d5b7f79ed225b038e6` |
 | Quipu version | `quipu 0.12.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
