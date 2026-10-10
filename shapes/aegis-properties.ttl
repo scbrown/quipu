@@ -879,3 +879,7 @@ aegis:exemptLineMarker a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:label "exempt line marker" ;
     rdfs:comment "A literal marker which, present on the same introduced line as a match, exempts that match, for text that names a pattern on purpose such as an incident runbook. Literal rather than a regex so the exemption stays explicit and greppable; RE2 has no lookaround to fold it into aegis:regex." .
+
+aegis:aboutWorkItem a owl:ObjectProperty ;
+    rdfs:label "about work item" ;
+    rdfs:comment "The primary work item providing an episode's context. This is an attribution claim, not proof of implementation or completion. A producer verifies the existing target's direct WorkItem type in its authoritative records graph before writing; a reader joins that graph explicitly. The target is not copied into the episode graph. No global domain or range: neither endpoint gains a type merely from a reference." .
