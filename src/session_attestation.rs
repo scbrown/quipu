@@ -17,6 +17,9 @@ use crate::metrics::attestation::{VerificationObservation, VerificationResult as
 use crate::share::sha256;
 
 pub const WRITE_V1: &str = "quipu-write-v1";
+/// v1 plus an AUDIENCE: the receiving store's id, so a write accepted by one
+/// quipu cannot be relayed to another that trusts the same key (aegis-72cpbx).
+pub const WRITE_V2: &str = "quipu-write-v2";
 pub const SHARE_V1: &str = "quipu-share-v1";
 
 /// The one clock window every attestation is checked against, shares and
@@ -98,6 +101,11 @@ pub struct AttestationEnvelope {
     pub issued_at_epoch: u64,
     pub nonce: String,
     pub signature: String,
+    /// `quipu-write-v2` only: the store id the client signed for. Absent from
+    /// the JSON when `None`, so v1 and share envelopes serialize exactly as they
+    /// did before v2 existed (the published v1 vector pins those bytes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience: Option<String>,
 }
 
 /// Fields uniquely binding one HTTP mutation.
@@ -107,6 +115,11 @@ pub struct WriteBinding<'a> {
     pub path: &'a str,
     pub content_type: &'a str,
     pub body_sha256: &'a str,
+    /// `None` selects `quipu-write-v1`. `Some` selects `quipu-write-v2`, and
+    /// it must be the RECEIVING store's own id, never the client's claim: it
+    /// is what gets signed, so a verifier that took it from the envelope would
+    /// sign-check whatever audience the sender chose.
+    pub audience: Option<&'a str>,
 }
 
 /// Fields uniquely binding one validated v1 share manifest.
@@ -129,7 +142,10 @@ impl SignedBinding<'_> {
     #[must_use]
     pub const fn version(&self) -> &'static str {
         match self {
-            Self::Write(_) => WRITE_V1,
+            Self::Write(WriteBinding { audience: None, .. }) => WRITE_V1,
+            Self::Write(WriteBinding {
+                audience: Some(_), ..
+            }) => WRITE_V2,
             Self::Share(_) => SHARE_V1,
         }
     }
@@ -426,11 +442,43 @@ fn validate_envelope(envelope: &AttestationEnvelope, payload: &SignedBinding<'_>
             payload.version()
         )));
     }
+    // The audience is checked here, before the signature, so a relay gets a
+    // verdict that says why (`invalid`) rather than a bare `badsig`. Only v2
+    // carries one; anywhere else it would be an unsigned field.
+    let expected = match payload {
+        SignedBinding::Write(w) => w.audience,
+        SignedBinding::Share(_) => None,
+    };
+    match (expected, envelope.audience.as_deref()) {
+        (None, None) => {}
+        (None, Some(_)) => {
+            return Err(Error::InvalidValue(format!(
+                "attestation audience is only signed under {WRITE_V2}"
+            )));
+        }
+        (Some(_), None) => {
+            return Err(Error::InvalidValue(format!(
+                "{WRITE_V2} attestation carries no audience"
+            )));
+        }
+        (Some(ours), Some(theirs)) if ours != theirs => {
+            return Err(Error::InvalidValue(format!(
+                "attestation audience mismatch: signed for {theirs}, this store is {ours}"
+            )));
+        }
+        (Some(_), Some(_)) => {}
+    }
     // canonical_message is newline-delimited: a field carrying a newline or
     // any other control character could make two different envelopes
     // serialize to the same signed bytes (aegis-bys8d1 S3). Refuse them all.
     let fields: Vec<&str> = match payload {
-        SignedBinding::Write(w) => vec![w.method, w.path, w.content_type, w.body_sha256],
+        SignedBinding::Write(w) => vec![
+            w.method,
+            w.path,
+            w.content_type,
+            w.body_sha256,
+            w.audience.unwrap_or_default(),
+        ],
         SignedBinding::Share(s) => vec![s.share_id, s.graph_hash, s.shapes_hash],
     };
     let common = [
@@ -472,11 +520,20 @@ pub fn canonical_message(envelope: &AttestationEnvelope, payload: &SignedBinding
         envelope.nonce
     );
     match payload {
-        SignedBinding::Write(write) => format!(
-            "{WRITE_V1}\n{common}method={}\npath={}\ncontent_type={}\nbody_sha256={}\n",
-            write.method, write.path, write.content_type, write.body_sha256
-        )
-        .into_bytes(),
+        SignedBinding::Write(write) => {
+            let mut message = format!(
+                "{}\n{common}method={}\npath={}\ncontent_type={}\nbody_sha256={}\n",
+                payload.version(),
+                write.method,
+                write.path,
+                write.content_type,
+                write.body_sha256
+            );
+            if let Some(audience) = write.audience {
+                message.push_str(&format!("audience={audience}\n"));
+            }
+            message.into_bytes()
+        }
         SignedBinding::Share(share) => format!(
             "{SHARE_V1}\n{common}share_id={}\ngraph_hash={}\nshapes_hash={}\ntx_anchor={}\n",
             share.share_id, share.graph_hash, share.shapes_hash, share.tx_anchor
@@ -486,128 +543,5 @@ pub fn canonical_message(envelope: &AttestationEnvelope, payload: &SignedBinding
 }
 
 #[cfg(test)]
-mod tests {
-    use ring::rand::SystemRandom;
-    use ring::signature::{Ed25519KeyPair, KeyPair};
-
-    use super::*;
-
-    const NOW: u64 = 1_800_000_000;
-    const NONCE: &str = "0123456789abcdef0123456789abcdef";
-
-    fn fixture() -> (BindingRegistry, Ed25519KeyPair, SessionBinding) {
-        let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
-        let key = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let mut binding = SessionBinding::new(
-            "urn:agent:malcolm",
-            "session-1",
-            hex::encode(key.public_key().as_ref()),
-            "creel-extension:key-1",
-            NOW - 60,
-            NOW + 60,
-        )
-        .unwrap();
-        binding.allow_write = true; // signs the write domain too (aegis-bys8d1)
-        let registry = BindingRegistry::default();
-        registry.register(binding.clone()).unwrap();
-        (registry, key, binding)
-    }
-
-    fn share<'a>() -> SignedBinding<'a> {
-        SignedBinding::Share(ShareBinding {
-            share_id: "sha256:share",
-            graph_hash: "sha256:graph",
-            shapes_hash: "sha256:shapes",
-            tx_anchor: 42,
-        })
-    }
-
-    fn envelope(binding: &SessionBinding) -> AttestationEnvelope {
-        AttestationEnvelope {
-            version: SHARE_V1.into(),
-            key_id: binding.key_id.clone(),
-            session: binding.session.clone(),
-            introducer: binding.introducer.clone(),
-            issued_at_epoch: NOW,
-            nonce: NONCE.into(),
-            signature: String::new(),
-        }
-    }
-
-    fn sign(key: &Ed25519KeyPair, envelope: &mut AttestationEnvelope, payload: &SignedBinding<'_>) {
-        envelope.signature = crate::signing::sign_hex(key, &canonical_message(envelope, payload));
-    }
-
-    #[test]
-    fn both_domains_use_one_verifier_and_distinct_canonical_builders() {
-        let (registry, key, binding) = fixture();
-        let payload = share();
-        let mut env = envelope(&binding);
-        sign(&key, &mut env, &payload);
-        let principal = registry.verify(&env, &payload, NOW, 30).unwrap();
-        assert_eq!(principal.agent, "urn:agent:malcolm");
-
-        let write = SignedBinding::Write(WriteBinding {
-            method: "POST",
-            path: "/episode",
-            content_type: "application/json",
-            body_sha256: "sha256:body",
-        });
-        env.version = WRITE_V1.into();
-        env.nonce = "abcdef0123456789abcdef0123456789".into();
-        sign(&key, &mut env, &write);
-        assert!(registry.verify(&env, &write, NOW, 30).is_ok());
-    }
-
-    #[test]
-    fn tamper_substitution_replay_and_domain_downgrade_are_rejected() {
-        let (registry, key, binding) = fixture();
-        let payload = share();
-        let mut env = envelope(&binding);
-        sign(&key, &mut env, &payload);
-        let mut tampered = share();
-        let SignedBinding::Share(ref mut share) = tampered else {
-            unreachable!()
-        };
-        share.graph_hash = "sha256:altered";
-        assert!(registry.verify(&env, &tampered, NOW, 30).is_err());
-
-        assert!(registry.verify(&env, &payload, NOW, 30).is_ok());
-        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
-
-        let mut wrong_domain = envelope(&binding);
-        wrong_domain.version = WRITE_V1.into();
-        sign(&key, &mut wrong_domain, &payload);
-        assert!(registry.verify(&wrong_domain, &payload, NOW, 30).is_err());
-    }
-
-    #[test]
-    fn unbound_expired_revoked_and_malformed_nonce_are_rejected_without_consuming_nonce() {
-        let (registry, key, binding) = fixture();
-        let payload = share();
-        let mut env = envelope(&binding);
-        sign(&key, &mut env, &payload);
-
-        env.session = "unknown".into();
-        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
-        env.session = binding.session.clone();
-        env.nonce = "not-a-nonce".into();
-        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
-        env.nonce = NONCE.into();
-        assert!(registry.verify(&env, &payload, NOW + 120, 30).is_err());
-        registry.revoke(&binding.session).unwrap();
-        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
-    }
-
-    #[test]
-    fn registration_is_idempotent_but_conflicts_and_key_reuse_refuse() {
-        let (registry, _key, binding) = fixture();
-        registry.register(binding.clone()).unwrap();
-        let mut conflict = binding.clone();
-        conflict.agent = "urn:agent:other".into();
-        assert!(registry.register(conflict).is_err());
-        let mut reused = binding;
-        reused.session = "session-2".into();
-        assert!(registry.register(reused).is_err());
-    }
-}
+#[path = "session_attestation_tests.rs"]
+mod tests;

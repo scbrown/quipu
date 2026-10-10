@@ -18,6 +18,7 @@ because a copied number rots silently while its source moves on.
 | [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/scbrown/caboodle) `0a1b169` | **published**, with the boundary below |
 | [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository (`benchmark/public/watdiv_ingest.py`) | **published**, re-derivable |
 | [WatDiv 1M diagnostic](#watdiv-1m-diagnostic-checkpoint) | one-off query latency and process memory on a pinned 1M dataset | this repository (`docs/design/persistence-evidence/watdiv-1m-20260914/`) | **MEASURED, CONTROL-INVALID** — diagnostic only |
+| [Separate-process memory](#separate-process-memory-comparison) | memory residency by phase, Quipu SQLite versus Oxigraph RocksDB | this repository, [published evidence](https://github.com/scbrown/quipu/tree/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4) | **published**, limited to the stated memory observations |
 | [Performance](#performance-watdivlubm) | WatDiv / LUBM query latency against Oxigraph | — | **NOT RUN** |
 
 ## Extraction → ingress (Text2KGBench)
@@ -289,16 +290,29 @@ class with no result is published as NOT RUN and kept in the list, because the
 alternative — leaving it out until it looks good — is how a benchmark page stops
 being evidence and becomes marketing.
 
-**A comparison is PENDING, and it is not this row.** A separate-process memory
-comparison against a RocksDB-backed Oxigraph on the same pinned dataset is scoped
-and not yet run. It is a *memory residency* measurement, not query latency, so it
-will not satisfy this row when it lands — it will earn its own. The diagnostic
-checkpoint above is likewise not a substitute: it has no second engine in it at all.
+The separate-process memory comparison below is published, but does not satisfy
+this query-latency row. The diagnostic checkpoint above is likewise not a
+substitute: it has no second engine in it at all.
 
 Note also that the in-process `oxi_compare` harness in this repository **cannot**
 fill this row. It deliberately shares the parser and data model between arms, so
 what it measures is storage and evaluation, never engine versus engine — and with
 one process there is no separate resident set to compare.
+
+## Separate-process memory comparison
+
+The [September 16 run-4 evidence and phase table](https://github.com/scbrown/quipu/blob/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4/README.md)
+are published with [machine-readable results](https://github.com/scbrown/quipu/blob/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4/summary.json).
+Each engine ran in its own process on the pinned WatDiv artifact. Read the whole
+phase table, including the anonymous/file-backed split and the query-completion
+gap: raw RSS favours different engines at different phases, so no overall engine
+ranking follows from these observations.
+
+This is one dataset, one machine, one run per engine, with concurrency one and
+four. Timing figures in the receipts are **not admissible as a comparison** because
+the host was shared; store-device effects were not independently controlled.
+These are historical memory observations, not a measurement of the current
+release. The WatDiv/LUBM query-latency comparison remains **NOT RUN**.
 
 ## The rules this section is held to
 

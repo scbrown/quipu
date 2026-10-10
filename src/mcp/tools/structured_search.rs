@@ -76,6 +76,9 @@ pub(super) fn search(store: &Store, input: &Json) -> Result<Json> {
         "entity_type",
         "infer_types",
         "explain",
+        "alpha",
+        "fusion",
+        "rrf_k",
     ] {
         if input.get(field).is_some() {
             return Err(invalid(format!(

@@ -5,11 +5,27 @@ use crate::cli::flag_value;
 pub fn cmd_search(args: &[String], db: &str) {
     let Some(query) = args.get(2).filter(|q| !q.starts_with("--")) else {
         eprintln!(
-            "usage: quipu search <query> --mode keyword [--limit N] [--valid-at ISO] [--db path]"
+            "usage: quipu search <query> --mode keyword [--graph IRI | --graphs IRI,IRI | --all-graphs] [--limit N] [--valid-at ISO] [--db path]"
         );
         std::process::exit(1);
     };
-    let store = crate::cli_open::open_store(db);
+    for flag in [
+        "--graph",
+        "--graphs",
+        "--anchor",
+        "--anchor-mode",
+        "--direction",
+        "--max-hops",
+        "--via",
+        "--decay",
+    ] {
+        if args.iter().any(|arg| arg == flag)
+            && flag_value(args, flag).is_none_or(|value| value.starts_with("--"))
+        {
+            eprintln!("error: {flag} requires a graph value");
+            std::process::exit(1);
+        }
+    }
     let mut input =
         serde_json::json!({"query":query,"mode":flag_value(args,"--mode").unwrap_or("keyword")});
     if let Some(limit) = flag_value(args, "--limit") {
@@ -17,6 +33,47 @@ pub fn cmd_search(args: &[String], db: &str) {
             eprintln!("error: --limit must be an unsigned integer");
             std::process::exit(1);
         }));
+    }
+    for (flag, key) in [
+        ("--alpha", "alpha"),
+        ("--rrf-k", "rrf_k"),
+        ("--decay", "decay"),
+    ] {
+        if let Some(value) = flag_value(args, flag) {
+            let parsed = value
+                .parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite())
+                .unwrap_or_else(|| {
+                    eprintln!("error: {flag} must be finite numeric");
+                    std::process::exit(1);
+                });
+            input[key] = serde_json::json!(parsed);
+        }
+    }
+    for (flag, key) in [
+        ("--anchor", "anchor"),
+        ("--anchor-mode", "anchor_mode"),
+        ("--direction", "direction"),
+    ] {
+        if let Some(value) = flag_value(args, flag) {
+            input[key] = serde_json::json!(value);
+        }
+    }
+    if let Some(value) = flag_value(args, "--max-hops") {
+        input["max_hops"] = serde_json::json!(value.parse::<u64>().unwrap_or_else(|_| {
+            eprintln!("error: --max-hops must be an unsigned integer");
+            std::process::exit(1);
+        }));
+    }
+    if let Some(value) = flag_value(args, "--via") {
+        input["via"] = serde_json::json!(value.split(',').collect::<Vec<_>>());
+    }
+    if let Some(fusion) = flag_value(args, "--fusion") {
+        input["fusion"] = serde_json::json!(fusion);
+    }
+    if args.iter().any(|a| a == "--explain") {
+        input["explain"] = serde_json::json!(true);
     }
     if let Some(at) = flag_value(args, "--valid-at") {
         input["valid_at"] = serde_json::json!(at);
@@ -36,6 +93,16 @@ pub fn cmd_search(args: &[String], db: &str) {
             std::process::exit(1);
         });
     }
+    if let Some(graph) = flag_value(args, "--graph") {
+        input["graph"] = serde_json::json!(graph);
+    }
+    if let Some(graphs) = flag_value(args, "--graphs") {
+        input["graphs"] = serde_json::json!(graphs.split(',').collect::<Vec<_>>());
+    }
+    if args.iter().any(|a| a == "--all-graphs") {
+        input["all_graphs"] = serde_json::json!(true);
+    }
+    let store = crate::cli_open::open_store(db);
     match quipu::tool_search(&store, &input) {
         Ok(out) => println!("{}", serde_json::to_string_pretty(&out).unwrap()),
         Err(e) => {

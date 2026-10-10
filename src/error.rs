@@ -37,6 +37,12 @@ pub enum Error {
     )]
     QueryTimeout { elapsed_ms: u128, limit_ms: u128 },
 
+    /// The server rejected a write before invoking its tool or settling a nonce.
+    #[error(
+        "write not started: waited {waited_ms}ms for the writer (busy); retry later; the write did not run"
+    )]
+    WriteAdmissionTimeout { waited_ms: u128 },
+
     #[error(
         "query complexity limit: an intermediate join result exceeded {limit} rows — \
          this query's joins explode (unbound patterns multiplying against each other). \

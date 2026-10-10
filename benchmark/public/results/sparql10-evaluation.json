@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4",
-  "quipu_version": "quipu 0.11.1\ngit_sha: 4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4\ngit_dirty: false",
-  "generated_at": "2026-10-08T20:21:25Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/37837741337",
+  "quipu_revision": "768c44ec6777f7e561724ed285b34eee1293d1c2",
+  "quipu_version": "quipu 0.11.1\ngit_sha: 768c44ec6777f7e561724ed285b34eee1293d1c2\ngit_dirty: false",
+  "generated_at": "2026-10-10T12:34:25Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38052152981",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -26,8 +26,8 @@
     "sparql10-query": {
       "cases": 242,
       "error": 6,
-      "failed": 42,
-      "passed": 184,
+      "failed": 35,
+      "passed": 191,
       "unsupported": 10
     }
   },
@@ -1309,8 +1309,8 @@
       "manifest": "../sparql10/cast/manifest.ttl",
       "query": "../sparql10/cast/cast-str.rq",
       "result": "../sparql10/cast/cast-str.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1319,8 +1319,8 @@
       "manifest": "../sparql10/cast/manifest.ttl",
       "query": "../sparql10/cast/cast-flt.rq",
       "result": "../sparql10/cast/cast-flt.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1339,8 +1339,8 @@
       "manifest": "../sparql10/cast/manifest.ttl",
       "query": "../sparql10/cast/cast-dec.rq",
       "result": "../sparql10/cast/cast-dec.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1349,8 +1349,8 @@
       "manifest": "../sparql10/cast/manifest.ttl",
       "query": "../sparql10/cast/cast-int.rq",
       "result": "../sparql10/cast/cast-int.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1359,8 +1359,8 @@
       "manifest": "../sparql10/cast/manifest.ttl",
       "query": "../sparql10/cast/cast-dT.rq",
       "result": "../sparql10/cast/cast-dT.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1369,8 +1369,8 @@
       "manifest": "../sparql10/cast/manifest.ttl",
       "query": "../sparql10/cast/cast-bool.rq",
       "result": "../sparql10/cast/cast-bool.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -2299,8 +2299,8 @@
       "manifest": "../sparql10/sort/manifest.ttl",
       "query": "../sparql10/sort/query-sort-function.rq",
       "result": "../sparql10/sort/result-sort-function.ttl",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",

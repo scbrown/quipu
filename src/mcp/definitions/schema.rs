@@ -54,11 +54,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "type": "object",
                 "properties": {
                     "id": { "type": "integer", "description": "Proposal ID to accept" },
-                    "decided_by": { "type": "string", "description": "Identity of the approver (default: aegis/crew/braino)" },
+                    "decided_by": { "type": "string", "description": "Identity of the approver (required; there is no default)" },
                     "note": { "type": "string", "description": "Optional acceptance note" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
                 },
-                "required": ["id"]
+                "required": ["id", "decided_by"]
             }
         }),
         serde_json::json!({
@@ -68,11 +68,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "type": "object",
                 "properties": {
                     "id": { "type": "integer", "description": "Proposal ID to reject" },
-                    "decided_by": { "type": "string", "description": "Identity of the rejector (default: aegis/crew/braino)" },
+                    "decided_by": { "type": "string", "description": "Identity of the rejector (required; there is no default)" },
                     "note": { "type": "string", "description": "Reason for rejection" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
                 },
-                "required": ["id", "note"]
+                "required": ["id", "decided_by", "note"]
             }
         }),
     ]

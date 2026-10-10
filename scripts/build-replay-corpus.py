@@ -15,9 +15,12 @@ in a sense that did not survive contact with a wordlist):
 The pseudonymiser is deterministic and STRUCTURE-PRESERVING: it renames, it
 never drops triples, so every cardinality the merge operator reasons about
 survives. Run with --verify to prove that on the emitted fixture.
+
+Client credentials: QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token.
+Public query reads need no token. A definite 401 stops extraction without retry.
 """
 
-import argparse, json, os, re, secrets, sys, urllib.request
+import argparse, json, os, re, secrets, sys, urllib.error, urllib.request
 
 # The source store's namespace is deployment-specific and is NOT hardcoded here
 # (this file is public). Override with --namespace or REPLAY_NAMESPACE.
@@ -51,6 +54,23 @@ def build_detector(deny_file):
                 pats.append(line)
     return re.compile("|".join(f"(?:{p})" for p in pats), re.I)
 
+def client_token():
+    """One client credential order; public reads remain usable without a token."""
+    value = os.environ.get("QUIPU_AUTH_TOKEN", "").strip()
+    if not value:
+        path = os.environ.get("QUIPU_AUTH_TOKEN_FILE") or os.path.expanduser("~/.config/quipu/token")
+        try:
+            with open(path, encoding="utf-8") as source:
+                value = source.read().strip()
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeError):
+            sys.exit("build-replay-corpus: credential unreadable; checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run caboodle doctor.")
+    if value and not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", value):
+        sys.exit("build-replay-corpus: credential invalid; checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run caboodle doctor.")
+    return value or None
+
+
 def query(endpoint, sparql, token=None):
     body = json.dumps({"query": sparql}).encode()
     req = urllib.request.Request(
@@ -59,8 +79,14 @@ def query(endpoint, sparql, token=None):
     )
     if token:
         req.add_header("Authorization", "Bearer " + token)
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.load(r)["rows"]
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.load(r)["rows"]
+    except urllib.error.HTTPError as error:
+        if error.code == 401:
+            error.close()
+            sys.exit("build-replay-corpus: credential rejected (HTTP 401); checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run caboodle doctor. No retry was attempted.")
+        raise
 
 NAMESPACE = ONT
 
@@ -175,11 +201,7 @@ def main():
     global NAMESPACE
     NAMESPACE = args.namespace
 
-    token = os.environ.get("QUIPU_AUTH_TOKEN")
-    if not token:
-        p = os.path.expanduser("~/.config/aegis/quipu_token")
-        if os.path.exists(p):
-            token = open(p).read().strip()
+    token = client_token()
 
     # CONTROL first: an absence measured with an unproven instrument is not a
     # finding. If this returns nothing the store is unreachable or empty and

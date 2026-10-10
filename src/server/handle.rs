@@ -49,6 +49,9 @@ pub(crate) struct StoreHandle {
     /// text `/search` timed out while pooled `/query` answered in 8 ms
     /// (aegis-hzh9rz).
     pub(crate) embedding_provider: Option<Arc<dyn quipu::EmbeddingProvider>>,
+    /// Immutable startup search settings. Reading mode/alpha before embedding
+    /// must not queue on a busy WAL reader (or the writer fallback).
+    pub(crate) search_config: quipu::SearchConfig,
     /// The registered reactive reasoner, kept concrete (not as the
     /// `dyn TransactObserver` the store holds) so `POST /shapes` can hot-swap
     /// its ruleset — quipu-923, gap G6: without this handle, rules loaded at
@@ -116,6 +119,7 @@ impl StoreHandle {
             graph_metrics: super::graph_metrics::GraphMetrics::new(db_path),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),
+            search_config: store.search_config().clone(),
             writer: FairMutex::new(store),
             readers,
             federation,
@@ -141,6 +145,7 @@ impl StoreHandle {
             graph_metrics: super::graph_metrics::GraphMetrics::new(":memory:"),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),
+            search_config: store.search_config().clone(),
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             federation: quipu::config::FederationConfig::default(),
@@ -163,6 +168,19 @@ impl StoreHandle {
             let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
         }
         guard
+    }
+
+    /// First writer acquisition for tool handlers. Budget rejection precedes
+    /// attestation settlement, so a refused unrun write does not spend its nonce.
+    pub(crate) fn write_lock(
+        &self,
+    ) -> Result<parking_lot::FairMutexGuard<'_, quipu::Store>, super::base::AppError> {
+        let guard = self.writer.lock();
+        super::admission::reject_expired_write()?;
+        if let Some(pending) = quipu::transaction_auth::current_attestation() {
+            let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
+        }
+        Ok(guard)
     }
 
     /// A READ connection from the pool, or the writer when the pool is empty.

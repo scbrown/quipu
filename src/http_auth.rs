@@ -55,6 +55,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/proposal/accept",
     "/proposal/reject",
     "/embed_backfill",
+    "/embed_backfill_graph",
     // aegis-5qmg3r: alignment. `apply` takes &mut Store, materialises
     // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
     // (a graphs-registry write, the same reason /overlay/create is here).
@@ -133,6 +134,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/validate",
     "/search",
     "/hybrid_search",
+    // Bounded retrieval plus read-only SPARQL; no index activation/backfill.
+    "/search_query",
     "/unified_search",
     "/ask",
     "/search_nodes",

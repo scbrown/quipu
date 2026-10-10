@@ -29,6 +29,7 @@ pub mod migration;
 pub mod namespace;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+mod search_graph_scope;
 pub mod transaction_auth;
 pub mod write_kind;
 pub mod write_provenance;
@@ -65,6 +66,8 @@ pub mod session_attestation;
 #[cfg(feature = "shacl")]
 pub mod shacl;
 #[cfg(feature = "shacl")]
+mod shacl_admission;
+#[cfg(feature = "shacl")]
 pub mod shacl_context;
 pub mod share;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,
@@ -83,6 +86,8 @@ mod git_merge_alias;
 mod git_merge_repo;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_restore;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod project_graph;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
 pub mod share_completeness;
@@ -141,7 +146,10 @@ pub use context::{
     KnowledgeRelevance, tool_context, tool_unified_search,
 };
 pub use derivation::{DerivationMethod, Rederivation};
-pub use embedding::{DeferredEmbed, EmbeddingProvider, NO_PROVIDER_HELP, build_entity_text};
+pub use embedding::{
+    DeferredEmbed, EmbeddingProvider, NO_PROVIDER_HELP, build_entity_text,
+    build_entity_text_for_graph_backfill,
+};
 pub use episode::{
     Episode, IngestResolutionOpts, IngestResult, episode_provenance, ingest_batch, ingest_episode,
     ingest_episode_with_resolution,
@@ -236,3 +244,7 @@ pub use vector_lance::LanceVectorStore;
 /// Native MCP protocol adapters over the governed HTTP application.
 #[cfg(feature = "mcp")]
 pub mod mcp_transport;
+
+/// Bounded search-seeded SPARQL SELECT queries.
+pub mod search_query;
+pub use search_query::tool_search_query;

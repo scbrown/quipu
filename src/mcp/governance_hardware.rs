@@ -60,6 +60,27 @@ fn as_of(witness: &Witness) -> TemporalContext {
     }
 }
 
+/// The counter the assertion must EXCEED: the registration's `aegis:signCount`
+/// as recorded STRICTLY BEFORE the verdict's own transaction (aegis-mbob8m).
+///
+/// The caller records the assertion's counter as the registration's new
+/// `aegis:signCount`, and nothing stops it doing so in the same transaction as
+/// the verdict. Read at the witness itself, a re-verify at the recorded basis
+/// then sees the verdict's own counter, and the `WebAuthn` strictly-increasing rule
+/// refuses a valid verdict as a clone. Measured, not inferred: "recorded 11,
+/// presented 11". Every other registry read stays at the witness; only the
+/// counter, which the verdict itself advances, is read one transaction earlier.
+/// A replayed or cloned assertion is still compared with the highest counter
+/// recorded before it, so the anti-replay property is unchanged. With no
+/// transaction to anchor to (`now`, or a caller-supplied instant) the witness
+/// is used as-is.
+fn counter_ctx(witness: &Witness) -> TemporalContext {
+    TemporalContext {
+        as_of_tx: witness.tx.map(|tx| tx - 1),
+        ..as_of(witness)
+    }
+}
+
 /// The verdict fields the hardware path verifies.
 pub(super) struct Claim<'a> {
     pub verifier: &'a str,
@@ -302,7 +323,7 @@ fn verify_hardware_verdict(
                 continue;
             }
         };
-        let recorded = recorded_sign_count(store, &reg.iri, &ctx)?;
+        let recorded = recorded_sign_count(store, &reg.iri, &counter_ctx(witness))?;
         match verify_one(
             scheme,
             reg,

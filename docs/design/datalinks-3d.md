@@ -244,7 +244,7 @@ same damping, convergence threshold and dangling-mass redistribution as before.
 
 To author a replacement snapshot, supply Turtle, its application shapes, and
 a reviewed identifier-policy catalogue (see
-[preparing an outward share](../book/src/sharing/README.md#prepare-an-outward-share)):
+[preparing an outward share](../book/src/sharing/index.md#prepare-an-outward-share)):
 
 ```bash
 # Move the existing qpack directory aside before producing a replacement.

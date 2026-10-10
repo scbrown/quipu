@@ -247,6 +247,7 @@ impl Store {
         Self::migrate_datasets(&conn)?;
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
+        Self::migrate_decision_nonces(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
         Self::migrate_pending_share_queries(&conn)?;
@@ -454,6 +455,7 @@ impl Store {
         // registration cannot answer wrongly: a narrowed query then fails
         // loudly with "no such function".
         let _ = crate::sparql::string_pushdown::register(&conn);
+        let _ = crate::sparql::status_pushdown::register(&conn);
         Self {
             conn,
             signing: None,

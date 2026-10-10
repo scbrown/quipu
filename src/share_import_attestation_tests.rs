@@ -100,6 +100,7 @@ fn attest(store: &Store, m: &ShareManifest) -> AttestationEnvelope {
         issued_at_epoch: NOW,
         nonce: "b".repeat(32),
         signature: String::new(),
+        audience: None,
     };
     let payload = SignedBinding::Share(ShareBinding {
         share_id: &m.share_id,

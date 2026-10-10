@@ -7,10 +7,30 @@ the world while agreeing about every triple. No triple-level operator can see
 it, so a recall of $1.000$ is not achievable by anything in Table~\ref{tab:armA}.
 We left the class in the benchmark deliberately: it is the most common real
 divergence defect in the recorded corpus, and excluding it would have produced a
-shape-aware arm scoring $1.000$ on both precision and recall as an artefact of
-what we chose to measure. Resolving it needs entity resolution --- a different
-kind of system, working from labels and neighbourhoods rather than from triples,
-and one whose errors are not obviously cheaper than the ones it prevents.
+shape-aware arm scoring $1.000$ on both precision and recall as an artifact of
+what we chose to measure. Arm D tests a separate pairwise entity-resolution stage, using labels and
+historical neighborhoods to propose identity decisions. Its held-out run recovered
+$11/88$ aliases ($11/55$ with eligible evidence) and proposed one false identity.
+Semantic recall was $1/45$ ($1/19$ eligible), compared with label matching's
+$3/45$ ($3/19$ eligible) and zero false proposals. The preregistered baseline-beating
+condition fails on this stratum, a negative finding for Jev. Candidate generation
+is a separate requirement whose recall bounds end-to-end resolution, and we
+measured it with free signals only. Each pair's left endpoint ranks every entity
+asserting one of its types before the repair, by the larger of normalized label
+similarity and MiniLM cosine over the same cleaned pre-repair evidence, with ties
+counted against the true partner. Recall at $k = 1, 5, 10, 50$ is $38$, $54$,
+$56$ and $57$ of $93$ (id-form $23, 32, 34, 35$ of $46$; semantic
+$15, 22, 22, 22$ of $47$). The ceiling is the type block, not the ranking:
+$30$ partners cannot be ranked at all, $26$ of them because they never enter the
+anchor's typed pool ($15$ had no pre-repair facts and $11$ carried disjoint
+types), and $25$ of the $30$ are semantic. Among the $63$ rankable partners,
+$56$ fall in the top ten, and cosine alone puts more partners first ($43$) than
+the combined score ($38$). A resolver fed by this blocker would lose about a
+third of all aliases, and over half of the semantic class, before pairwise
+resolution begins. Historical evidence gaps, the semantic negative
+shortfall, easy reviewed negatives, and shared endpoints limit generalization.
+No actual identities were merged, so the study measures proposed errors rather
+than downstream damage or the economic cost of accepting them.
 
 \paragraph{The $939$ is a counterfactual.} Those doublings arose from sequential
 re-posts through a single write path, not from a share, a divergence and a merge.
@@ -19,8 +39,8 @@ been reconciled by this operator, each would have been surfaced as a decision
 instead of silently doubling. It is \emph{not} a claim that the operator was
 running and prevented $1{,}784$ doublings.
 
-\paragraph{Comment bodies in the corpus are synthetic.} Real values are prose
-about a deployment. Only the multiplicity is real --- which is all the merge
+\paragraph{Comment bodies in the merge replay corpus are synthetic.} Real values are prose
+about a deployment. In arms A and B, only the multiplicity is real --- which is all the merge
 reasons about, but it does mean the corpus cannot support any claim about value
 content.
 
@@ -31,9 +51,9 @@ is resolved. This is the conservative choice and it is a real usability cost;
 partial application with a held-back conflict set is future work.
 
 \paragraph{Ground graphs only.} The benchmark's graphs contain no blank nodes,
-so canonicalisation there reduces to sorting. RDFC-1.0 is the substrate we build
+so canonicalization there reduces to sorting. RDFC-1.0 is the substrate we build
 on and is not exercised by this arm; nothing here is evidence about blank-node
-canonicalisation.
+canonicalization.
 
 \paragraph{Timing is indicative.} One machine, one process, single runs. The
 line-merge arms include process spawn for \texttt{git merge-file}, of order
@@ -48,5 +68,17 @@ scorer, and the comparison in Table~\ref{tab:armA} would not transfer unchanged.
 
 \paragraph{One deployment.} The recorded corpus comes from a single production
 store. Its class distribution --- alias-mint and functional-value doubling
-dominating --- may not generalise, and we make no claim about divergence rates
+dominating --- may not generalize, and we make no claim about divergence rates
 in other systems from it.
+
+\paragraph{Private evidence limits inference reproducibility.}
+Arm D publishes the item labels, frozen free-baseline scores, prompt, numeric
+responses, attempt ledger, and offline scorer. Its structural item views replace
+private strings with random tokens and withhold descriptions; selected evidence
+examples are scrubbed editorial paraphrases. These artifacts reproduce scoring,
+not the original model requests or embeddings. Reviewer inspection used the
+preserved private evidence. A reader cannot independently regenerate the model
+outputs from the public views, and a commercial model may change separately.
+Timeouts may be billed without usage responses, so list-price subtotals do not
+establish total account spend. First-attempt and eventual-item availability
+must be reported separately when retries are allowed.

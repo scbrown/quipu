@@ -141,6 +141,19 @@ pub struct SearchConfig {
     pub keyword: bool,
     /// Explicit structured candidate filters. SQLite-only, default off.
     pub structured: bool,
+    /// Hybrid lexical/vector fusion. Off until its offline evaluation passes.
+    pub hybrid: bool,
+    /// Default search mode; semantic preserves the existing API.
+    pub mode: String,
+    /// Semantic contribution, with exact pure-mode endpoints.
+    pub alpha: f64,
+    /// weighted (min-max scores) or rrf (weighted reciprocal ranks).
+    pub fusion: String,
+    /// Positive reciprocal-rank denominator offset (default 60).
+    pub rrf_k: f64,
+    /// Explicit graph search and automatic named-only embedding fallback.
+    /// Default off: prepare vectors through bounded maintenance before enabling.
+    pub named_graphs: bool,
 }
 
 impl Default for SearchConfig {
@@ -156,6 +169,12 @@ impl Default for SearchConfig {
             anchored: false,
             keyword: false,
             structured: false,
+            hybrid: false,
+            mode: "semantic".into(),
+            alpha: 0.5,
+            fusion: "rrf".into(),
+            rrf_k: 60.0,
+            named_graphs: false,
         }
     }
 }
