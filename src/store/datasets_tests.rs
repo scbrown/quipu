@@ -236,11 +236,12 @@ fn a_dataset_can_be_replaced_and_members_do_not_accumulate() {
 }
 
 #[test]
-fn a_member_naming_a_nonexistent_graph_contributes_nothing() {
-    // Same rule apply_dataset already applies to an unknown FROM IRI: match
-    // nothing, never fall through to ROOT.
+fn a_member_naming_a_nonexistent_graph_is_refused_and_nothing_is_created() {
+    // Stored, it would read nothing while looking like a real member, and the
+    // member-id resolution dropped it without a word (aegis-ddhsvc). A typo is
+    // a refusal at create, naming the member, not a silent hole at read.
     let mut store = store_with_graphs(&["urn:g:real"]);
-    store
+    let err = store
         .dataset_create(
             "urn:ds:partial",
             &[
@@ -250,12 +251,33 @@ fn a_member_naming_a_nonexistent_graph_contributes_nothing() {
             TS,
             None,
         )
-        .unwrap();
-    assert_eq!(
-        store.dataset_member_ids("urn:ds:partial").unwrap().len(),
-        1,
-        "the unknown member resolves to nothing, not to ROOT"
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("urn:g:never-created"), "{err}");
+    assert!(
+        !err.contains("urn:g:real,"),
+        "only the bad member is named: {err}"
     );
+    assert!(!store.is_dataset("urn:ds:partial").unwrap());
+}
+
+#[test]
+fn the_root_iri_is_a_dataset_member_that_reads_the_default_graph() {
+    let mut store = store_with_graphs(&["urn:g:board"]);
+    store
+        .dataset_create(
+            "urn:ds:root-plus",
+            &[
+                DatasetMember::new(crate::schema::ROOT_GRAPH_IRI),
+                DatasetMember::new("urn:g:board"),
+            ],
+            TS,
+            None,
+        )
+        .unwrap();
+    let ids = store.dataset_member_ids("urn:ds:root-plus").unwrap();
+    assert!(ids.contains(&crate::schema::ROOT_GRAPH), "{ids:?}");
+    assert_eq!(ids.len(), 2, "{ids:?}");
 }
 
 #[test]
@@ -329,4 +351,51 @@ fn the_tool_surfaces_the_duplicate_rank_refusal() {
     )
     .expect_err("duplicate ranks");
     assert!(err.to_string().contains("unambiguous"), "{err}");
+}
+
+#[test]
+fn a_root_plus_board_dataset_as_the_query_graph_reads_both() {
+    // aegis-ddhsvc acceptance: the dataset used as the query `graph` returns the
+    // same rows as FROM <root> FROM <board>, and more than either alone.
+    use crate::{tool_episode, tool_query};
+    use serde_json::json;
+    const BOARD: &str = "urn:g:board-acceptance";
+    let mut store = Store::open_in_memory().unwrap();
+    for (name, graph) in [("root-item", None), ("board-item", Some(BOARD))] {
+        let mut ep = json!({"name": name, "episode_body": "x", "source": "t",
+                             "nodes": [{"name": name, "type": "Thing"}]});
+        if let Some(g) = graph {
+            ep["graph"] = json!(g);
+        }
+        tool_episode(&mut store, &ep).unwrap();
+    }
+    store
+        .dataset_create(
+            "urn:ds:root-board",
+            &[
+                DatasetMember::new(crate::schema::ROOT_GRAPH_IRI),
+                DatasetMember::new(BOARD),
+            ],
+            TS,
+            None,
+        )
+        .unwrap();
+    let thing = "<http://aegis.gastown.local/ontology/Thing>";
+    let count = |q: serde_json::Value| -> u64 {
+        let r = tool_query(&store, &q).unwrap();
+        r["rows"][0]["n"].as_u64().unwrap()
+    };
+    let bare =
+        format!("SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {{ ?s a ?t . FILTER(?t = {thing}) }}");
+    let via_dataset = count(json!({"query": bare, "graph": "urn:ds:root-board"}));
+    let control = count(json!({"query": format!(
+        "SELECT (COUNT(DISTINCT ?s) AS ?n) FROM <{}> FROM <{BOARD}> WHERE {{ ?s a ?t . FILTER(?t = {thing}) }}",
+        crate::schema::ROOT_GRAPH_IRI)}));
+    let root_only = count(json!({"query": bare}));
+    assert_eq!(
+        via_dataset, control,
+        "dataset graph must equal FROM root + FROM board"
+    );
+    assert_eq!(via_dataset, 2, "one Thing in ROOT, one in the board");
+    assert_eq!(root_only, 1, "control: ROOT alone sees one");
 }

@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 3e5bd94f0e7e9e31bd0a86fc555bad9a6b40817f624d3efe49d09ac15a1754c5 # shrinks to updates = ["DELETE { e:s3 p:status \"open\" } INSERT {  } WHERE { e:s1 p:status \"open\" }"]
+cc ee66c7899d98bce17109c95ead4fbdf07ec604aa8971ee6dd93f05403ff3faa4 # odm5yt CI 37675617263

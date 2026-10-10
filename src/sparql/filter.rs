@@ -289,8 +289,35 @@ fn eval_regex(store: &Store, args: &[Expression], row: &Bindings) -> Result<bool
     Ok(re.is_match(&text))
 }
 
-/// Compile a SPARQL REGEX pattern + flag string into a `regex::Regex`.
-fn build_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
+/// Compiled patterns, per thread. A FILTER evaluates per row, so without this
+/// `REGEX(?l, "x")` recompiled the same pattern for every one of ~1.1M labels:
+/// ~11 µs/row, 13 s on the production label scan (aegis-tl2q4j). `Regex` clones
+/// share one compiled program. Bounded: cleared when it reaches the cap.
+const REGEX_CACHE_CAP: usize = 64;
+
+thread_local! {
+    static REGEX_CACHE: std::cell::RefCell<std::collections::HashMap<(String, String), regex::Regex>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Compile a SPARQL REGEX pattern + flag string into a `regex::Regex`, cached.
+pub(super) fn build_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
+    let key = (pattern.to_string(), flags.to_string());
+    if let Some(re) = REGEX_CACHE.with(|c| c.borrow().get(&key).cloned()) {
+        return Ok(re);
+    }
+    let re = compile_regex(pattern, flags)?;
+    REGEX_CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() >= REGEX_CACHE_CAP {
+            c.clear();
+        }
+        c.insert(key, re.clone());
+    });
+    Ok(re)
+}
+
+fn compile_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
     let mut inline = String::new();
     for f in flags.chars() {
         match f {
@@ -315,16 +342,26 @@ fn build_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
 /// Refs resolve to their IRI string.
 fn value_to_string(store: &Store, v: &Value) -> String {
     match v {
+        Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        other => lexical(other).unwrap_or_default(),
+    }
+}
+
+/// [`value_to_string`] for every value that needs no store: `None` only for
+/// an IRI. The string pushdown (aegis-tl2q4j) narrows with this, so it must
+/// stay the one definition both use.
+pub(super) fn lexical(v: &Value) -> Option<String> {
+    Some(match v {
         Value::Str(s) => s.clone(),
         // SPARQL STR() yields the LEXICAL form — without the tag, without the
         // datatype. STR("hello"@en) is "hello", never "hello@en".
         Value::Lang { lexical, .. } | Value::Typed { lexical, .. } => lexical.clone(),
-        Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        Value::Ref(_) => return None,
         Value::Int(i) => i.to_string(),
         Value::Float(f) => f.to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
-    }
+    })
 }
 
 /// Evaluate an expression to a Value.
