@@ -834,7 +834,7 @@ fn future_import_review_columns_are_text_and_unknown_columns_still_refuse() {
             |row| row.get(0),
         )
         .unwrap();
-    assert!(!present, "compatibility must not activate review state");
+    assert!(present, "lifecycle schema is active and remains compatible");
     store
         .conn
         .execute_batch(crate::share_completeness::IMPORT_REVIEW_SCHEMA_SQL)

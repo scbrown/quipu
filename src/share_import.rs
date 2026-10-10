@@ -11,6 +11,8 @@ use crate::share::{ShareManifest, manifest_bytes, sha256};
 use crate::share_scrub::ShareDestination;
 use crate::store::Store;
 
+pub use crate::share_review::{import_share, promote_import};
+
 const SCHEMA_V1: &str = "https://github.com/scbrown/quipu/share-manifest/v1";
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 
@@ -395,7 +397,7 @@ fn validate_local(store: &Store, data: &str) -> Result<ImportValidation> {
 }
 
 /// Verify, resolve, validate, and stage one share without touching ROOT.
-pub fn import_share(
+pub(crate) fn import_inner(
     store: &mut Store,
     request: &ShareImportRequest,
     timestamp: &str,
@@ -543,7 +545,7 @@ pub fn import_share(
 }
 
 /// Explicitly copy an eligible staging graph into ROOT.
-pub fn promote_import(
+pub(crate) fn promote_inner(
     store: &mut Store,
     request: &PromoteImportRequest,
     timestamp: &str,
