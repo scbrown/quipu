@@ -35,10 +35,6 @@ All notable changes to this project will be documented in this file.
 
 - Gate string-filter query performance on a 2.1M-triple fixture (#467)([fd3a029](https://github.com/scbrown/quipu/commit/fd3a029a69d7e569dab9fb07261ae2bb1a36d995))
 
-### Changed
-
-- *(cli)* Split archive commands to restore the size ratchet([1f42262](https://github.com/scbrown/quipu/commit/1f422626a0f9b449b16e3bccfe89d71fe3659fb5))
-
 ### Documentation
 
 - Make share -> import -> promote the obvious bulk-load path (#436)([467ed2e](https://github.com/scbrown/quipu/commit/467ed2ebc03eba3803a0455ab4968c94d71312f5))
@@ -48,6 +44,7 @@ All notable changes to this project will be documented in this file.
 - *(paper)* Report negative Jev alias-resolution findings (#327)([2344938](https://github.com/scbrown/quipu/commit/234493859007103e3ae3322798f0562f0933f9b3))
 - Describe current installs, native MCP and inference behavior (#439)([68199f1](https://github.com/scbrown/quipu/commit/68199f1ba82c405c6939d107701aa8d99896c89f))
 - *(conformance)* Name non-passing SPARQL 1.0 cases (#469)([7c10e26](https://github.com/scbrown/quipu/commit/7c10e26fc87ea5b4406d1d9767a9444b54d31970))
+- *(conformance)* Accept measured MIN term discrepancy with disclosure([a221519](https://github.com/scbrown/quipu/commit/a2215192163b8b9d987cd4c1c42cdfe250660e6a))
 
 ### Fixed
 
@@ -71,7 +68,7 @@ All notable changes to this project will be documented in this file.
 - *(search)* Rank scoped SQLite candidates before top-K (#488)([575d035](https://github.com/scbrown/quipu/commit/575d035ddfe0c9b4ceb61c3d7cd72059eb13c294))
 - *(sparql)* CONSTRUCT template blank nodes are fresh per solution (#309)([e8a82b2](https://github.com/scbrown/quipu/commit/e8a82b2980d1bed5049fede3dd8011873da2ab8c))
 - *(provenance)* Govern episode references to existing work items (#329)([a404b89](https://github.com/scbrown/quipu/commit/a404b89698dbf5e0273ff5d3ca80932519364126))
-- Reconcile final release outputs and split the filter cache([56e3178](https://github.com/scbrown/quipu/commit/56e31789ad60074fa49044c05971a9f9989d6e9a))
+- Repair main release, conformance and governance checks (#491)([dfa6663](https://github.com/scbrown/quipu/commit/dfa66635fd4ed6d5641292d5b7f79ed225b038e6))
 
 ### Miscellaneous
 
@@ -88,7 +85,6 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - *(sparql)* Preserve typed join order and grouped metadata counts (#478)([4a588eb](https://github.com/scbrown/quipu/commit/4a588eba576da0ed452ff21e3222f57aa1c344f8))
-- *(governance)* Enroll human authority in approval fixtures([89a239d](https://github.com/scbrown/quipu/commit/89a239d1b9a1ac8ed49ab1cbecbbaf27bf1a9f76))
 
 ### Perf
 
