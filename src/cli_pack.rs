@@ -256,16 +256,46 @@ pub fn cmd_restore(args: &[String], db_path: &str) {
 
 /// `quipu share --output <dir>` — write a deterministic, git-native share.
 pub fn cmd_share(args: &[String], db_path: &str) {
-    let output = flag_value(args, "--output").unwrap_or_else(|| {
-        eprintln!(
-            "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
+    // `--project [<id>]` (aegis-w3k75d.11): share THIS repository's project
+    // graph to the committed location, writing .quipu/.gitignore first so the
+    // store and signing key beside it can never be staged by `git add .quipu`.
+    let project = project_flag(args).map(|id| {
+        let root = std::path::Path::new(".");
+        let id = quipu::project_graph::scaffold(root, id).unwrap_or_else(|e| {
+            eprintln!("share --project: {e}");
+            std::process::exit(1);
+        });
+        let next = quipu::project_graph::clear_next_bundle(root).unwrap_or_else(|e| {
+            eprintln!("share --project: {e}");
+            std::process::exit(1);
+        });
+        (quipu::project_graph::project_iri(&id), next)
+    });
+    if project.is_some()
+        && (flag_value(args, "--output").is_some() || flag_value(args, "--since").is_some())
+    {
+        eprintln!("share --project writes .quipu/graph itself; --output and --since do not apply");
+        std::process::exit(1);
+    }
+    let project_output = project
+        .as_ref()
+        .map(|(_, dir)| dir.to_string_lossy().into_owned());
+    let output = flag_value(args, "--output")
+        .or(project_output.as_deref())
+        .unwrap_or_else(|| {
+            eprintln!(
+                "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
              [--queries <name>]... [--no-queries] [--parent-share <sha256:id>] \
              [--since <parent-reference>] [--turtle] [--destination internal]"
-        );
+            );
+            std::process::exit(1);
+        });
+    let graph = flag_value(args, "--graph").or(project.as_ref().map(|(iri, _)| iri.as_str()));
+    if project.is_some() && flag_value(args, "--graph").is_some() {
+        eprintln!("share accepts --project or --graph, not both: --project names the graph");
         std::process::exit(1);
-    });
-    let graph = flag_value(args, "--graph");
+    }
     let group = flag_value(args, "--group-id");
     let construct = flag_value(args, "--construct");
     if [graph.is_some(), group.is_some(), construct.is_some()]
@@ -329,8 +359,18 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         }
         return;
     }
-    match quipu::share::share(&store, output, &opts) {
+    match quipu::share::share(&store, output, &opts).and_then(|manifest| {
+        if project.is_some() {
+            quipu::project_graph::install_next_bundle(std::path::Path::new("."))?;
+        }
+        Ok(manifest)
+    }) {
         Ok(manifest) => {
+            let output = if project.is_some() {
+                "./.quipu/graph"
+            } else {
+                output
+            };
             println!("shared {}", manifest.share_id);
             println!("  graph_hash: {}", manifest.graph_hash);
             println!("  tx_anchor:  {}", manifest.tx_anchor);
@@ -404,6 +444,67 @@ pub fn cmd_merge(args: &[String], db_path: &str) {
 }
 
 /// `quipu import <share-dir>` stages a verified share; promotion is separate.
+/// `--project` with an optional id: `Some(Some(id))`, `Some(None)` (use the
+/// committed id), or `None` when the flag is absent.
+fn project_flag(args: &[String]) -> Option<Option<&str>> {
+    let at = args.iter().position(|a| a == "--project")?;
+    Some(
+        args.get(at + 1)
+            .map(String::as_str)
+            .filter(|v| !v.starts_with("--")),
+    )
+}
+
+/// `quipu load <bundle-dir>`: import a project bundle and promote it into its
+/// own graph (aegis-w3k75d.11). One command for a fresh clone.
+///
+/// The import is the ordinary `import_share`, with every gate it has; only the
+/// promotion differs. It targets the manifest's scope graph (never ROOT) and is
+/// a diff, so a re-load after `git pull` changes only what changed.
+pub fn cmd_load_bundle(args: &[String], db_path: &str) {
+    let timestamp = chrono_now();
+    let dir = &args[2];
+    let actor = flag_value(args, "--actor");
+    let result = quipu::share_transport::read_reference(dir).and_then(|mut request| {
+        let target = match &request.manifest.scope {
+            quipu::share::ShareScope::Graph(iri) => iri.clone(),
+            other => {
+                return Err(quipu::Error::InvalidValue(format!(
+                    "{dir} is a share of scope {other:?}; `quipu load` loads a single-graph \
+                     bundle (quipu share --project). Use `quipu import` for other shares."
+                )));
+            }
+        };
+        request.actor = actor.map(String::from);
+        request.destination = destination_flag(args);
+        request.source = flag_value(args, "--source").unwrap_or(dir).to_string();
+        let mut store = crate::cli_open::open_store(db_path);
+        let imported = quipu::share_import::import_share(&mut store, &request, &timestamp, actor)?;
+        if !imported.promotion.eligible {
+            return Err(quipu::Error::InvalidValue(format!(
+                "the bundle imported into quarantine ({:?}); nothing was loaded into {target}. \
+                 Inspect {} before promoting.",
+                imported.promotion.blockers, imported.staging_graph
+            )));
+        }
+        quipu::project_graph::promote_into_graph(
+            &mut store,
+            &imported.share_id,
+            &imported.staging_graph,
+            &target,
+            &timestamp,
+            actor,
+        )
+    });
+    match result {
+        Ok(loaded) => println!("{}", serde_json::to_string_pretty(&loaded).unwrap()),
+        Err(error) => {
+            eprintln!("load error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
 pub fn cmd_import(args: &[String], db_path: &str) {
     let timestamp = chrono_now();
     if args.get(2).map(String::as_str) == Some("delta") {
