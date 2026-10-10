@@ -563,6 +563,80 @@ change to its content, and it contributes nothing.
 - `--format markdown` suits a PR comment; `--format json` is the same
   structure (`entities[].changed/added/removed`, plus totals) for tools.
 
+## `quipu share diff --report` — the pull-request review
+
+```text
+quipu share diff <old> <new> --report [--format markdown|json]
+    [--old-shapes <ttl>] [--new-shapes <ttl>] [--decisions <json>]
+    [--fail-on-introduced]
+```
+
+The report a reviewer reads when a pull request changes a pack. When `<old>`
+and `<new>` are pack directories, each side's `shapes.ttl` and the new side's
+`decisions.json` are picked up from the directory; the flags name them
+explicitly otherwise. The repository's `qpack review` workflow
+(`.github/workflows/qpack-review.yml`) runs it for every pack a pull request
+touches and publishes the result as the check's job summary.
+
+### Reading the PR report
+
+Sections always appear in this order:
+
+1. **Facts.** The `quipu share diff` output above: per-entity changed, added
+   and removed facts, by label.
+2. **SHACL violations introduced.** Old data is validated against the old
+   pack's shapes, new data against the new pack's shapes, and the report lists
+   the violations that occur more often in new than in old, keyed by focus
+   node, path, constraint component and value. A violation already present
+   before the change is counted as *pre-existing*, never as introduced; the
+   count of violations the change *resolves* is shown beside it. When the
+   shapes change, a row whose old data already fails the NEW shapes is marked
+   *shapes change*: the data did not move, the rules did, and the pack still
+   stops conforming. If the new pack ships no shapes, or the binary was built
+   without the `shacl` feature, the section says **NOT CHECKED**. That is not a
+   zero, and `--fail-on-introduced` refuses (exit 1) on a build without SHACL
+   rather than pass. A surviving pack with missing new shapes also refuses this gate.
+Whole pack deletion is distinguished by the workflow only when every artifact
+file is absent at the head; incomplete surviving packs refuse. No new-head
+validation is claimed for a proven deletion. Blank-node labels are collapsed when matching, because
+   RDFC may relabel every blank node between versions.
+3. **Merge decisions.** When the change carries a `decisions.json` sidecar from
+   `quipu git-merge` (see below), each conflict is listed with its subject,
+   predicate, the constraint that made it a conflict (`sh:maxCount 1`), the
+   base/ours/theirs values and the recorded resolution, or **UNRESOLVED**. Alias
+   proposals recorded by the driver are listed the same way. The CI script
+   renders a sidecar only when the pull request adds or changes it.
+4. **Alias caveat.** Always present. A triple-level diff, merge or validation
+   cannot see two different IRIs minted for one real entity; such a pair looks
+   like two healthy entities. Below the caveat are advisory candidates: an
+   entity ADDED by the change whose normalized label is at least 0.90
+   Jaro-Winkler-similar to a same-type entity in the old pack, or to another
+   added entity. This is the merge driver's proposer, reused. No candidates is
+   not evidence of no aliases.
+5. **Summary.** The report's last line, used as the check annotation title:
+
+```text
+qpack review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates
+```
+
+`--format json` carries the same structure (`diff`, `shacl`, `decisions`,
+`alias_candidates`, `summary`). With `--fail-on-introduced` the exit status is
+3 when at least one violation is introduced; the report is printed in full
+first.
+
+The check is **red only** when a pack introduces a SHACL violation or its report
+cannot be computed. Everything else is information for the reviewer. A pack, for
+the workflow, is a directory holding `export.nt` or `payload.nq` together with
+`manifest.json` or `manifest.ttl`; the two versions compared are the merge-base
+version and the pull request head. The workflow runs with a read-only token. It
+can also keep one sticky PR comment up to date, but only when the repository
+variable `QPACK_REVIEW_COMMENT` is `true`: that job needs `pull-requests: write`,
+and granting it is a security-posture decision, so it is off by default.
+
+High-stakes (class-B) DecisionRecords are not settled by approving the pull
+request. They are resolved through the hardware-signed human verdict tracked as
+aegis-kzt0ql.9; the report only shows them.
+
 ## `quipu diff-textconv` — readable `git diff` for pack files
 
 ```text
