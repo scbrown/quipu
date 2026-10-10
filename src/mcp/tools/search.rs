@@ -15,7 +15,25 @@ use crate::vector::KnowledgeVectorStore;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    match input.get("mode") {
+        None => {}
+        Some(JsonValue::String(mode)) if mode == "semantic" => {}
+        Some(JsonValue::String(mode)) if mode == "keyword" => {
+            return keyword_response(store, input);
+        }
+        Some(_) => {
+            return Err(Error::InvalidValue(
+                "mode must be 'semantic' or 'keyword'".into(),
+            ));
+        }
+    }
     let content_ranking = super::search_ranking::ranking_mode(input)?;
+    let anchored = super::search_anchor::AnchorRequest::parse(input)?;
+    if anchored.is_some() && !store.search_config().anchored {
+        return Err(Error::InvalidValue(
+            "anchored search is disabled on this server ([quipu.search] anchored = false)".into(),
+        ));
+    }
     let explicit_embedding: Option<Vec<f32>> = input
         .get("embedding")
         .and_then(|v| v.as_array())
@@ -74,7 +92,11 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     // Oversample in both paths: an entity has one embedding row per fact/text,
     // so the raw top-N can be several rows of the same entity (aegis-a1s5).
     // Fetching extra candidates leaves room to dedupe down to `limit` entities.
-    let oversampled = store.search_config().oversample(limit);
+    let mut oversampled = store.search_config().oversample(limit);
+    if anchored.is_some() {
+        // The anchor reorders; give it a pool to reorder (the .8 baseline's).
+        oversampled = oversampled.max(ANCHOR_POOL);
+    }
 
     let matches = if let Some(ref allowed) = scope {
         // Keep only in-scope entities (works for both the SQLite backend and as
@@ -104,6 +126,17 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .collect();
     let matches =
         super::search_ranking::rank(store, matches, content_ranking, valid_at, query_text)?;
+    if let Some(req) = anchored {
+        return anchored_response(
+            store,
+            &matches,
+            &req,
+            limit,
+            valid_at,
+            prefixes.as_ref(),
+            scope.is_some(),
+        );
+    }
 
     let results: Vec<JsonValue> = matches
         .iter()
@@ -137,6 +170,77 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    if !store.search_config().keyword {
+        return Err(Error::InvalidValue(
+            "keyword search is disabled ([quipu.search] keyword = false)".into(),
+        ));
+    }
+    let infer_types = match input.get("infer_types") {
+        None => false,
+        Some(JsonValue::Bool(value)) => *value,
+        Some(_) => return Err(Error::InvalidValue("infer_types must be boolean".into())),
+    };
+    if input.get("anchor").is_some()
+        || input.get("embedding").is_some()
+        || input
+            .get("ranking")
+            .and_then(JsonValue::as_str)
+            .is_some_and(|r| r != "semantic")
+    {
+        return Err(Error::InvalidValue(
+            "keyword mode does not accept embedding, anchor, or content ranking".into(),
+        ));
+    }
+    let query = input
+        .get("query")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("keyword mode requires query text".into()))?;
+    let limit = store
+        .search_config()
+        .clamp_limit(input.get("limit").and_then(JsonValue::as_u64));
+    let valid_at = input.get("valid_at").and_then(JsonValue::as_str);
+    let groups: Option<Vec<&str>> = input
+        .get("group_ids")
+        .and_then(JsonValue::as_array)
+        .map(|v| v.iter().filter_map(JsonValue::as_str).collect());
+    let scope = scoped_entity_iris_at(
+        store,
+        input.get("entity_type").and_then(JsonValue::as_str),
+        groups.as_deref(),
+        valid_at,
+        infer_types,
+    )?;
+    let matches = store.keyword_search_hits(query, limit, valid_at, scope.as_ref())?;
+    let prefixes = if input
+        .get("verbose")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false)
+    {
+        None
+    } else {
+        Some(crate::compact::PrefixMap::from_store(store)?)
+    };
+    let results: Vec<_> = matches
+        .into_iter()
+        .map(|hit| {
+            let m = hit.matched;
+            let iri = store.resolve(m.entity_id)?;
+            Ok(serde_json::json!({
+                "entity": prefixes.as_ref().map_or(iri.clone(), |p| p.compact(&iri)),
+                "text": m.text, "score": m.score, "bm25": -m.score,
+                "ranking_reason": "keyword", "source": "knowledge",
+                "valid_from": m.valid_from, "valid_to": m.valid_to,
+                "language": hit.language, "datatype":hit.datatype, "type_iri":hit.type_iri,
+                "plane":"ROOT"
+            }))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(
+        serde_json::json!({"count":results.len(),"results":results,"scoped":scope.is_some(),"ranking":"keyword","indexed_types":"asserted","infer_types":infer_types}),
+    )
+}
+
 /// Resolve the set of entity IRIs permitted by an optional `entity_type` and/or
 /// `group_ids` scope — best-effort PROVENANCE scoping, NOT tenant isolation
 /// (hq-93d; design: docs/design/group-isolation.md). Returns `Ok(None)` when no
@@ -168,6 +272,16 @@ fn scoped_entity_iris(
     entity_type: Option<&str>,
     group_ids: Option<&[&str]>,
 ) -> Result<Option<std::collections::HashSet<String>>> {
+    scoped_entity_iris_at(store, entity_type, group_ids, None, true)
+}
+
+fn scoped_entity_iris_at(
+    store: &Store,
+    entity_type: Option<&str>,
+    group_ids: Option<&[&str]>,
+    valid_at: Option<&str>,
+    infer_types: bool,
+) -> Result<Option<std::collections::HashSet<String>>> {
     let has_group = group_ids.is_some_and(|g| !g.is_empty());
     if entity_type.is_none() && !has_group {
         return Ok(None);
@@ -192,11 +306,27 @@ fn scoped_entity_iris(
     }
     if let Some(type_iri) = entity_type {
         let safe_type = type_iri.replace('>', "\\>");
-        patterns.push_str(&format!("?s a <{safe_type}> . "));
+        if infer_types {
+            patterns.push_str(&format!("?s a <{safe_type}> . "));
+        } else {
+            patterns.push_str("?s a ?_keywordType . ");
+            filters.push_str(&format!("FILTER(?_keywordType = <{safe_type}>) "));
+        }
     }
 
     let sparql = format!("SELECT DISTINCT ?s WHERE {{ {patterns}{filters}}}");
-    let result = sparql::query(store, &sparql)?;
+    let result = if let Some(at) = valid_at {
+        sparql::query_temporal(
+            store,
+            &sparql,
+            &crate::sparql::TemporalContext {
+                valid_at: Some(at.to_string()),
+                ..Default::default()
+            },
+        )?
+    } else {
+        sparql::query(store, &sparql)?
+    };
 
     let mut iris = std::collections::HashSet::new();
     for row in result.rows() {
@@ -372,5 +502,66 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
             "configured": store.embedding_provider().is_some(),
             "embedded_entities": store.vector_store().vector_count().unwrap_or(0),
         },
+    }))
+}
+
+/// Candidates an anchored search reorders: the plain top of this many.
+const ANCHOR_POOL: usize = 200;
+
+/// The anchored form of [`tool_search`]'s response (aegis-rcz5ib.8): the same
+/// result shape plus `hops` (and `path` with `explain`) per result, and an
+/// `anchor` block reporting reach and truncation.
+fn anchored_response(
+    store: &Store,
+    matches: &[super::search_ranking::RankedMatch],
+    req: &super::search_anchor::AnchorRequest,
+    limit: usize,
+    valid_at: Option<&str>,
+    prefixes: Option<&crate::compact::PrefixMap>,
+    scoped: bool,
+) -> Result<JsonValue> {
+    let nb = super::search_anchor::walk(store, req, valid_at)?;
+    let by_id: std::collections::HashMap<i64, &super::search_ranking::RankedMatch> =
+        matches.iter().map(|m| (m.matched.entity_id, m)).collect();
+    let order = super::search_anchor::rerank(
+        matches
+            .iter()
+            .map(|m| (m.matched.entity_id, m.score))
+            .collect(),
+        &nb,
+        req,
+    );
+    let results: Vec<JsonValue> = order
+        .into_iter()
+        .take(limit)
+        .map(|(id, score, hops)| {
+            let ranked = by_id[&id];
+            let m = &ranked.matched;
+            let iri = store.resolve(id).unwrap_or_else(|_| format!("ref:{id}"));
+            let iri = prefixes.map_or(iri.clone(), |map| map.compact(&iri));
+            let mut row = serde_json::json!({
+                "entity": iri,
+                "text": m.text,
+                "score": score,
+                "text_score": ranked.score,
+                "similarity": m.score,
+                "hops": hops,
+                "ranking_reason": if ranked.demoted { "contentless_artifact" } else { "anchored" },
+                "source": "knowledge",
+                "valid_from": m.valid_from,
+                "valid_to": m.valid_to
+            });
+            if req.explain {
+                row["path"] = serde_json::json!(nb.path(store, id));
+            }
+            row
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "results": results,
+        "count": results.len(),
+        "scoped": scoped,
+        "ranking": "anchored",
+        "anchor": super::search_anchor::summary(&nb, req),
     }))
 }
