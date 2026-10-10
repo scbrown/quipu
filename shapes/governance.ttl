@@ -698,6 +698,13 @@ aegis:VerdictShape a sh:NodeShape ;
 aegis:VerifierRegistrationShape a sh:NodeShape ;
     sh:targetClass aegis:VerifierRegistration ;
     sh:property [
+        # Human trust-root tier (aegis-kzt0ql.9.4). Absent = agent tier.
+        sh:path aegis:trustTier ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "human" ) ;
+    ] ;
+    sh:property [
         sh:path aegis:verifier ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
@@ -771,6 +778,27 @@ aegis:DecisionVerdictShape a sh:NodeShape ;
     sh:property [ sh:path aegis:outcome ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:verifier ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:sealSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# The human trust root (aegis-kzt0ql.9.4). A registration carrying
+# aegis:trustTier "human" in ROOT is a human trust-root key; changing the set
+# of them takes an aegis:RegistryAmendment signed by an already-enrolled human
+# key (enforced by the write gate, not by these shapes). The first key is
+# enrolled once, at the console, and leaves an aegis:TrustRootBootstrap record.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:RegistryAmendmentShape a sh:NodeShape ;
+    sh:targetClass aegis:RegistryAmendment ;
+    sh:property [ sh:path aegis:amends ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:amendedDigest ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^(sha256:[0-9a-f]{64}|revoked)$" ] ;
+    sh:property [ sh:path aegis:amendmentSigner ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:amendmentNonce ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^[0-9a-fA-F]{32,}$" ] ;
+    sh:property [ sh:path aegis:amendmentSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+aegis:TrustRootBootstrapShape a sh:NodeShape ;
+    sh:targetClass aegis:TrustRootBootstrap ;
+    sh:property [ sh:path aegis:enrolled ; sh:class aegis:VerifierRegistration ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:keyFingerprint ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^SHA256:[A-Za-z0-9+/]{43}$" ] .
 
 # ═══════════════════════════════════════════════════════════════════
 # Escalation Router (Q-SARC-ER) — bounded human oversight.

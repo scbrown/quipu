@@ -85,9 +85,22 @@ fn ns(name: &str) -> String {
 
 /// `sha256:<hex>` over the RDFC-1.0 canonical form of the decision's content.
 pub fn decision_digest(store: &Store, decision: &str) -> Result<String> {
-    let entity = store
-        .lookup(decision)?
-        .ok_or_else(|| Error::InvalidValue(format!("decision '{decision}' does not exist")))?;
+    content_digest(store, decision, &UNSEALED)?
+        .ok_or_else(|| Error::InvalidValue(format!("decision '{decision}' has no content to seal")))
+}
+
+/// `sha256:<hex>` over the RDFC-1.0 canonical form of `iri`'s concise bounded
+/// description in ROOT (its current facts, plus the blank nodes it reaches),
+/// excluding the root's `unsealed` predicates. `None` when there is nothing
+/// to seal. Shared by the decision seal and the trust-root registry gate.
+pub(crate) fn content_digest(
+    store: &Store,
+    iri: &str,
+    unsealed: &[&str],
+) -> Result<Option<String>> {
+    let Some(entity) = store.lookup(iri)? else {
+        return Ok(None);
+    };
     let mut lines = Vec::new();
     let mut seen = BTreeSet::new();
     let mut queue = vec![entity];
@@ -98,7 +111,7 @@ pub fn decision_digest(store: &Store, decision: &str) -> Result<String> {
         let subject_term = crate::rdf::value_to_term(store, &Value::Ref(subject))?;
         for fact in store.entity_facts(subject)? {
             let predicate = store.resolve(fact.attribute)?;
-            if subject == entity && UNSEALED.contains(&predicate.as_str()) {
+            if subject == entity && unsealed.contains(&predicate.as_str()) {
                 continue;
             }
             if let Value::Ref(object) = &fact.value
@@ -111,12 +124,10 @@ pub fn decision_digest(store: &Store, decision: &str) -> Result<String> {
         }
     }
     if lines.is_empty() {
-        return Err(Error::InvalidValue(format!(
-            "decision '{decision}' has no content to seal"
-        )));
+        return Ok(None);
     }
     let canonical = crate::share::canonicalize_ntriples(lines.concat().as_bytes())?;
-    Ok(crate::share::sha256(&canonical))
+    Ok(Some(crate::share::sha256(&canonical)))
 }
 
 /// The canonical bytes an approver signs. Every field is fixed by quipu except
@@ -268,7 +279,13 @@ pub fn attest(
         return Ok(Err(Refusal::NoPolicy));
     };
     let message = p.challenge(outcome);
-    let keys = registered_keys(store, verifier, Some(&policy), &Witness::now(), Scope::Root)?;
+    let keys = registered_keys(
+        store,
+        verifier,
+        Some(&policy),
+        &Witness::now(),
+        Scope::HumanTier,
+    )?;
     if !keys
         .iter()
         .any(|k| crate::signing::verify_hex(k, &message, signature))
@@ -379,7 +396,7 @@ pub fn verify_recorded(store: &Store, verdict: &str) -> Result<std::result::Resu
         }
     }
     let message = p.challenge(&outcome);
-    let keys = registered_keys(store, &verifier, Some(&policy), &witness, Scope::Root)?;
+    let keys = registered_keys(store, &verifier, Some(&policy), &witness, Scope::HumanTier)?;
     if keys
         .iter()
         .any(|k| crate::signing::verify_hex(k, &message, &signature))
