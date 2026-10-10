@@ -1821,3 +1821,11 @@ manifest; `{"queries": {...}}` runs the batch and returns candidates per
 query, scored the way `/resolve` scores.
 
 RDF `/knot` loads accept `blank_node_scope`: distinct IDs separate repeated identical input; the same ID shares blank nodes across graphs only for byte-identical input. By default, whole-document bytes and destination graph define scope.
+
+### POST /search_query
+
+Search first, then evaluate SELECT from at most100 distinct seed IRIs.
+Keyword mode defaults and needs no embeddings; hybrid fuses successful lexical
+and semantic retrieval with reciprocal rank fusion. Seed ranks and explicit
+bounded completeness accompany the ordinary query result. See
+[the request and scope contract](../../../design/search-rooted-sparql.md).
