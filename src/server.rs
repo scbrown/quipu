@@ -40,6 +40,9 @@ mod graph_store;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[cfg(feature = "owl")]
+#[path = "server/owl_materialize.rs"]
+mod owl_materialize;
 #[cfg(test)]
 #[path = "server/parse_guard_tests.rs"]
 mod parse_guard_tests;
