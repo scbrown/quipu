@@ -1946,15 +1946,18 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_graph_list"));
     assert!(names.contains(&"quipu_graph_freeze"));
     assert!(names.contains(&"quipu_graph_thaw"));
+    // Share-merge conflict resolution (aegis-yavo9c): a read and its writer.
+    assert!(names.contains(&"quipu_merge_decisions"));
+    assert!(names.contains(&"quipu_merge_apply"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 48);
+        assert_eq!(defs.len(), 50);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 46);
+        assert_eq!(defs.len(), 48);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }
@@ -4974,8 +4977,9 @@ mod knot_on_violation {
     use super::*;
 
     const REAL: &str = include_str!("../../shapes/aegis-ontology.shapes.ttl");
-    const EMIT_LINE: &str =
-        "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n";
+    // Both soft markers: the emit route AND the Warning severity (aegis-1mv0to).
+    // Flipping to reject means dropping both; Warning alone never blocks.
+    const EMIT_LINE: &str = "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:severity sh:Warning ;\n";
     const UNTRACED: &str = "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
         aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
@@ -5028,8 +5032,8 @@ mod knot_on_violation {
         assert_eq!(payload["mode"], "emit");
     }
 
-    /// Mutation arm: the SAME real shape with its emit annotation removed is a
-    /// reject shape again, and /knot refuses the same write.
+    /// Mutation arm: the SAME real shape with its emit annotation and Warning
+    /// severity removed is a reject shape again, and /knot refuses the same write.
     #[test]
     fn without_emit_annotation_the_same_shape_rejects() {
         assert!(

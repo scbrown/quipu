@@ -459,3 +459,78 @@ fn lead_for_shapes_route_to_the_rejecting_document_together() {
         "control: the splitter does route emit shapes"
     );
 }
+
+/// aegis-1mv0to: the production `DirectiveTraceabilityShape` REPORTS an
+/// untraced directive as a warning, and the warning does not BLOCK. Validated
+/// against the FULL file (both halves), the path share import and compose take.
+/// If this fails, a release's repository share quarantines again.
+#[test]
+fn directive_traceability_is_a_warning_on_the_full_shapes_file() {
+    let data = r#"
+        @prefix aegis: <http://aegis.gastown.local/ontology/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        aegis:untraced-directive a aegis:Directive ;
+            rdfs:label "Untraced directive" ;
+            aegis:issuedBy "Stiwi" .
+    "#;
+    let feedback = quipu::validate_shapes(SHAPES, data).unwrap();
+    assert!(
+        !feedback.blocks(),
+        "an untraced directive must not block: {:?}",
+        feedback.results
+    );
+    assert_eq!(feedback.violations, 0);
+    // SHACL's own sh:conforms stays false on a warning; only the gate is narrower.
+    assert!(!feedback.conforms);
+    assert!(
+        feedback
+            .results
+            .iter()
+            .any(|r| r.severity.contains("Warning")
+                && r.source_shape
+                    .as_deref()
+                    .is_some_and(|s| s.contains("DirectiveTraceabilityShape"))),
+        "the traceability gap must still be reported: {:?}",
+        feedback.results
+    );
+}
+
+const BEAD_PREFIXES: &str = r#"
+    @prefix aegis: <http://aegis.gastown.local/ontology/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+"#;
+
+#[test]
+fn a_legacy_bead_that_is_also_a_work_item_conforms() {
+    // The 2631 live Bead nodes carry both types (aegis-ks4oph).
+    let data = format!(
+        r#"{BEAD_PREFIXES}
+        aegis:aegis-legacy a aegis:Bead, aegis:WorkItem ; rdfs:label "aegis-legacy" ."#
+    );
+    assert!(quipu::validate_shapes(SHAPES, &data).unwrap().conforms);
+}
+
+#[test]
+fn a_bead_only_node_fails_even_though_bead_is_a_subclass_of_work_item() {
+    // A new Bead write would be Bead-ONLY. The shapes declare
+    // `aegis:Bead rdfs:subClassOf aegis:WorkItem`, so this is the case where
+    // inference could make the WorkItem requirement vacuous. It must not: the
+    // shape reads the data's own rdf:type, and the axiom lives in the shapes
+    // graph. This test runs under every feature set CI builds, owl included.
+    let data = format!(
+        r#"{BEAD_PREFIXES}
+        aegis:aegis-new a aegis:Bead ; rdfs:label "aegis-new" ."#
+    );
+    let report = quipu::validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        !report.conforms,
+        "a Bead-only node must violate BeadLegacyShape"
+    );
+}
+
+#[test]
+fn bead_is_declared_a_deprecated_subclass_of_work_item() {
+    assert!(
+        SHAPES.contains("aegis:Bead rdfs:subClassOf aegis:WorkItem ;\n    owl:deprecated true .")
+    );
+}

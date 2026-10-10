@@ -49,7 +49,11 @@ fn report_severity(severity: &shacl_engine::types::Severity) -> String {
 /// Structured feedback from SHACL validation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationFeedback {
-    /// Whether the data conforms to the shapes.
+    /// Whether the data conforms to the shapes, in the sense of SHACL's
+    /// `sh:conforms`: true only when there are NO results of ANY severity, so a
+    /// lone `sh:Warning` makes it false. The W3C suite pins this. For "does
+    /// anything block", ask [`ValidationFeedback::blocks`] instead.
+    /// (`shacl_context`'s store-context repair reports `violations == 0` here.)
     pub conforms: bool,
     /// Number of violations found.
     pub violations: usize,
@@ -61,6 +65,17 @@ pub struct ValidationFeedback {
     /// near-duplicate entities were detected during write.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolution_candidates: Option<Vec<EntityCandidate>>,
+}
+
+impl ValidationFeedback {
+    /// Whether any result has `sh:Violation` severity. Narrower than
+    /// `!conforms`: `sh:Warning` and `sh:Info` results are reported but do not
+    /// block. Share import and compose gate on this (aegis-1mv0to), so a shape
+    /// can declare itself advisory with `sh:severity sh:Warning`.
+    #[must_use]
+    pub fn blocks(&self) -> bool {
+        self.violations > 0
+    }
 }
 
 /// A single validation issue.

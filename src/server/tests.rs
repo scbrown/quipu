@@ -1,5 +1,8 @@
 //! Tests for the server's lock discipline and handler wiring.
 
+#[path = "search_keyword_tests.rs"]
+mod search_keyword_tests;
+
 use std::sync::Arc;
 
 use axum::{

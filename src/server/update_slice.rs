@@ -91,8 +91,10 @@ pub(crate) enum Subjects {
 /// How `/update` must build its evaluation dataset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Plan {
-    /// Copy only these predicates (by IRI), each for the given subjects.
-    Sliced(BTreeMap<String, Subjects>),
+    /// Copy only these predicates (by IRI), each for the given subjects, plus
+    /// EVERY current fact of each `whole` subject (a variable predicate on a
+    /// constant subject, aegis-w3k75d.15).
+    Sliced(BTreeMap<String, Subjects>, BTreeSet<String>),
     /// Copy the whole store; the string says which construct forced it.
     Full(&'static str),
 }
@@ -101,7 +103,7 @@ type Walk = Result<(), &'static str>;
 
 /// Decide the dataset an update needs. `Plan::Full` is always safe.
 pub(crate) fn plan(update: &str) -> Plan {
-    let Ok(parsed) = SparqlParser::new().parse_update(update) else {
+    let Ok(Ok(parsed)) = quipu::sparql_structure::parse_update(SparqlParser::new(), update) else {
         return Plan::Full("unparsed");
     };
     let mut slice = Slice::default();
@@ -110,12 +112,14 @@ pub(crate) fn plan(update: &str) -> Plan {
             return Plan::Full(reason);
         }
     }
-    Plan::Sliced(slice.touched)
+    Plan::Sliced(slice.touched, slice.whole)
 }
 
 #[derive(Default)]
 struct Slice {
     touched: BTreeMap<String, Subjects>,
+    /// Subjects a variable-predicate pattern reads in full.
+    whole: BTreeSet<String>,
 }
 
 impl Slice {
@@ -130,6 +134,31 @@ impl Slice {
             }
             (entry, None) => *entry = Subjects::All,
             (Subjects::All, Some(_)) => {}
+        }
+    }
+
+    /// A pattern with this predicate and subject. A VARIABLE predicate reads
+    /// every predicate of its subject, so it slices only when the subject is a
+    /// constant IRI (that subject's facts, from the per-entity index); with an
+    /// open subject it would read the whole store, so the plan stays full.
+    /// seeds writes are this shape: they replace `<seed> ?p ?o` and guard with
+    /// `FILTER NOT EXISTS { <new> ?x ?y }`, so every sd write copied the whole
+    /// store until this (aegis-w3k75d.15, 2 prod recycles on 2026-10-07).
+    fn record_pattern(
+        &mut self,
+        predicate: &NamedNodePattern,
+        subject: Option<&NamedNode>,
+    ) -> Walk {
+        match (predicate, subject) {
+            (NamedNodePattern::NamedNode(p), _) => {
+                self.record(p, subject);
+                Ok(())
+            }
+            (NamedNodePattern::Variable(_), Some(subject)) => {
+                self.whole.insert(subject.as_str().to_owned());
+                Ok(())
+            }
+            (NamedNodePattern::Variable(_), None) => Err("variable-predicate"),
         }
     }
 
@@ -178,12 +207,12 @@ impl Slice {
                 for quad in delete {
                     let subject = ground_subject(&quad.subject)?;
                     ground_object(&quad.object)?;
-                    self.record(named_predicate(&quad.predicate)?, subject);
+                    self.record_pattern(&quad.predicate, subject)?;
                 }
                 for quad in insert {
                     let subject = term_subject(&quad.subject)?;
                     term_object(&quad.object)?;
-                    self.record(named_predicate(&quad.predicate)?, subject);
+                    self.record_pattern(&quad.predicate, subject)?;
                 }
                 self.pattern(pattern)
             }
@@ -197,8 +226,7 @@ impl Slice {
     fn triple(&mut self, triple: &TriplePattern) -> Walk {
         let subject = term_subject(&triple.subject)?;
         term_object(&triple.object)?;
-        self.record(named_predicate(&triple.predicate)?, subject);
-        Ok(())
+        self.record_pattern(&triple.predicate, subject)
     }
 
     fn pattern(&mut self, pattern: &GraphPattern) -> Walk {
@@ -326,13 +354,6 @@ impl Slice {
             Expression::Exists(pattern) => self.pattern(pattern),
             _ => Err("unsupported-expression"),
         }
-    }
-}
-
-fn named_predicate(predicate: &NamedNodePattern) -> Result<&NamedNode, &'static str> {
-    match predicate {
-        NamedNodePattern::NamedNode(node) => Ok(node),
-        NamedNodePattern::Variable(_) => Err("variable-predicate"),
     }
 }
 

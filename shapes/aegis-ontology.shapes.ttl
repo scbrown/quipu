@@ -10,7 +10,9 @@
 
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
 @prefix quipu:  <http://quipu.dev/ontology/> .
 @prefix aegis:  <http://aegis.gastown.local/ontology/> .
 
@@ -817,7 +819,15 @@ aegis:DirectiveShape a sh:NodeShape ;
 # `quipu validate` (or SPARQL) over the stored graph (ian ruling, aegis-4c3ppi).
 # Drop the annotation (enforcement reverts to reject) once that count reads
 # zero AND both predicates are in REQUIRED_PREDICATE_PROVEN at measured 100%:
-# "work it to true". Store-context validation (emit path) is what lets
+# "work it to true". When it flips to reject, drop sh:severity too.
+#
+# sh:severity sh:Warning (aegis-1mv0to): emit protects only the write paths
+# that route by onViolation. Share import and compose gate on conforms, and a
+# defaulted sh:Violation quarantined the whole v0.10.0 repository share for 2
+# untraced directives. Warning is the spec's word for "report, do not block",
+# and the 4c3ppi spec already said Warning until 100%.
+#
+# Store-context validation (emit path) is what lets
 # sh:class see the linked WorkItem/Policy types that are not in the payload.
 #
 # Pilot, proven end to end 2026-09-24: directive-patent-filings-private-no-
@@ -827,6 +837,7 @@ aegis:DirectiveShape a sh:NodeShape ;
 
 aegis:DirectiveTraceabilityShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
+    sh:severity sh:Warning ;
     sh:targetClass aegis:Directive ;
     # I2 label floor. DirectiveShape already requires it, so this asserts
     # nothing new about the data; it keeps every targetClass shape honest.
@@ -1829,6 +1840,26 @@ aegis:FailureMode rdfs:subClassOf aegis:FailureKnowledge .
 aegis:FailurePattern rdfs:subClassOf aegis:FailureKnowledge .
 aegis:IncidentClass rdfs:subClassOf aegis:FailureKnowledge .
 aegis:Directive rdfs:subClassOf aegis:OperationalKnowledge .
+
+# ── Legacy aegis:Bead: deprecated, governed, never written (aegis-ks4oph) ──
+#
+# 2631 nodes still carry aegis:Bead beside aegis:WorkItem. aegis-ykuhen kept the
+# old type deliberately as auditable history when it moved them to WorkItem, and
+# the ruling on aegis-ks4oph (2026-10-07) keeps it: Bead is a DEPRECATED LEGACY
+# subclass of WorkItem. Producers emit WorkItem; nothing writes Bead.
+#
+# The shape exists so the live census (I7) sees a governed legacy kind, not an
+# unshaped one, and it asserts the one thing that makes a Bead legitimate: it is
+# ALSO a WorkItem. A Bead-only node, which is what a new Bead write would be,
+# violates it. Note that the vocabulary gate admits any targeted class, so this
+# shape does not by itself refuse such a write at /episode. It makes one visible.
+aegis:Bead rdfs:subClassOf aegis:WorkItem ;
+    owl:deprecated true .
+
+aegis:BeadLegacyShape a sh:NodeShape ;
+    sh:targetClass aegis:Bead ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue aegis:WorkItem ; ] .
 
 # ── Asserted in the store before they were ever written down ─────
 #

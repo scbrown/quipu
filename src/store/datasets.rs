@@ -110,6 +110,24 @@ impl Store {
             )));
         }
 
+        // A member that resolves to no graph is refused, never stored: stored,
+        // it would read nothing while looking like a real member, and
+        // `dataset_member_ids` dropped it without a word (aegis-ddhsvc).
+        let unresolved: Vec<&str> = members
+            .iter()
+            .map(|m| m.graph_iri.as_str())
+            .filter(|iri| !matches!(self.member_graph_ids(iri), Ok(ids) if !ids.is_empty()))
+            .collect();
+        if !unresolved.is_empty() {
+            return Err(Error::InvalidValue(format!(
+                "dataset '{name}' names {} member(s) that resolve to no graph: {}. Use a \
+                 registered graph IRI, or {} for the default graph.",
+                unresolved.len(),
+                unresolved.join(", "),
+                crate::schema::ROOT_GRAPH_IRI
+            )));
+        }
+
         let meta_g = self.meta_graph_id()?;
         let subject = self.intern(name)?;
         let a_type = self.intern(RDF_TYPE)?;
@@ -236,15 +254,29 @@ impl Store {
         // `lookup_all` to prevent for a bare `FROM <iri>`. For an ordinary
         // single-space member this is one id, exactly as before.
         for m in self.dataset_members(name)? {
-            for g in self.lookup_all(&m.graph_iri)? {
-                let registered = self
-                    .conn
-                    .query_row("SELECT 1 FROM graphs WHERE g = ?1", params![g], |_| Ok(()))
-                    .optional()?
-                    .is_some();
-                if registered {
-                    ids.push(g);
-                }
+            ids.extend(self.member_graph_ids(&m.graph_iri)?);
+        }
+        Ok(ids)
+    }
+
+    /// The graph ids one dataset member reads. ROOT has no interned term, so
+    /// its well-known IRI resolves here exactly as `FROM <urn:quipu:graph:root>`
+    /// does in `sparql::apply_dataset`; without this a dataset could never
+    /// include the default graph (aegis-ddhsvc). Any other IRI resolves to its
+    /// registered graph ids (several when deep-frozen; see above).
+    fn member_graph_ids(&self, iri: &str) -> Result<Vec<i64>> {
+        if iri == crate::schema::ROOT_GRAPH_IRI {
+            return Ok(vec![crate::schema::ROOT_GRAPH]);
+        }
+        let mut ids = Vec::new();
+        for g in self.lookup_all(iri)? {
+            let registered = self
+                .conn
+                .query_row("SELECT 1 FROM graphs WHERE g = ?1", params![g], |_| Ok(()))
+                .optional()?
+                .is_some();
+            if registered {
+                ids.push(g);
             }
         }
         Ok(ids)

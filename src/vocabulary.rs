@@ -113,7 +113,7 @@ pub fn ungoverned_episode_types<'a>(
     };
     let mut found = BTreeSet::new();
     for ntype in node_types {
-        let iri = format!("{base_ns}{}", crate::episode::sanitize_iri_local(ntype));
+        let iri = crate::episode::node_type_iri(ntype, base_ns);
         if !sanctioned.contains(&iri) {
             found.insert(iri);
         }
@@ -145,7 +145,7 @@ pub fn enforce_episode_types<'a>(
     }
     let mut unknown = BTreeSet::new();
     for node_type in node_types {
-        let iri = format!("{base_ns}{}", crate::episode::sanitize_iri_local(node_type));
+        let iri = crate::episode::node_type_iri(node_type, base_ns);
         if !vocabulary.contains(&iri) {
             unknown.insert(iri);
         }

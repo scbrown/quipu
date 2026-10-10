@@ -64,12 +64,14 @@ stops being read.
 | `server.read_only` | `false` | Refuse all write endpoints |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
+| `server.update_full_copy_max_facts` | `250000` | Facts an unsliceable `/update` (open subject AND open predicate) may copy before it is refused with advice; 0 = unbounded |
 | `events.retention_days` | unset (keep forever) | Prune events older than N days, never past any registered consumer's committed offset |
 | `labels.min_freshness` | unset | Graph-label floor: refuse results staler than this |
 | `labels.min_trust_rank` / `labels.min_trust_chain` | unset | Trust floors on the query path |
 | `labels.deny_policy_tokens` | `[]` | Policy-class tokens that exclude a graph from results |
 | `labels.deny_data_kinds` | `[]` | Refuse queries composing graphs of these `dataKind` tokens (a blocklist — undeclared kinds pass) |
 | `search.default_limit` | `10` | Result limit when the caller passes none |
+| `search.keyword` | `false` | Opt-in SQLite FTS5 keyword search; activation installs schema/triggers without a bulk startup migration. Existing facts require explicit bounded backfill; reads refuse until complete. |
 | `search.max_limit` | `1000` | Hard cap on requested result limits |
 | `search.max_sparql_rows` | `10000` | Cap on SPARQL result rows |
 | `search.query_timeout_ms` | `30000` | SPARQL evaluation deadline |
