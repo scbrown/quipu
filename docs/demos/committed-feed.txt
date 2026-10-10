@@ -1,0 +1,14 @@
+Script started on 2026-10-10 13:35:37-04:00 [COMMAND="python3 /tmp/byan-demo/record_quipu.py" <not executed on terminal>]
+Quipu committed-feed demo: isolated in-memory source fixture
+Legacy ROOT event log versus named-graph replay; delivery must leave consumer ACK at zero.
+Source head: 2ad4a8cee48b208d3386adf034dd3476a6835979
+DEMO legacy ROOT event offset: 0
+DEMO named-graph stream replay 1 HTTP 200
+DEMO event: quipu.changes | id: 2 | data: {"capture":"old_and_new_values","next_tx":2,"records":[{"actor":null,"attribute":"urn:test:value","entity":"urn:test:work-1","graph":"urn:test:seeds-board","op":"assert","sequence":0,"source":null,"timestamp":"2026-01-01","tx":2,"value":1}],"watermark_timestamp":"2026-01-01","watermark_tx":2} |  | 
+DEMO named-graph stream replay 2 HTTP 200
+DEMO event: quipu.changes | id: 2 | data: {"capture":"old_and_new_values","next_tx":2,"records":[{"actor":null,"attribute":"urn:test:value","entity":"urn:test:work-1","graph":"urn:test:seeds-board","op":"assert","sequence":0,"source":null,"timestamp":"2026-01-01","tx":2,"value":1}],"watermark_timestamp":"2026-01-01","watermark_tx":2} |  | 
+DEMO consumer ACK after delivery: 0
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.03s
+Actual fixture command exit: 0
+
+Script done on 2026-10-10 13:36:01-04:00 [COMMAND_EXIT_CODE="0"]
