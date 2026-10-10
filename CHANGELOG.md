@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-10
+
+### Added
+
+- *(stream)* Stream durable event and named-graph transaction feeds (#501)([abc4486](https://github.com/scbrown/quipu/commit/abc448626dcc33d313f3de9b4864c3b1bc12cb71))
+- *(share)* Add fail-closed pack review reports and workflow (#502)([ee174b2](https://github.com/scbrown/quipu/commit/ee174b23476be30015e23a1f35c1c5c681dc3aff))
+
+### Changed
+
+- *(share)* Use pendant names and retain legacy pack reads (#503)([1ffd453](https://github.com/scbrown/quipu/commit/1ffd453b57e2657b83e9d88572063fa76e1243a7))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at dfc5da2b (#497)([f670536](https://github.com/scbrown/quipu/commit/f6705365e3b17f1d913c39adc556127b8c91d116))
+
 ## [0.12.0] - 2026-10-10
 
 ### Added
