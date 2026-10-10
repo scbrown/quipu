@@ -56,6 +56,7 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // embedding model and config are part of the declared set precisely because
     // regeneration is only reconstruction if the recipe travels.
     ("vectors", Disposition::Regenerated),
+    ("named_search_entities", Disposition::Regenerated),
     // Derived ROOT fact text. Rebuild with the pinned FTS5 projection and
     // bounded search-index backfill, never carry SQLite physical rowids.
     ("lexical_fts", Disposition::Regenerated),

@@ -807,15 +807,48 @@ Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
 omitted mode or `mode: "semantic"` preserves vector search.
 
+Select one registered graph with `graph: "<IRI>"`, several with
+`graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
+`all_graphs: true` (also `graph: "all"`). Omitted scope remains ROOT. Selectors
+are mutually exclusive and unknown IRIs are refused. Explicit results carry
+`graph` and selected entity memberships in `graphs`. For keyword mode,
+`graph` identifies the matching assertion; for semantic mode it is the first
+selected membership. The graph
+metadata plane is excluded from all-graphs scope. Named-graph semantic text
+uses one vector per entity; entities with ROOT text keep it, otherwise text
+combines their named-graph facts. Explicit graph scope refuses ROOT content
+and anchor reranking.
+
+Explicit graph selection and automatic named-only embedding text are disabled
+by default (`[quipu.search] named_graphs = false`). Prepare existing named-only
+vectors through bounded `POST /embed_backfill_graph` calls, then enable the
+flag. This avoids turning the next producer snapshot into an unpaced initial
+embedding drain. Graph backfill leaves entities with any ROOT history alone,
+including ROOT entities without vectors. Roll back exposure by disabling
+`named_graphs`; retain this binary's ROOT exclusion while named vectors exist.
+Reverting to a pre-scope binary after backfill can expose those vectors in
+unscoped search.
+
+A local `named_search_entities` origin cache is created when named vectors are
+prepared. It retains their exclusion from ROOT even if the named facts are
+physically cleaned up. The cache is regenerated with embeddings when a store
+is reconstructed; it is not exported as factual content.
+
 #### Keyword index
 
 Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
 activation installs an empty FTS5 index and same-transaction fact triggers; it
 never backfills during startup or a read. Writes, source replacement, closure,
 rollback and physical deletion are reflected atomically. Index documents are
-ROOT assertion rows; `valid_at` checks their original valid-time intervals,
-with an exclusive `valid_to` boundary. Named-graph/attached-pack search is not
-part of this initial lexical stage.
+assertion rows with graph IDs; omitted scope reads ROOT only. `valid_at`
+checks their original valid-time intervals, with an exclusive `valid_to`
+boundary. Attached packs are not part of this index.
+
+An existing ROOT-only index is upgraded without dropping its documents.
+The upgrade replaces its derived view/triggers and invalidates completeness;
+bounded backfill must revisit fact ranges before keyword reads resume. A
+named-graph query against the older index is refused rather than reported
+as an empty graph.
 
 Backfill is explicit and resumable:
 
@@ -823,6 +856,8 @@ Backfill is explicit and resumable:
 quipu search-index backfill --batch-size 500 --db /path/to/store.db
 quipu search-index status --db /path/to/store.db
 quipu search '"complete episode phrase"' --mode keyword --db /path/to/store.db
+quipu search 'Memory Beads' --mode keyword --graph urn:example:knowledge --db /path/to/store.db
+quipu search 'Memory Beads' --mode keyword --all-graphs --db /path/to/store.db
 ```
 
 One command commits one batch (1–10000 scanned fact rows), then releases the
@@ -1221,6 +1256,19 @@ Backfill embeddings for entities that lack them. Returns
 `{"status": "error", ...}` when no embedding provider is configured; the
 `--embed-backfill` startup flag instead exits non-zero rather than serving
 without the capability it was asked for.
+
+### `POST /embed_backfill_graph`
+
+Embed up to `max_entities` (default 256, clamped to 1-2000) entities of one
+registered named graph that have no current vector. Body:
+`{"graph": "<IRI>", "max_entities": N}`. Returns `entities_embedded`,
+`remaining` (still un-vectored in that graph) and `stale_skipped` (entities
+edited during the call, left for the next one). An unknown graph is refused.
+
+Each call is deliberately bounded: pace repeated calls and watch server memory
+between them rather than draining a large graph in one pass. Entities that
+exist only in named graphs are embedded from their named-graph facts, and they
+are searchable with `quipu_search` `graph=<IRI>`; unscoped search stays ROOT.
 
 ### `GET /preview/{iri}`
 

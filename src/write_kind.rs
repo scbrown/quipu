@@ -100,7 +100,11 @@ impl WriteKind {
             "/overlay/write" | "/overlay/create" => Self::Overlay,
             "/graph/create" | "/graph/label" | "/graph/freeze" | "/graph/thaw" | "/datasets"
             | "/queries" | "/shapes" | "/subscriptions" | "/events/commit" => Self::GraphAdmin,
-            "/project" | "/impact" | "/embed_backfill" | "/align/apply" => Self::Derive,
+            "/project"
+            | "/impact"
+            | "/embed_backfill"
+            | "/embed_backfill_graph"
+            | "/align/apply" => Self::Derive,
             "/ontology" => Self::Ontology,
             "/reason" => Self::Reasoner,
             _ => return None,

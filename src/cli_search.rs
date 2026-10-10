@@ -5,11 +5,18 @@ use crate::cli::flag_value;
 pub fn cmd_search(args: &[String], db: &str) {
     let Some(query) = args.get(2).filter(|q| !q.starts_with("--")) else {
         eprintln!(
-            "usage: quipu search <query> --mode keyword [--limit N] [--valid-at ISO] [--db path]"
+            "usage: quipu search <query> --mode keyword [--graph IRI | --graphs IRI,IRI | --all-graphs] [--limit N] [--valid-at ISO] [--db path]"
         );
         std::process::exit(1);
     };
-    let store = crate::cli_open::open_store(db);
+    for flag in ["--graph", "--graphs"] {
+        if args.iter().any(|arg| arg == flag)
+            && flag_value(args, flag).is_none_or(|value| value.starts_with("--"))
+        {
+            eprintln!("error: {flag} requires a graph value");
+            std::process::exit(1);
+        }
+    }
     let mut input =
         serde_json::json!({"query":query,"mode":flag_value(args,"--mode").unwrap_or("keyword")});
     if let Some(limit) = flag_value(args, "--limit") {
@@ -27,6 +34,16 @@ pub fn cmd_search(args: &[String], db: &str) {
     if let Some(group) = flag_value(args, "--group") {
         input["group_ids"] = serde_json::json!([group]);
     }
+    if let Some(graph) = flag_value(args, "--graph") {
+        input["graph"] = serde_json::json!(graph);
+    }
+    if let Some(graphs) = flag_value(args, "--graphs") {
+        input["graphs"] = serde_json::json!(graphs.split(',').collect::<Vec<_>>());
+    }
+    if args.iter().any(|a| a == "--all-graphs") {
+        input["all_graphs"] = serde_json::json!(true);
+    }
+    let store = crate::cli_open::open_store(db);
     match quipu::tool_search(&store, &input) {
         Ok(out) => println!("{}", serde_json::to_string_pretty(&out).unwrap()),
         Err(e) => {

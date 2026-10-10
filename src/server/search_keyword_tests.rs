@@ -24,6 +24,7 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let path = db.to_str().unwrap();
     let mut store = Store::open(path).unwrap();
     store.search_config_mut().keyword = true;
+    store.search_config_mut().named_graphs = true;
     store.initialize_lexical_index().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
     store.set_embedding_provider(Arc::new(ForbiddenEmbed(calls.clone())));
@@ -39,6 +40,20 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     };
     store
         .transact(&[datum], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    let graph = store.graph_create("urn:test:keyword:graph").unwrap();
+    let named = quipu::Datum {
+        entity: store.intern("https://example.org/named-device").unwrap(),
+        attribute: store
+            .intern("http://www.w3.org/2000/01/rdf-schema#label")
+            .unwrap(),
+        value: quipu::Value::Str("walneedle namedneedle".into()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op: quipu::Op::Assert,
+    };
+    store
+        .transact_to_graph(&[named], "2026-01-01T00:00:00Z", None, None, graph)
         .unwrap();
     let readers = super::super::ReadPool::open(path, &store, 1);
     assert_eq!(readers.len(), 1);
@@ -57,19 +72,36 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
         release_rx.recv().unwrap();
     });
     ready_rx.recv().unwrap();
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        super::super::tools::search(
-            State(shared.clone()),
-            axum::Json(json!({"mode":"keyword","query":"walneedle"})),
+    let mut results = Vec::new();
+    for (input, count) in [
+        (json!({"mode":"keyword","query":"walneedle"}), 1),
+        (
+            json!({"mode":"keyword","query":"walneedle","graph":"urn:test:keyword:graph"}),
+            1,
         ),
-    )
-    .await;
+        (
+            json!({"mode":"keyword","query":"walneedle","all_graphs":true}),
+            2,
+        ),
+        (
+            json!({"mode":"keyword","query":"walneedle","graphs":["urn:test:keyword:graph"]}),
+            1,
+        ),
+    ] {
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            super::super::tools::search(State(shared.clone()), axum::Json(input)),
+        )
+        .await;
+        results.push((result, count));
+    }
     release_tx.send(()).unwrap();
     worker.join().unwrap();
-    let result = result.unwrap().unwrap();
-    assert_eq!(result.0["count"], 1);
-    assert_eq!(result.0["ranking"], "keyword");
-    assert!(result.0.get("ignored_fields").is_none());
+    for (result, count) in results {
+        let result = result.unwrap().unwrap();
+        assert_eq!(result.0["count"], count);
+        assert_eq!(result.0["ranking"], "keyword");
+        assert!(result.0.get("ignored_fields").is_none());
+    }
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }

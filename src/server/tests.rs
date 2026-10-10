@@ -1667,3 +1667,85 @@ async fn read_admission_bounds_concurrent_blocking_reads() {
 
 #[path = "source_claims_tests.rs"]
 mod source_claims;
+
+/// aegis-rcz5ib.10: the named-graph backfill is BOUNDED per call (pacing is
+/// the caller's), embeds only that graph's un-vectored entities, never touches
+/// ROOT, and reports what is left.
+#[test]
+fn graph_backfill_is_bounded_per_call_and_skips_root() {
+    use quipu::KnowledgeVectorStore as _;
+
+    let batches = Arc::new(parking_lot::Mutex::new(vec![]));
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(RecordingProvider {
+        batches: batches.clone(),
+    }));
+    store.embedding_config_mut().dimension = 8;
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<http://example.org/root> <http://www.w3.org/2000/01/rdf-schema#label> \"root entity\" ."[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+    let graph = store.graph_create("urn:test:graph:knowledge").unwrap();
+    let mut nt = String::new();
+    for i in 0..70 {
+        nt.push_str(&format!(
+            "<http://example.org/item{i:02}> <http://www.w3.org/2000/01/rdf-schema#label> \"item {i:02}\" .\n"
+        ));
+    }
+    // A ROOT entity may also have overlay facts and no vector. Adding its
+    // first vector here would change the previously observed ROOT ranking.
+    nt.push_str("<http://example.org/root> <http://www.w3.org/2000/01/rdf-schema#label> \"overlay label\" .\n");
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut store,
+        nt.as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    let first =
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
+    assert_eq!((first.embedded, first.remaining), (50, 20));
+    assert!(
+        batches.lock().iter().all(|&n| n <= 32),
+        "one ONNX call exceeded the 32-entity batch: {:?}",
+        batches.lock()
+    );
+    let second =
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
+    assert_eq!((second.embedded, second.remaining), (20, 0));
+    let third =
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
+    assert_eq!(
+        (third.embedded, third.remaining),
+        (0, 0),
+        "idempotent once complete"
+    );
+    assert_eq!(
+        shared.lock().vector_count().unwrap(),
+        70,
+        "only the graph's entities are embedded; the ROOT entity is untouched"
+    );
+    assert!(
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:missing", 50)
+            .is_err(),
+        "an unknown graph is refused"
+    );
+}
+
+#[path = "graph_backfill_temporal_tests.rs"]
+mod graph_backfill_temporal;
