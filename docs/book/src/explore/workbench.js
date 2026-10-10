@@ -3,6 +3,33 @@
 const $ = (selector) => document.querySelector(selector);
 let report = null;
 
+export function setQuery(text, title) {
+  const lines = text.split("\n");
+  const prefixes = lines.filter((line) => /^\s*(PREFIX|BASE)\s/i.test(line));
+  $("#sparql").dataset.prefixes = prefixes.join("\n");
+  $("#sparql").value = lines.filter((line) => !/^\s*(PREFIX|BASE)\s/i.test(line)).join("\n").trim();
+  $("#query-prefixes").textContent = prefixes.join("\n");
+  $("#query-prefix-block").hidden = !prefixes.length;
+  $("#query-prefix-block").open = false;
+  $("#question-title").textContent = title;
+  $("#sparql-out").hidden = false;
+  $("#bad-verdict").hidden = true;
+  $("#run").hidden = false;
+  $("#edit-query").hidden = false;
+}
+
+function verdict(out, heading, refusal, probe, reason) {
+  heading.textContent = "Refused. Nothing was written.";
+  const sentence = document.createElement("p"); sentence.textContent = reason;
+  const proof = document.createElement("p"); proof.className = "proof";
+  proof.textContent = "Follow-up query: 0 rows written. Existing graph control: 1 row.";
+  const disclosure = document.createElement("details");
+  const summary = document.createElement("summary"); summary.textContent = "Show engine output";
+  const feedback = document.createElement("pre"); feedback.textContent = refusal;
+  const query = document.createElement("pre"); query.textContent = probe;
+  disclosure.append(summary, feedback, query); out.append(sentence, proof, disclosure);
+}
+
 export function loadStarted(bytes) {
   report = null;
   for (const step of document.querySelectorAll("#load-cord li")) {
@@ -107,14 +134,22 @@ export function setupWorkbench() {
   }
 
   $("#bad-write").addEventListener("click", async () => {
+    const button = $("#bad-write");
+    button.disabled = true;
     showTab("ask");
+    const name = `explorer-refusal-probe-${crypto.randomUUID()}`;
+    const type = report?.shacl_compiled ? "InternalIdentifierPattern" : "UnknownExplorerDemoType";
+    // INSERT represents the node assertions attempted by the episode write.
+    setQuery(`INSERT DATA {\n  <http://aegis.gastown.local/ontology/${name}>\n    a <http://aegis.gastown.local/ontology/${type}> ;\n    <http://www.w3.org/2000/01/rdf-schema#label> "${name}" .\n}`, "Try a bad write");
+    $("#sparql-out").hidden = true;
+    $("#run").hidden = true;
+    $("#edit-query").hidden = true;
     const out = $("#bad-verdict");
     out.hidden = false;
     out.replaceChildren();
     const heading = document.createElement("h3");
     out.append(heading);
     if (!report?.shacl_compiled) {
-      const name = `explorer-vocabulary-probe-${crypto.randomUUID()}`;
       const probe = `SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#label> "${name}" }`;
       let refusal = null;
       try {
@@ -130,25 +165,17 @@ export function setupWorkbench() {
           || after.rows?.length !== 0 || !positive.rows?.length) {
           throw new Error("Vocabulary refusal and zero writes were not established");
         }
-        heading.textContent = "Refused: unknown type";
-        const feedback = document.createElement("pre"); feedback.textContent = refusal;
-        const query = document.createElement("pre"); query.textContent = probe;
-        out.append(feedback, query, document.createTextNode(
-          "Follow-up query: 0 rows written. Existing graph control: 1 row. Full SHACL refusal arrives with the full-feature engine.",
-        ));
+        verdict(out, heading, refusal, probe, "UnknownExplorerDemoType isn't a type this graph knows.");
+        out.append(document.createTextNode("Full SHACL refusal arrives with the full-feature engine."));
       } catch (error) {
         heading.textContent = "Could not establish the refusal";
         out.append(document.createTextNode(error.message));
-      }
+      } finally { button.disabled = false; }
       return;
     }
-    const button = $("#bad-write");
-    button.disabled = true;
-    const name = `explorer-shacl-probe-${crypto.randomUUID()}`;
     // Publication policy shapes require regex and a block tier. The deliberate
     // omission must be rejected by SHACL, not by an unknown-type front door.
     const probe = `SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#label> "${name}" }`;
-    const query = document.createElement("pre"); query.textContent = probe; out.append(query);
     try {
       const before = await window.quipu.query(probe);
       if (!Array.isArray(before.rows) || before.rows.length !== 0) throw new Error("Probe is not fresh");
@@ -165,9 +192,7 @@ export function setupWorkbench() {
         || !Array.isArray(after.rows) || after.rows.length !== 0 || !positive.rows?.length) {
         throw new Error("The engine did not establish SHACL refusal plus absence behind a positive control");
       }
-      heading.textContent = "Refused by the loaded SHACL shapes";
-      const feedback = document.createElement("pre"); feedback.textContent = refusal;
-      out.append(feedback, document.createTextNode("Follow-up query: 0 rows written. Existing graph control: 1 row."));
+      verdict(out, heading, refusal, probe, "The policy rule is missing fields required by the loaded SHACL shapes.");
     } catch (error) {
       heading.textContent = "Demonstration could not establish the promised result";
       out.append(document.createTextNode(error.message));

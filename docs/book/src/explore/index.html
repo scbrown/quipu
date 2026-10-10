@@ -53,6 +53,7 @@
       <div class="body">
         <div class="row" id="canned" aria-label="Starter questions"></div>
         <textarea id="sparql" spellcheck="false"></textarea>
+        <details id="query-prefix-block"><summary>Show prefixes</summary><pre id="query-prefixes"></pre></details>
         <div class="row"><button class="go" id="run">Run</button><button id="edit-query">Edit query</button>
           <span class="muted" style="font-size:12px">
             Reads only. Nothing you type here leaves your browser.</span></div>
@@ -144,6 +145,7 @@
           <button class="go" id="download-pack">Download .qpack.tar.gz</button>
           <button id="download-nt">Download export.nt</button>
         </div>
+        <p id="export-status" class="note" role="status"></p>
 
         <h3>Propose these edits as a pull request</h3>
         <p class="note">

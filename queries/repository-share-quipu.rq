@@ -43,4 +43,14 @@ WHERE {
   # both endpoints and literal mentions instead of renaming entity identity.
   FILTER(!REGEX(STR(?s), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
   FILTER(!REGEX(STR(?o), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  # Exclude the whole node when a required label contains an internal ID.
+  # Dropping only its label would leave a typed, SHACL-invalid fragment.
+  MINUS {
+    ?s ?internalPredicate ?internalValue .
+    FILTER(REGEX(STR(?internalValue), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  }
+  MINUS {
+    ?o ?targetPredicate ?targetValue .
+    FILTER(REGEX(STR(?targetValue), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  }
 }

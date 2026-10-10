@@ -1,5 +1,5 @@
 import { createConstellation } from "./constellation.js";
-import { setupWorkbench, loadStarted, loaded } from "./workbench.js";
+import { setupWorkbench, loadStarted, loaded, setQuery } from "./workbench.js";
 
 setupWorkbench();
 
@@ -417,9 +417,6 @@ async function afterWrite(item, outcome, description) {
   await constellation.load();
   drawNeighbourhood(item);
   await refreshExport();
-  $("#sparql").value = CANNED[0].sparql;
-  $("#question-title").textContent = CANNED[0].name;
-  $("#starter-questions button")?.setAttribute("aria-pressed", "true");
   await runSparql();
 }
 
@@ -696,6 +693,10 @@ function download(name, blob) {
 }
 
 async function downloadPack() {
+  const button = $("#download-pack");
+  button.disabled = true;
+  button.textContent = "Building pack…";
+  $("#export-status").textContent = "Building your share pack in this tab…";
   editNote("Building the pack…");
   try {
     const bytes = await ask({ cmd: "exportPack" });
@@ -705,7 +706,14 @@ async function downloadPack() {
     editNote(`Downloaded ${fmt(bytes.byteLength)} bytes. `
       + "Stage it locally: `quipu import <file> --db your.db` "
       + "(load the matching shapes in your database first; promotion is separate).");
-  } catch (err) { editNote(err.message, true); }
+    $("#export-status").textContent = `Downloaded ${fmt(bytes.byteLength)} bytes.`;
+  } catch (err) {
+    editNote(err.message, true);
+    $("#export-status").textContent = "Export refused by the graph's policy. Inspect the editor's report for details.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Download .qpack.tar.gz";
+  }
 }
 
 async function downloadNtriples() {
@@ -731,13 +739,13 @@ function wireShowQuery(sel, sparql) {
   if (!link) return;
   link.onclick = (e) => {
     e.preventDefault();
-    $("#sparql").value = sparql;
+    setQuery(sparql, "Inspect this query");
     $("#sparql").scrollIntoView({ behavior: "smooth", block: "center" });
   };
 }
 
 async function runSparql() {
-  const sparql = $("#sparql").value;
+  const sparql = ($("#sparql").dataset.prefixes || "") + "\n" + $("#sparql").value;
   const out = $("#sparql-out");
   out.replaceChildren(el("p", { class: "muted", text: "running…" }));
   const t0 = performance.now();
@@ -792,6 +800,9 @@ async function loadPack(bytes, source) {
   await constellation.load();
   await renderBrowser();
   await refreshExport();
+  setQuery(CANNED[0].sparql, CANNED[0].name);
+  $("#starter-questions button")?.setAttribute("aria-pressed", "true");
+  await runSparql();
   reportReleaseFreshness(report.manifest.producer.version);
 }
 
@@ -819,15 +830,14 @@ async function boot() {
       : `The WebAssembly worker did not start: ${err.message}`);
     return;
   }
-  $("#sparql").value = CANNED[0].sparql;
+  setQuery(CANNED[0].sparql, CANNED[0].name);
   $("#run").addEventListener("click", runSparql);
   const canned = $("#canned");
   for (const c of CANNED) {
     canned.append(el("button", {
       class: "canned", text: c.name,
       onclick: () => {
-        $("#sparql").value = c.sparql;
-        $("#question-title").textContent = c.name;
+        setQuery(c.sparql, c.name);
         runSparql();
       },
     }));

@@ -27,7 +27,7 @@ button,input,textarea,select { font:inherit; color:inherit; }
 button,summary { cursor:pointer; }
 button { border:1px solid var(--line); border-radius:7px; background:var(--panel); padding:7px 12px; }
 button:hover { background:var(--indigo-soft); }
-button:disabled { opacity:.55; cursor:default; }
+button:disabled { opacity:1; color:var(--muted); background:var(--sunk); border-color:var(--line); cursor:default; }
 :focus-visible { outline:3px solid var(--indigo); outline-offset:3px; }
 .top,.top nav,.row,.graph-tools { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .top { margin-bottom:28px; }
@@ -70,6 +70,8 @@ textarea[readonly] { border-color:transparent; }
 input { background:var(--sunk); border:1px solid var(--line); border-radius:6px; padding:8px; max-width:100%; }
 input[type="search"],input[type="url"] { width:100%; }
 .go { background:var(--indigo); color:var(--panel); border-color:var(--indigo); }
+.go:hover:not(:disabled) { background:var(--indigo); color:var(--panel); filter:brightness(1.08); }
+button:disabled:hover { background:var(--sunk); color:var(--muted); }
 #sparql-out { overflow:auto; margin-top:14px; }
 table { border-collapse:collapse; width:100%; font-size:12px; }
 th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
@@ -84,6 +86,9 @@ th { background:var(--sunk); }
 #node-card p,#node-card blockquote { color:var(--muted); }
 #node-card .node-links { max-height:190px; overflow:auto; margin:10px 0; }
 #question-title { margin-top:0; }
+#query-prefix-block { margin:0 0 10px; }
+#query-prefixes { font-size:11px; overflow-wrap:anywhere; white-space:pre-wrap; }
+.proof { padding:10px; border:1px solid var(--ok); border-radius:6px; color:var(--ok); background:var(--panel); }
 #facts-drawer { width:min(760px,94vw); max-height:85vh; overflow:auto; color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:12px; }
 #facts-drawer::backdrop { background:#0008; }
 #facts-drawer section { margin-top:16px; }
