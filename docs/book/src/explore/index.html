@@ -43,7 +43,7 @@
 <main hidden>
 <div class="bench">
   <aside class="pane starters"><h2>Start here</h2><div id="starter-questions"></div>
-  <button id="bad-write" class="bad-control">Try a bad write →</button>
+  <button id="bad-write" class="bad-control" aria-pressed="false">Try a bad write →</button>
   <p class="muted" id="validation-summary">Checking this engine's validation capabilities.</p></aside>
   <div class="pane center">
   <div class="tabs" role="tablist" aria-label="Workbench"><button id="tab-ask" role="tab" aria-controls="view-ask" aria-selected="true" data-tab="ask">Ask</button><button id="tab-map" role="tab" aria-controls="view-map" aria-selected="false" data-tab="map">Map</button><button id="tab-inside" role="tab" aria-controls="view-inside" aria-selected="false" data-tab="inside">What's inside</button></div>
@@ -56,7 +56,7 @@
         <details id="query-prefix-block"><summary>Show prefixes</summary><pre id="query-prefixes"></pre></details>
         <div class="row"><button class="go" id="run">Run</button><button id="edit-query">Edit query</button>
           <span class="muted" style="font-size:12px">
-            Reads only. Nothing you type here leaves your browser.</span></div>
+            Runs in this tab only.</span></div>
         <div id="sparql-out"></div>
       </div>
     </section><div id="bad-verdict" hidden aria-live="polite"></div></div>

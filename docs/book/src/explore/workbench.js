@@ -16,6 +16,7 @@ export function setQuery(text, title) {
   $("#bad-verdict").hidden = true;
   $("#run").hidden = false;
   $("#edit-query").hidden = false;
+  $("#bad-write").setAttribute("aria-pressed", "false");
 }
 
 function verdict(out, heading, refusal, probe, reason) {
@@ -138,9 +139,14 @@ export function setupWorkbench() {
     button.disabled = true;
     showTab("ask");
     const name = `explorer-refusal-probe-${crypto.randomUUID()}`;
-    const type = report?.shacl_compiled ? "InternalIdentifierPattern" : "UnknownExplorerDemoType";
-    // INSERT represents the node assertions attempted by the episode write.
-    setQuery(`INSERT DATA {\n  <http://aegis.gastown.local/ontology/${name}>\n    a <http://aegis.gastown.local/ontology/${type}> ;\n    <http://www.w3.org/2000/01/rdf-schema#label> "${name}" .\n}`, "Try a bad write");
+    // A readable alias represents the fresh UUID node used in the actual
+    // episode. Its exact identity remains in the engine/probe disclosure.
+    const example = report?.shacl_compiled
+      ? "q:demo-policy a aegis:InternalIdentifierPattern ."
+      : "q:demo-widget a q:Widget .";
+    setQuery(`PREFIX q: <https://quipu.dev/knowledge/>\nPREFIX aegis: <http://aegis.gastown.local/ontology/>\nINSERT DATA {\n  ${example}\n}`, "Try a bad write");
+    for (const starter of $("#starter-questions").children) starter.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-pressed", "true");
     $("#sparql-out").hidden = true;
     $("#run").hidden = true;
     $("#edit-query").hidden = true;
@@ -157,7 +163,7 @@ export function setupWorkbench() {
         if (before.rows?.length !== 0) throw new Error("Probe is not fresh");
         try {
           await window.quipu.episode({ name, source: "interactive vocabulary refusal",
-            nodes: [{ name, type: "UnknownExplorerDemoType" }], edges: [] });
+            nodes: [{ name, type: "https://quipu.dev/knowledge/Widget" }], edges: [] });
         } catch (error) { refusal = error.message; }
         const after = await window.quipu.query(probe);
         const positive = await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1");
@@ -165,7 +171,7 @@ export function setupWorkbench() {
           || after.rows?.length !== 0 || !positive.rows?.length) {
           throw new Error("Vocabulary refusal and zero writes were not established");
         }
-        verdict(out, heading, refusal, probe, "UnknownExplorerDemoType isn't a type this graph knows.");
+        verdict(out, heading, refusal, probe, "q:Widget isn't a type this graph knows.");
         out.append(document.createTextNode("Full SHACL refusal arrives with the full-feature engine."));
       } catch (error) {
         heading.textContent = "Could not establish the refusal";
