@@ -71,6 +71,7 @@ All notable changes to this project will be documented in this file.
 - *(search)* Rank scoped SQLite candidates before top-K (#488)([575d035](https://github.com/scbrown/quipu/commit/575d035ddfe0c9b4ceb61c3d7cd72059eb13c294))
 - *(sparql)* CONSTRUCT template blank nodes are fresh per solution (#309)([e8a82b2](https://github.com/scbrown/quipu/commit/e8a82b2980d1bed5049fede3dd8011873da2ab8c))
 - *(provenance)* Govern episode references to existing work items (#329)([a404b89](https://github.com/scbrown/quipu/commit/a404b89698dbf5e0273ff5d3ca80932519364126))
+- Reconcile final release outputs and split the filter cache([56e3178](https://github.com/scbrown/quipu/commit/56e31789ad60074fa49044c05971a9f9989d6e9a))
 
 ### Miscellaneous
 
