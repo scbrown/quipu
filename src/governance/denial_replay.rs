@@ -126,7 +126,7 @@ impl VerdictReplay {
                     && self.refused == Some(true)
                     && self.same_rules == Some(true)
                     && self.same_post_state == Some(true)
-                    && self.seal != Some(Seal::Invalid)
+                    && self.seal == Some(Seal::Valid)
             }
             Basis::AttestationOnly(_) => false,
         }
@@ -513,4 +513,35 @@ fn check_seal(store: &Store, entry: &Entry) -> Result<Seal> {
             Seal::Invalid
         },
     )
+}
+
+#[cfg(test)]
+mod seal_contract_tests {
+    use super::*;
+
+    #[test]
+    fn quarantine_rederivation_requires_a_valid_seal() {
+        let mut replay = VerdictReplay {
+            verdict: String::new(),
+            policy: String::new(),
+            target: String::new(),
+            recorded: "deny".into(),
+            basis: Basis::Quarantined {
+                entry: 1,
+                delta: "presented",
+            },
+            replayed: Some("deny".into()),
+            refused: Some(true),
+            same_rules: Some(true),
+            same_post_state: Some(true),
+            rules_in_force: Some(true),
+            seal: None,
+        };
+        for seal in [None, Some(Seal::Unverifiable), Some(Seal::Invalid)] {
+            replay.seal = seal;
+            assert!(!replay.rederived());
+        }
+        replay.seal = Some(Seal::Valid);
+        assert!(replay.rederived());
+    }
 }
