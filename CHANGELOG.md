@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - *(hooks)* Quipu owns its session-capture hook: hook session-capture + hooks bundle|install|uninstall|status (#448)([03e0185](https://github.com/scbrown/quipu/commit/03e018575a57cb180d5b476b422cd20fcf6f1f88))
 - *(search)* Transactional SQLite FTS5 keyword index (#449)([adc448c](https://github.com/scbrown/quipu/commit/adc448cd9ddf53ab9f6c82ed185b0c9b422e6581))
 - *(shapes)* TextRule exemptions: exemptRepo, exemptLineMarker, and declare exemptPathRegex (#274)([a2bbd72](https://github.com/scbrown/quipu/commit/a2bbd727a512b08a93f10e27429c20a662333e2b))
+- *(audit)* Detect committed changes that bypass path enforcement (#397)([6023a92](https://github.com/scbrown/quipu/commit/6023a920c79dde56f67949229fc4ec7e4196b941))
 
 
 
