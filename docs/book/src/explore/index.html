@@ -48,6 +48,7 @@
   <div class="pane center">
   <div class="tabs" role="tablist" aria-label="Workbench"><button id="tab-ask" role="tab" aria-controls="view-ask" aria-selected="true" data-tab="ask">Ask</button><button id="tab-map" role="tab" aria-controls="view-map" aria-selected="false" data-tab="map">Map</button><button id="tab-inside" role="tab" aria-controls="view-inside" aria-selected="false" data-tab="inside">What's inside</button></div>
   <div id="view-ask" role="tabpanel" aria-labelledby="tab-ask"><section>
+      <h3 id="question-title">How does the vision guide code?</h3>
       <h2>SPARQL <span class="note">— against the copy in this tab</span></h2>
       <div class="body">
         <div class="row" id="canned" aria-label="Starter questions"></div>
@@ -108,21 +109,18 @@
     </section></div>
   </div>
   <aside class="pane inspector"><h2>Selected node</h2><article id="node-card" aria-live="polite" aria-label="Selected node"><p class="muted">Choose a node in the map or a file inside the pack.</p></article>
-  <details open><summary>Inspect and edit facts</summary><section>
+  <dialog id="facts-drawer"><button id="facts-close">Close inspector</button><section>
       <h2>Edit the facts <span class="note" id="facts-subject"></span>
         <a href="#" id="facts-showq">show the query</a></h2>
       <div class="body">
         <p class="muted" style="font-size:12.5px;margin-bottom:12px">
-          The store is in your tab, so this is safe and it is also <em>real</em>: each button
-          calls a genuine Quipu write — <code class="mono">tool_set</code>,
-          <code class="mono">tool_retract</code> — the same functions the REST API exposes. The
-          closed-vocabulary gate applies, which is worth seeing rather than working around: what
-          you may add is bounded by the shapes the sender shipped with the pack.
+          Edit this node's facts in your local copy. Download your changes from
+          the Take it with you card when you are ready.
         </p>
         <div id="facts"></div>
         <p id="edit-note"></p>
       </div>
-    </section></details>
+    </section></dialog>
   <details id="pack-provenance"><summary>Pack provenance and validation</summary><section>
     <h2>Provenance <span class="note">— what you are actually looking at</span></h2>
     <div class="body">

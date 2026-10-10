@@ -36,8 +36,11 @@ WHERE {
     VALUES ?s {
       aegis:repo_quipu
       aegis:repo-embedded-knowledge-databases-directive-2026-09-03
-      aegis:aegis-otg3xz.4
     }
     ?s ?p ?o .
   }
+  # Work tracking identifiers are not public repository knowledge. Filter
+  # both endpoints and literal mentions instead of renaming entity identity.
+  FILTER(!REGEX(STR(?s), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
+  FILTER(!REGEX(STR(?o), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))
 }

@@ -307,6 +307,7 @@ async function selectFile(item) {
   body.replaceChildren(el("p", { class: "muted", text: "querying…" }));
   drawNeighbourhood(item);
   renderFacts(item);
+  if (!$("#facts-drawer").open) $("#facts-drawer").showModal();
   if (item.iri.startsWith("https://quipu.dev/knowledge/")) {
     body.replaceChildren(el("p", { text: "This is contributor knowledge. Its source and related nodes are in the constellation card; its editable facts are below." }));
     wireShowQuery("#detail-showq", factsQuery(item.iri));
@@ -416,6 +417,10 @@ async function afterWrite(item, outcome, description) {
   await constellation.load();
   drawNeighbourhood(item);
   await refreshExport();
+  $("#sparql").value = CANNED[0].sparql;
+  $("#question-title").textContent = CANNED[0].name;
+  $("#starter-questions button")?.setAttribute("aria-pressed", "true");
+  await runSparql();
 }
 
 async function writeSet(item, predicate, value) {
@@ -820,7 +825,11 @@ async function boot() {
   for (const c of CANNED) {
     canned.append(el("button", {
       class: "canned", text: c.name,
-      onclick: () => { $("#sparql").value = c.sparql; runSparql(); },
+      onclick: () => {
+        $("#sparql").value = c.sparql;
+        $("#question-title").textContent = c.name;
+        runSparql();
+      },
     }));
   }
   registerServer();

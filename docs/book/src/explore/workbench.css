@@ -82,6 +82,11 @@ th { background:var(--sunk); }
 #node-card { background:transparent; border:0; padding:0; min-height:90px; }
 #node-card h3 { color:var(--fg); }
 #node-card p,#node-card blockquote { color:var(--muted); }
+#node-card .node-links { max-height:190px; overflow:auto; margin:10px 0; }
+#question-title { margin-top:0; }
+#facts-drawer { width:min(760px,94vw); max-height:85vh; overflow:auto; color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:12px; }
+#facts-drawer::backdrop { background:#0008; }
+#facts-drawer section { margin-top:16px; }
 #node-card blockquote { padding-left:12px; border-left:2px solid var(--fiber); }
 #node-card .node-links button { width:100%; white-space:normal; margin-bottom:5px; }
 .inspector details { margin-top:16px; border-top:1px solid var(--line); padding-top:10px; }

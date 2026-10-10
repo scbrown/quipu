@@ -45,6 +45,7 @@ export function loaded(value) {
 }
 
 export function setupWorkbench() {
+  $("#facts-close").addEventListener("click", () => $("#facts-drawer").close());
   const showTab = (name) => {
     for (const button of document.querySelectorAll("[data-tab]")) {
       const selected = button.dataset.tab === name;
@@ -113,11 +114,32 @@ export function setupWorkbench() {
     const heading = document.createElement("h3");
     out.append(heading);
     if (!report?.shacl_compiled) {
-      heading.textContent = "SHACL demonstration unavailable in this engine build";
-      out.append(document.createTextNode(
-        "The current browser can check vocabulary, but that is not SHACL validation. "
-        + "This control requires the full-feature engine before it can demonstrate a shape refusal.",
-      ));
+      const name = `explorer-vocabulary-probe-${crypto.randomUUID()}`;
+      const probe = `SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#label> "${name}" }`;
+      let refusal = null;
+      try {
+        const before = await window.quipu.query(probe);
+        if (before.rows?.length !== 0) throw new Error("Probe is not fresh");
+        try {
+          await window.quipu.episode({ name, source: "interactive vocabulary refusal",
+            nodes: [{ name, type: "UnknownExplorerDemoType" }], edges: [] });
+        } catch (error) { refusal = error.message; }
+        const after = await window.quipu.query(probe);
+        const positive = await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1");
+        if (!refusal || !/unknown|ungoverned|vocabulary|type/i.test(refusal)
+          || after.rows?.length !== 0 || !positive.rows?.length) {
+          throw new Error("Vocabulary refusal and zero writes were not established");
+        }
+        heading.textContent = "Refused: unknown type";
+        const feedback = document.createElement("pre"); feedback.textContent = refusal;
+        const query = document.createElement("pre"); query.textContent = probe;
+        out.append(feedback, query, document.createTextNode(
+          "Follow-up query: 0 rows written. Existing graph control: 1 row. Full SHACL refusal arrives with the full-feature engine.",
+        ));
+      } catch (error) {
+        heading.textContent = "Could not establish the refusal";
+        out.append(document.createTextNode(error.message));
+      }
       return;
     }
     const button = $("#bad-write");

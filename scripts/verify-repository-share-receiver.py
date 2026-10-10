@@ -104,6 +104,8 @@ def catalogue_controls(binary, work):
 
 
 def verify(binary, share, db, work):
+    if re.search(r"(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]", (share / "export.nt").read_text()):
+        raise RuntimeError("internal work identifiers escaped the public scope")
     query = (
         "SELECT (STR(?rule) AS ?iri) WHERE { ?rule a "
         "<http://aegis.gastown.local/ontology/InternalIdentifierPattern> }"
@@ -182,6 +184,7 @@ def verify(binary, share, db, work):
         "blocked_bytes_refused": True, "native_shapes_refused_incomplete_rule": True,
         "exact_rule_values_pinned": True, "missing_one_refused": True,
         "changed_label_regex_tier_refused": True,
+        "internal_work_ids_absent": True,
         "browser_shacl_claimed": False, "source_share": str(share),
     }))
 
