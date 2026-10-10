@@ -9,6 +9,7 @@ mod queries;
 mod read;
 pub(crate) mod search;
 mod search_anchor;
+mod search_fusion;
 mod search_ranking;
 mod shapes;
 mod write;

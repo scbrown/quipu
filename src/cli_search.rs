@@ -25,6 +25,25 @@ pub fn cmd_search(args: &[String], db: &str) {
             std::process::exit(1);
         }));
     }
+    for (flag, key) in [("--alpha", "alpha"), ("--rrf-k", "rrf_k")] {
+        if let Some(value) = flag_value(args, flag) {
+            let parsed = value
+                .parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite())
+                .unwrap_or_else(|| {
+                    eprintln!("error: {flag} must be finite numeric");
+                    std::process::exit(1);
+                });
+            input[key] = serde_json::json!(parsed);
+        }
+    }
+    if let Some(fusion) = flag_value(args, "--fusion") {
+        input["fusion"] = serde_json::json!(fusion);
+    }
+    if args.iter().any(|a| a == "--explain") {
+        input["explain"] = serde_json::json!(true);
+    }
     if let Some(at) = flag_value(args, "--valid-at") {
         input["valid_at"] = serde_json::json!(at);
     }

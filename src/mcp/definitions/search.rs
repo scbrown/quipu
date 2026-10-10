@@ -10,12 +10,15 @@ pub(super) fn defs() -> Vec<JsonValue> {
     vec![
         serde_json::json!({
             "name": "quipu_search",
-            "description": "Semantic vector search (default) or opt-in SQLite FTS5 keyword search. Keyword mode requires query text and an enabled, backfilled index; it needs no embedding provider.",
+            "description": "Semantic vector search (default), opt-in SQLite FTS5 keyword search, or configurable lexical/vector hybrid fusion. Keyword mode requires query text and an enabled, backfilled index; it needs no embedding provider.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "query": { "type": "string", "description": "Natural language search query (auto-embedded when EmbeddingProvider is attached)" },
-                    "mode": { "type": "string", "enum": ["semantic", "keyword"], "default": "semantic", "description": "Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true." },
+                    "mode": { "type": "string", "enum": ["semantic", "keyword", "hybrid"], "default": "semantic", "description": "Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true." },
+                    "alpha": { "type":"number", "minimum":0, "maximum":1, "description":"Semantic weight. Hybrid alpha=1 preserves semantic results exactly, alpha=0 returns keyword results." },
+                    "fusion": { "type":"string", "enum":["weighted","rrf"], "description":"Min-max score blend or weighted reciprocal rank fusion." },
+                    "rrf_k": { "type":"number", "exclusiveMinimum":0, "description":"Positive RRF constant; server default 60." },
                     "infer_types": { "type": "boolean", "description": "Keyword mode only: type scope includes subclass inference when true; defaults false (asserted full-IRI types only). Type tokens are always asserted; response marks both choices." },
                     "embedding": { "type": "array", "items": { "type": "number" }, "description": "Pre-computed query embedding vector (f32 array). Takes precedence over query." },
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
@@ -33,7 +36,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     ,"decay": { "type": "number", "description": "Per-hop multiplier in (0, 1] for decay mode (default 0.5)." }
                     ,"via": { "type": "array", "items": { "type": "string" }, "description": "Traverse only these predicate IRIs (replaces the default exclusions)." }
                     ,"direction": { "type": "string", "enum": ["both", "out", "in"], "description": "Edge direction to traverse (default both)." }
-                    ,"explain": { "type": "boolean", "description": "Add one shortest path from the anchor to each result." }
+                    ,"explain": { "type": "boolean", "description": "Return score components, matched lexical fields, applied filters and highlighted snippets; anchored search also returns a shortest path." }
                 }
             }
         }),

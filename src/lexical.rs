@@ -195,6 +195,10 @@ pub struct LexicalProgress {
 #[derive(Debug)]
 pub struct LexicalMatch {
     pub matched: VectorMatch,
+    /// Columns containing actual FTS token matches in the winning assertion.
+    pub matched_fields: Vec<String>,
+    /// Bounded FTS snippet with non-HTML match delimiters for safe rendering.
+    pub snippet: String,
     pub language: Option<String>,
     pub datatype: Option<String>,
     pub type_iri: Option<String>,
@@ -422,7 +426,7 @@ impl Store {
             return Err(Error::InvalidValue("named-graph keyword index needs an explicit bounded backfill upgrade".into()));
         }
         let expr = match_expression(query)?;
-        let sql = "SELECT f.e, coalesce(nullif(label,''),nullif(alt_label,''),nullif(description,''),nullif(attributes,''),nullif(type_names,''),iri_tokens), -bm25(lexical_fts), f.valid_from, f.valid_to, language, datatype, type_iri, f.g
+        let sql = "SELECT f.e, coalesce(nullif(label,''),nullif(alt_label,''),nullif(description,''),nullif(attributes,''),nullif(type_names,''),iri_tokens), -bm25(lexical_fts), f.valid_from, f.valid_to, language, datatype, type_iri, f.g, CASE WHEN highlight(lexical_fts,0,char(30),char(31)) != label THEN 'label,' ELSE '' END || CASE WHEN highlight(lexical_fts,1,char(30),char(31)) != alt_label THEN 'alt_label,' ELSE '' END || CASE WHEN highlight(lexical_fts,2,char(30),char(31)) != description THEN 'description,' ELSE '' END || CASE WHEN highlight(lexical_fts,3,char(30),char(31)) != attributes THEN 'attributes,' ELSE '' END || CASE WHEN highlight(lexical_fts,4,char(30),char(31)) != type_names THEN 'type_names,' ELSE '' END || CASE WHEN highlight(lexical_fts,5,char(30),char(31)) != iri_tokens THEN 'iri_tokens,' ELSE '' END, snippet(lexical_fts,-1,char(30),char(31),'…',32)
             FROM lexical_fts JOIN facts f ON f.rowid=lexical_fts.rowid
             WHERE lexical_fts MATCH ?1 AND f.g IN (SELECT value FROM json_each(?3)) AND f.op=1
             AND ((?2 IS NULL AND f.valid_to IS NULL) OR (?2 IS NOT NULL AND f.valid_from<=?2 AND (f.valid_to IS NULL OR f.valid_to>?2)))
@@ -446,6 +450,13 @@ impl Store {
                 continue;
             }
             out.push(LexicalMatch {
+                snippet: r.get(10)?,
+                matched_fields: r
+                    .get::<_, String>(9)?
+                    .split(',')
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_string)
+                    .collect(),
                 matched: VectorMatch {
                     entity_id,
                     text: r.get(1)?,

@@ -163,10 +163,27 @@ macro_rules! embed_handler {
             read_blocking(move || {
                 let original = i.clone();
                 let mut i = i;
-                if i.get("embedding").is_none()
-                    && !(stringify!($name) == "search"
-                        && i.get("mode").and_then(JsonValue::as_str) == Some("keyword"))
-                {
+                let no_embed = if stringify!($name) == "search" {
+                    let config = &s.search_config;
+                    let configured_mode = if config.mode == "hybrid" && !config.hybrid {
+                        "semantic"
+                    } else {
+                        config.mode.as_str()
+                    };
+                    let mode = i
+                        .get("mode")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or(configured_mode);
+                    mode == "keyword"
+                        || (mode == "hybrid"
+                            && i.get("alpha")
+                                .and_then(JsonValue::as_f64)
+                                .unwrap_or(config.alpha)
+                                == 0.0)
+                } else {
+                    false
+                };
+                if i.get("embedding").is_none() && !no_embed {
                     if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {
                         // The handle's startup copy: never the writer lock, which a
                         // long write can hold for minutes (aegis-hzh9rz).
