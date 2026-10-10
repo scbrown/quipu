@@ -4,9 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-10
+
 ### Added
 
-- *(sparql)* XSD casts, so xsd:integer(?x) and friends answer([0eba346](https://github.com/scbrown/quipu/commit/0eba3467317fe27be011f22289140787c15f7a78))
 - *(search)* Graph-anchored search behind a default-off flag (#438)([badedd4](https://github.com/scbrown/quipu/commit/badedd41f369877b5dfcc1c599499adc5739cd64))
 - *(merge)* Resolve conflicts with an emitted decisions file (#435)([ed911ec](https://github.com/scbrown/quipu/commit/ed911ec0550e7e9bd0a3f0369eeeffee0c1da799))
 - *(metrics)* Count committed writes by declared provenance (#447)([d80817d](https://github.com/scbrown/quipu/commit/d80817d606519eded43003da52de916f092ce50b))
@@ -14,6 +15,9 @@ All notable changes to this project will be documented in this file.
 - *(search)* Transactional SQLite FTS5 keyword index (#449)([adc448c](https://github.com/scbrown/quipu/commit/adc448cd9ddf53ab9f6c82ed185b0c9b422e6581))
 - *(shapes)* TextRule exemptions: exemptRepo, exemptLineMarker, and declare exemptPathRegex (#274)([a2bbd72](https://github.com/scbrown/quipu/commit/a2bbd727a512b08a93f10e27429c20a662333e2b))
 - *(audit)* Detect committed changes that bypass path enforcement (#397)([6023a92](https://github.com/scbrown/quipu/commit/6023a920c79dde56f67949229fc4ec7e4196b941))
+- *(sparql)* XSD casts, so xsd:integer(?x) and friends answer (#307)([f26f751](https://github.com/scbrown/quipu/commit/f26f751c2fe3d046bdf42c1a7b76d572cc7fa42c))
+- *(search)* Opt-in graph scope for semantic and keyword search (#452)([398b553](https://github.com/scbrown/quipu/commit/398b55305e464dd338379fbefb00521517da8058))
+- *(search)* Opt-in hybrid fusion with explain and snippets (#462)([3e7d6ec](https://github.com/scbrown/quipu/commit/3e7d6ec49de9442054a1d73a0cb75d8147ce63a6))
 
 
 
@@ -30,8 +34,6 @@ All notable changes to this project will be documented in this file.
 - *(update)* Enforce the vocabulary gate and SHACL on what a SPARQL update asserts, as /knot does (#422)([483cab8](https://github.com/scbrown/quipu/commit/483cab892acce6b06cb0f69b71d2ad137b78f5d8))
 - *(update)* Bound the whole-store copy an unsliceable update needs (#460)([a0c9b71](https://github.com/scbrown/quipu/commit/a0c9b714c523591d272081e2731c7d9fa6365083))
 - *(metrics)* Attribute authentication refusals and clarify provisioning (#457)([4bfed20](https://github.com/scbrown/quipu/commit/4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4))
-- *(sparql)* Preserve integer cast identity and refuse overflow([975fe7a](https://github.com/scbrown/quipu/commit/975fe7a56bd089abd20173e5395cda76ca9a0eb6))
-- *(sparql)* Validate date casts and numeric lexical boundaries([13fb619](https://github.com/scbrown/quipu/commit/13fb6191e14495d3b2c7806a411179ed9a8a27b5))
 - *(owl)* Derive scheduled closure outside the writer lock (#297)([d8b6757](https://github.com/scbrown/quipu/commit/d8b6757c379c31840aef1105bcd9cb0e2b8122a6))
 - *(observability)* Record request peers and provenance gaps (#484)([addcc33](https://github.com/scbrown/quipu/commit/addcc3376a90c9f5a10db0d5fe5dde4a88f96152))
 
@@ -46,11 +48,6 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive ledgers at 4bfed20a (#466)([83cdb96](https://github.com/scbrown/quipu/commit/83cdb961a3dbb69549d21be855c3cd66f42f5631))
 - *(conformance)* Re-derive ledgers at d8b6757c (#486)([50ae3a7](https://github.com/scbrown/quipu/commit/50ae3a7c19389d1b472327005154791ad037be1f))
 - *(conformance)* Re-derive ledgers at 6023a920 (#487)([6ec26c8](https://github.com/scbrown/quipu/commit/6ec26c807cb080bf5fdef2bcca2fb9267b4dfa05))
-- *(conformance)* Derive ledgers from current source([4759e72](https://github.com/scbrown/quipu/commit/4759e72d8d1c4293d999293bb8e2098a55ab604c))
-
-### Testing
-
-- *(sparql)* Publish constructor conformance results([eb5e11b](https://github.com/scbrown/quipu/commit/eb5e11b9061c020c85f584639cce94a7f4a052a1))
 
 ### Perf
 
