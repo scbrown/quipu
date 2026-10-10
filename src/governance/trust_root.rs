@@ -144,10 +144,10 @@ fn strings(store: &Store, entity: &str, predicate: &str) -> Result<Vec<String>> 
         if !attrs.contains(&f.attribute) {
             continue;
         }
-        if let Value::Str(s) | Value::Typed { lexical: s, .. } = f.value {
-            if !values.contains(&s) {
-                values.push(s);
-            }
+        if let Value::Str(s) | Value::Typed { lexical: s, .. } = f.value
+            && !values.contains(&s)
+        {
+            values.push(s);
         }
     }
     Ok(values)
