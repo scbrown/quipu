@@ -52,6 +52,8 @@
 //! (constraints Σ declares that the window never exercised). The gap is named
 //! rather than papered over: a checker that reported "coverage: pass" while
 //! testing something weaker would be the more dangerous artifact.
+//! The opt-in [`super::git_audit`] pass supplies commit/path observations for
+//! path-policy coverage; selector replay remains outside that pass.
 
 use crate::error::Result;
 use crate::store::Store;
@@ -66,6 +68,8 @@ pub use parse::{Evaluation, TraceRecord, parse_trace};
 pub enum Pass {
     /// Constraints cited versus constraints declared.
     Coverage,
+    /// Committed path changes reconciled against per-commit trace evidence.
+    GitCoverage,
     /// Class ↔ enforcement point, and trace versus Σ.
     Placement,
     /// Response taken versus response declared.
@@ -88,6 +92,7 @@ impl Pass {
     pub fn as_str(self) -> &'static str {
         match self {
             Pass::Coverage => "coverage",
+            Pass::GitCoverage => "git-coverage",
             Pass::Placement => "placement",
             Pass::Outcome => "outcome",
             Pass::Attribution => "attribution",
