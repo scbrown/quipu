@@ -24,6 +24,7 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let path = db.to_str().unwrap();
     let mut store = Store::open(path).unwrap();
     store.search_config_mut().keyword = true;
+    store.search_config_mut().anchored = true;
     store.search_config_mut().hybrid = true;
     store.search_config_mut().mode = "keyword".into();
     store.search_config_mut().named_graphs = true;
@@ -77,6 +78,14 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let mut results = Vec::new();
     for (input, count) in [
         (json!({"mode":"keyword","query":"walneedle"}), 1),
+        (
+            json!({"mode":"keyword","query":"walneedle","anchor":"https://example.org/device","anchor_mode":"filter","explain":true}),
+            1,
+        ),
+        (
+            json!({"mode":"hybrid","alpha":0,"query":"walneedle","anchor":"https://example.org/device"}),
+            1,
+        ),
         (json!({"query":"walneedle"}), 1),
         (json!({"mode":"hybrid","alpha":0,"query":"walneedle"}), 1),
         (
@@ -92,19 +101,24 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
             1,
         ),
     ] {
+        let ranking = if input.get("anchor").is_some() {
+            "anchored"
+        } else {
+            "keyword"
+        };
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             super::super::tools::search(State(shared.clone()), axum::Json(input)),
         )
         .await;
-        results.push((result, count));
+        results.push((result, count, ranking));
     }
     release_tx.send(()).unwrap();
     worker.join().unwrap();
-    for (result, count) in results {
+    for (result, count, ranking) in results {
         let result = result.unwrap().unwrap();
         assert_eq!(result.0["count"], count);
-        assert_eq!(result.0["ranking"], "keyword");
+        assert_eq!(result.0["ranking"], ranking);
         assert!(result.0.get("ignored_fields").is_none());
     }
     assert_eq!(calls.load(Ordering::SeqCst), 0);
