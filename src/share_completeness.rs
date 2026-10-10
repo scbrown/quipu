@@ -9,6 +9,22 @@
 //! and a boundary that exists only in prose is one a later contributor
 //! "completes".
 
+/// Forward-compatible receiver review schema contract.
+///
+/// This release recognizes upgraded stores without creating review state on
+/// startup. The lifecycle writer can execute this contract when activated.
+pub const IMPORT_REVIEW_SCHEMA_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS import_reviews (
+    share_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    notice_policy TEXT,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_import_reviews_pending ON import_reviews(state, first_seen);
+"#;
+
 /// What a reconstruction does with one store table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Disposition {
@@ -89,6 +105,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("decision_nonces", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
+    // Receiver-local review decisions and notice routes. A foreign pack must
+    // not install its producer's review position or silence local notices.
+    ("import_reviews", Disposition::Excluded),
     // Local derived-index cursor/highwater. A reconstructed store has its
     // own fact rowids and must start a new bounded backfill.
     ("lexical_progress", Disposition::Excluded),
