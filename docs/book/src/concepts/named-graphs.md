@@ -137,8 +137,13 @@ curl -s localhost:3030/datasets -X POST \
   dataset's members at resolve time; everything downstream reads the
   expanded set.
 - A dataset is never implicitly active — the ROOT-alone default is
-  untouched; you get a dataset's graphs only by naming it. A member naming
-  an unregistered graph contributes nothing.
+  untouched; you get a dataset's graphs only by naming it. Creating a dataset
+  with a member that names no registered graph is refused, and the refusal
+  names that member.
+- `urn:quipu:graph:root` is a valid member and reads the default graph, the
+  same as `FROM <urn:quipu:graph:root>`. A dataset of ROOT plus a named graph
+  is how a stored query reads the default graph AND that graph, without
+  hardcoding either in the query text.
 - Members may carry a declared ordering (`{"graph": …, "ord": N}`);
   duplicate ranks are refused rather than tiebroken silently. An empty
   dataset is refused.

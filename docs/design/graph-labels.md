@@ -275,6 +275,19 @@ semilattice of graphs carrying lattice-valued labels," and it is directly
 testable as a proptest over random graph sets. If it fails, composition has
 stopped being associative and every derived answer is suspect.
 
+**What the test does and does not prove (aegis-xfuch4.4).** The algebraic laws
+(homomorphism, idempotence, commutativity, associativity, identity) pin
+STRUCTURE, not DIRECTION: a meet replaced by `max`, which widens, satisfies all
+five. Only the two direction laws (`composition_never_widens`,
+`adding_a_graph_never_widens`) catch that sign error. CI therefore runs every
+law in `src/lattice_props.rs` at 10,000 seeded cases on the real meet and on a
+deliberately widening one, and asserts that the direction laws fail there. It
+publishes the counts, the generator strategy, the shrink calls and the minimal
+counterexamples as the `lattice-proptest-evidence` artifact and the
+`Test (default)` job summary. The guarded direction laws exercise their
+assertion only when both sides are declared: about 68% and 82% of cases at
+10,000. The artifact reports that fraction rather than the raw case count.
+
 ### 4.1 Surfacing
 
 `QueryResult`'s three variants stay untouched — many internal callers match on

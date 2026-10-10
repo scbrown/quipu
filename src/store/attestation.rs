@@ -81,8 +81,8 @@ impl Store {
         self.conn.execute(
             "INSERT INTO attestation_bindings
                  (session, agent, public_key, key_id, introducer,
-                  issued_at_epoch, expires_at_epoch, revoked)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                  issued_at_epoch, expires_at_epoch, revoked, allow_write)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 binding.session,
                 binding.agent,
@@ -96,6 +96,7 @@ impl Store {
                 i64::try_from(binding.issued_at_epoch).unwrap_or(i64::MAX),
                 i64::try_from(binding.expires_at_epoch).unwrap_or(i64::MAX),
                 i64::from(binding.revoked),
+                i64::from(binding.allow_write),
             ],
         )?;
         Ok(())
@@ -105,6 +106,21 @@ impl Store {
     /// is a fact about the past, and a revoked row refuses where a missing row
     /// would merely be unbound — the two are different findings for whoever is
     /// reading the refusal.
+    /// Grant or withdraw a binding's permission to SIGN HTTP WRITES
+    /// (aegis-bys8d1). Separate from registration so an existing share-producer
+    /// binding is never widened as a side effect of anything else.
+    pub fn attestation_set_write(&self, session: &str, allow: bool) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE attestation_bindings SET allow_write = ?2 WHERE session = ?1",
+            params![session, i64::from(allow)],
+        )?;
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err(Error::InvalidValue(format!("no session binding {session}")))
+        }
+    }
+
     pub fn attestation_revoke(&self, session: &str) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE attestation_bindings SET revoked = 1 WHERE session = ?1",
@@ -123,38 +139,7 @@ impl Store {
     /// holds on every read as well as every write. The column remains, because
     /// the uniqueness constraint above needs something to index.
     pub fn attestation_binding(&self, session: &str) -> Result<Option<SessionBinding>> {
-        let row = self
-            .conn
-            .query_row(
-                "SELECT agent, public_key, introducer, issued_at_epoch,
-                        expires_at_epoch, revoked
-                   FROM attestation_bindings WHERE session = ?1",
-                params![session],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, i64>(3)?,
-                        row.get::<_, i64>(4)?,
-                        row.get::<_, i64>(5)?,
-                    ))
-                },
-            )
-            .optional()?;
-        let Some((agent, public_key, introducer, issued, expires, revoked)) = row else {
-            return Ok(None);
-        };
-        let mut binding = SessionBinding::new(
-            agent,
-            session,
-            public_key,
-            introducer,
-            issued.unsigned_abs(),
-            expires.unsigned_abs(),
-        )?;
-        binding.revoked = revoked != 0;
-        Ok(Some(binding))
+        binding_on(&self.conn, session)
     }
 
     /// Every registered session binding, for the operator question a `claimed`
@@ -165,7 +150,7 @@ impl Store {
     pub fn attestation_bindings(&self) -> Result<Vec<SessionBinding>> {
         let mut stmt = self.conn.prepare(
             "SELECT session, agent, public_key, introducer, issued_at_epoch,
-                    expires_at_epoch, revoked
+                    expires_at_epoch, revoked, allow_write
                FROM attestation_bindings ORDER BY session",
         )?;
         let rows = stmt
@@ -178,11 +163,13 @@ impl Store {
                     row.get::<_, i64>(4)?,
                     row.get::<_, i64>(5)?,
                     row.get::<_, i64>(6)?,
+                    row.get::<_, i64>(7)?,
                 ))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let mut out = Vec::with_capacity(rows.len());
-        for (session, agent, public_key, introducer, issued, expires, revoked) in rows {
+        for (session, agent, public_key, introducer, issued, expires, revoked, allow_write) in rows
+        {
             let mut binding = SessionBinding::new(
                 agent,
                 session,
@@ -192,6 +179,7 @@ impl Store {
                 expires.unsigned_abs(),
             )?;
             binding.revoked = revoked != 0;
+            binding.allow_write = allow_write != 0;
             out.push(binding);
         }
         Ok(out)
@@ -219,6 +207,41 @@ impl Store {
     }
 }
 
+impl Store {
+    /// Settle a signed write's pending attestation on the WRITER connection:
+    /// re-check its binding and spend its nonce, once per request. Called when
+    /// the request takes the writer lock, so the check and the spend share the
+    /// lock hold of the work they authorise (aegis-bys8d1).
+    pub fn settle_attestation(
+        &self,
+        pending: &crate::transaction_auth::PendingAttestation,
+    ) -> Result<()> {
+        crate::transaction_auth::settle_on(&self.conn, pending, crate::time::epoch_secs())
+    }
+
+    /// Whether `nonce` is already spent for `session`. A READ: the cheap
+    /// pre-check a signed write runs before it queues for the writer. The
+    /// authoritative spend is still the insert made under the writer lock.
+    pub fn attestation_nonce_spent(&self, session: &str, nonce: &str) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM attestation_nonces WHERE session = ?1 AND nonce = ?2",
+                params![session, nonce],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Spend `nonce` durably, outside any savepoint. `Ok(false)` means it was
+    /// already spent. Used after a signed write completes, so a spend made
+    /// inside a savepoint that later rolled back cannot leave it replayable.
+    pub fn attestation_ensure_spent(&self, session: &str, nonce: &str) -> Result<bool> {
+        consume_nonce_on(&self.conn, session, nonce, crate::time::epoch_secs())
+    }
+}
+
 impl AttestationBindings for Store {
     fn binding(&self, session: &str) -> Result<Option<SessionBinding>> {
         self.attestation_binding(session)
@@ -234,29 +257,88 @@ impl AttestationBindings for Store {
     /// to the schema — and a check that cannot tell them apart would always
     /// give the reassuring one.
     fn consume_nonce(&self, session: &str, nonce: &str, now_epoch: u64) -> Result<bool> {
-        let consumed_at = i64::try_from(now_epoch).unwrap_or(i64::MAX);
-        let inserted = self.conn.execute(
-            "INSERT OR IGNORE INTO attestation_nonces (session, nonce, consumed_at_epoch)
-             VALUES (?1, ?2, ?3)",
-            params![session, nonce, consumed_at],
-        )?;
-        if inserted == 1 {
-            return Ok(true);
-        }
-        let present: Option<i64> = self
-            .conn
-            .query_row(
-                "SELECT 1 FROM attestation_nonces WHERE session = ?1 AND nonce = ?2",
-                params![session, nonce],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if present.is_some() {
-            Ok(false)
-        } else {
-            Err(Error::InvalidValue(format!(
-                "attestation nonce could not be recorded for session {session}"
-            )))
-        }
+        consume_nonce_on(&self.conn, session, nonce, now_epoch)
+    }
+}
+
+/// The binding for `session` on `conn` (the store's own connection or a
+/// savepoint on it), so a check made inside a write sees that write's view.
+pub(crate) fn binding_on(
+    conn: &rusqlite::Connection,
+    session: &str,
+) -> Result<Option<SessionBinding>> {
+    let row = conn
+        .query_row(
+            "SELECT agent, public_key, introducer, issued_at_epoch,
+                    expires_at_epoch, revoked, allow_write
+               FROM attestation_bindings WHERE session = ?1",
+            params![session],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((agent, public_key, introducer, issued, expires, revoked, allow_write)) = row else {
+        return Ok(None);
+    };
+    let mut binding = SessionBinding::new(
+        agent,
+        session,
+        public_key,
+        introducer,
+        issued.unsigned_abs(),
+        expires.unsigned_abs(),
+    )?;
+    binding.revoked = revoked != 0;
+    binding.allow_write = allow_write != 0;
+    Ok(Some(binding))
+}
+
+/// Spend `nonce` for `session` on `conn`: `Ok(true)` spent now, `Ok(false)`
+/// ALREADY spent (a replay), `Err` the replay state could not be consulted.
+///
+/// `INSERT OR IGNORE` swallows every constraint violation, not only the
+/// primary-key collision that means "replay". So a zero row count is not
+/// taken at face value: the row is read back, and its ABSENCE after an
+/// ignored insert is reported as an error rather than as a replay. Those two
+/// answers send a reader to opposite places, one to an attacker and one to
+/// the schema, and a check that cannot tell them apart would always give the
+/// reassuring one.
+pub(crate) fn consume_nonce_on(
+    conn: &rusqlite::Connection,
+    session: &str,
+    nonce: &str,
+    now_epoch: u64,
+) -> Result<bool> {
+    let consumed_at = i64::try_from(now_epoch).unwrap_or(i64::MAX);
+    let inserted = conn.execute(
+        "INSERT OR IGNORE INTO attestation_nonces (session, nonce, consumed_at_epoch)
+         VALUES (?1, ?2, ?3)",
+        params![session, nonce, consumed_at],
+    )?;
+    if inserted == 1 {
+        return Ok(true);
+    }
+    let present: Option<i64> = conn
+        .query_row(
+            "SELECT 1 FROM attestation_nonces WHERE session = ?1 AND nonce = ?2",
+            params![session, nonce],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if present.is_some() {
+        Ok(false)
+    } else {
+        Err(Error::InvalidValue(format!(
+            "attestation nonce could not be recorded for session {session}"
+        )))
     }
 }

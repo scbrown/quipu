@@ -20,6 +20,12 @@ pub struct DeltaFiles {
     pub update: String,
     /// Shapes for the resulting share.
     pub shapes: String,
+    /// The resulting share's complete `queries.ttl`, when it carries queries
+    /// (aegis-fxpbys.2). Carried whole, like shapes: a query added, replaced or
+    /// removed since the parent is simply what this member now says, sealed by
+    /// `result.queries_hash`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queries: Option<String>,
 }
 
 /// A verified delta from one full share to another.
@@ -148,6 +154,8 @@ pub struct DeltaPayload {
     pub update: String,
     /// `shapes.ttl` contents for the resulting share.
     pub shapes: String,
+    /// `queries.ttl` contents for the resulting share, if it carries queries.
+    pub queries: Option<String>,
 }
 
 impl DeltaPayload {
@@ -160,7 +168,7 @@ impl DeltaPayload {
     /// # Errors
     /// The manifest cannot be serialized.
     pub fn files(&self) -> Result<Vec<(String, String)>> {
-        Ok(vec![
+        let mut files = vec![
             (
                 "manifest.json".to_string(),
                 String::from_utf8(manifest_bytes(&self.manifest, true)?)
@@ -169,7 +177,11 @@ impl DeltaPayload {
             ("manifest.ttl".to_string(), manifest_turtle(&self.manifest)),
             (self.manifest.files.update.clone(), self.update.clone()),
             (self.manifest.files.shapes.clone(), self.shapes.clone()),
-        ])
+        ];
+        if let (Some(name), Some(queries)) = (&self.manifest.files.queries, &self.queries) {
+            files.push((name.clone(), queries.clone()));
+        }
+        Ok(files)
     }
 }
 
@@ -225,13 +237,15 @@ pub fn build_delta_with_limit(
     let result = build_share_payload(store, &opts)?;
     let update = update_text(parent_export_ntriples, &result.files["export.nt"]);
     if !update.is_empty() {
-        spargebra::SparqlParser::new()
-            .parse_update(&update)
-            .map_err(|e| {
-                Error::InvalidValue(format!("generated delta is not SPARQL Update: {e}"))
-            })?;
+        crate::sparql_structure::parse_update(spargebra::SparqlParser::new(), &update)?.map_err(
+            |e| Error::InvalidValue(format!("generated delta is not SPARQL Update: {e}")),
+        )?;
     }
     let shapes = result.files["shapes.ttl"].clone();
+    let queries = result
+        .files
+        .get(crate::share_queries::QUERIES_FILE)
+        .cloned();
     let mut manifest = DeltaManifest {
         schema: SCHEMA.into(),
         delta_id: String::new(),
@@ -242,6 +256,9 @@ pub fn build_delta_with_limit(
         files: DeltaFiles {
             update: "delta.ru".into(),
             shapes: "shapes.ttl".into(),
+            queries: queries
+                .as_ref()
+                .map(|_| crate::share_queries::QUERIES_FILE.to_string()),
         },
     };
     manifest.delta_id = sha256(&manifest_bytes(&manifest, false)?);
@@ -259,6 +276,7 @@ pub fn build_delta_with_limit(
         manifest,
         update,
         shapes,
+        queries,
     };
     let files: BTreeMap<_, _> = payload.files()?.into_iter().collect();
     let encoded_len = serde_json::to_vec(&files)
@@ -292,11 +310,8 @@ pub fn write_delta(
         &parent.export_ntriples,
         opts,
     )?;
-    let DeltaPayload {
-        manifest,
-        update,
-        shapes,
-    } = built;
+    let files = built.files()?;
+    let manifest = built.manifest;
     let out = Path::new(out_dir);
     if out.exists() {
         return Err(Error::InvalidValue(format!(
@@ -305,20 +320,12 @@ pub fn write_delta(
     }
     let build = PathBuf::from(format!("{out_dir}.building"));
     std::fs::create_dir_all(&build).map_err(|e| Error::Store(format!("delta create: {e}")))?;
-    let written = (|| -> Result<()> {
-        std::fs::write(
-            build.join("manifest.json"),
-            manifest_bytes(&manifest, true)?,
-        )
-        .map_err(|e| Error::Store(format!("delta manifest write: {e}")))?;
-        std::fs::write(build.join("manifest.ttl"), manifest_turtle(&manifest))
-            .map_err(|e| Error::Store(format!("delta RDF manifest write: {e}")))?;
-        std::fs::write(build.join("delta.ru"), update)
-            .map_err(|e| Error::Store(format!("delta update write: {e}")))?;
-        std::fs::write(build.join("shapes.ttl"), &shapes)
-            .map_err(|e| Error::Store(format!("delta shapes write: {e}")))?;
-        Ok(())
-    })();
+    // One file list, shared with the wasm producer (`DeltaPayload::files`), so
+    // the two cannot disagree about which members a delta has.
+    let written = files.iter().try_for_each(|(name, contents)| {
+        std::fs::write(build.join(name), contents)
+            .map_err(|e| Error::Store(format!("delta {name} write: {e}")))
+    });
     if let Err(error) = written {
         let _ = std::fs::remove_dir_all(&build);
         return Err(error);
@@ -359,9 +366,9 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
     }
     let mut result = lines(&parent.export_ntriples);
     if !update.is_empty() {
-        let parsed = spargebra::SparqlParser::new()
-            .parse_update(&update)
-            .map_err(|e| Error::InvalidValue(format!("delta update parse: {e}")))?;
+        let parsed =
+            crate::sparql_structure::parse_update(spargebra::SparqlParser::new(), &update)?
+                .map_err(|e| Error::InvalidValue(format!("delta update parse: {e}")))?;
         for operation in parsed.operations {
             match operation {
                 GraphUpdateOperation::DeleteData { data } => {
@@ -401,6 +408,21 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
             .map_err(|e| Error::Serialization(format!("delta result UTF-8: {e}")))?,
         shapes_turtle: std::fs::read_to_string(root.join(&manifest.files.shapes))
             .map_err(|e| Error::InvalidValue(format!("delta shapes read: {e}")))?,
+        // Sealed by `result.queries_hash`; the import's `verify_share` checks it.
+        queries_turtle: match manifest.files.queries.as_deref() {
+            Some(crate::share_queries::QUERIES_FILE) => Some(
+                std::fs::read_to_string(root.join(crate::share_queries::QUERIES_FILE))
+                    .map_err(|e| Error::InvalidValue(format!("delta queries read: {e}")))?,
+            ),
+            Some(other) => {
+                return Err(Error::InvalidValue(format!(
+                    "delta names an unsupported queries member: {other}"
+                )));
+            }
+            None => None,
+        },
+        query_namespace: None,
+        replace_queries: false,
         source: delta_dir.into(),
         actor: None,
         accept_exact: false,

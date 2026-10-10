@@ -719,8 +719,8 @@ fn no_attachment_facts_source_is_the_literal_facts_table() {
 
 #[test]
 fn graph_predicate_is_pushed_into_each_union_branch() {
-    // Acceptance 2. `idx_geav` exists per file — each database's own migration
-    // created it — so a graph-scoped read should SEARCH both files by index.
+    // Acceptance 2. Graph indexes exist per file — each database's own
+    // migration created them — so a graph-scoped read should SEARCH both by g.
     // Pushed outside the union instead, SQLite scans both files on every
     // triple pattern.
     //
@@ -757,10 +757,12 @@ fn graph_predicate_is_pushed_into_each_union_branch() {
 
     for file in ["main.facts", "shared.facts"] {
         assert!(
-            plan.iter()
-                .any(|l| l.contains(file) && l.contains("idx_geav") && l.contains("SEARCH")),
+            plan.iter().any(|l| l.contains(file)
+                && l.contains("SEARCH")
+                && l.contains("USING INDEX")
+                && l.contains("(g=?)")),
             "the graph predicate must reach INSIDE the branch for {file}, so \
-             that file's own idx_geav is used. Plan was: {plan_text}"
+             that file's own graph index is searched by g. Plan was: {plan_text}"
         );
     }
     assert!(
@@ -1332,4 +1334,49 @@ fn describe_attachments_reports_what_is_actually_mounted() {
         "the path is what an operator checks: {lines:?}"
     );
     assert!(lines[0].ends_with("ro"), "mounts are read-only: {lines:?}");
+}
+
+/// aegis-tl2q4j: a string FILTER narrowed through `terms` must search the
+/// attachment's term space too, or every attached subject silently drops out.
+#[test]
+fn string_filter_pushdown_sees_attached_terms() {
+    let scratch = Scratch::new("narrow");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+    let (a, _) = respaced_layer(&scratch, "a", "a", 4);
+    let store = Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only("first", &a.to_string_lossy())],
+    )
+    .unwrap();
+    let rows = |q: &str| {
+        let mut out: Vec<String> = query_temporal(&store, q, &TemporalContext::default())
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| {
+                let mut kv: Vec<String> = r.iter().map(|(k, v)| format!("{k}={v:?}")).collect();
+                kv.sort();
+                kv.join(" ")
+            })
+            .collect();
+        out.sort();
+        out
+    };
+    for test in [
+        "CONTAINS(STR(?s), \"entity\")",
+        "STRSTARTS(STR(?p), \"urn:a:\")",
+        "REGEX(?o, \"named$\")",
+    ] {
+        let pushed = format!("SELECT * WHERE {{ GRAPH ?g {{ ?s ?p ?o FILTER({test}) }} }}");
+        let plain =
+            format!("SELECT * WHERE {{ GRAPH ?g {{ ?s ?p ?o FILTER(({test}) || false) }} }}");
+        let got = rows(&pushed);
+        assert_eq!(got, rows(&plain), "{pushed}");
+        assert!(
+            got.iter()
+                .any(|r| r.contains("urn:a:") || r.contains("a named")),
+            "control: the attached layer answers {pushed}: {got:?}"
+        );
+    }
 }

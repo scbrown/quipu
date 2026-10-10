@@ -1,0 +1,191 @@
+name: MCP Registry
+
+# Lists quipu in the official MCP Registry (registry.modelcontextprotocol.io),
+# which feeds the GitHub MCP Registry and so VS Code's `@mcp` gallery
+# (aegis-gys8sx, aegis-ro425e). Two steps, in this order, because the registry
+# verifies ownership by pulling the image and reading its LABEL:
+#
+#   1. push ghcr.io/scbrown/quipu:<version>, built from the release binaries
+#   2. `mcp-publisher publish` server.json, stamped with that version
+#
+# WHY OCI AND NOTHING ELSE (yet). VS Code installs only npm, pypi, oci and nuget
+# packages in one click; it filters `mcpb` and `cargo` out of the gallery entry
+# (src/vs/platform/mcp/common/mcpGalleryService.ts, toSupportedPackageRegistryType).
+# Of those four, OCI is the only one the Linux-only release can back today. An
+# npm or mcpb package that downloads a per-OS binary needs the macOS and Windows
+# release targets first (aegis-oifbu9). `cargo` is not listed because
+# `cargo install quipu-ai` builds `quipu` WITHOUT `quipu-server`, which needs
+# `--features full` and server.json has no way to ask for features, so the
+# installed `quipu mcp` could never start.
+#
+# One definition, two callers: release.yml calls it on every real release, and a
+# human can dispatch it for an existing tag (the first publish, or a retry).
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag whose binaries go in the image (quipu-ai-v<version>)"
+        required: true
+        type: string
+      publish:
+        description: "Publish server.json to the registry after pushing the image"
+        required: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, e.g. quipu-ai-v0.9.0"
+        required: true
+        type: string
+      publish:
+        description: "Also publish to the MCP Registry (main only)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/scbrown/quipu
+
+jobs:
+  image:
+    name: OCI image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the version from the tag
+        id: version
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#quipu-ai-v}"
+          if [ "$VERSION" = "$TAG" ] || ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'${TAG}' is not a quipu-ai-v<version> release tag"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      # The image packages the release TARBALL, checksum-verified, so what the
+      # registry installs is byte-for-byte what the release published and smoked.
+      - name: Stage the release binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          NAME="quipu-${TAG}-x86_64-unknown-linux-gnu"
+          mkdir -p dl oci-context
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dl \
+            --pattern "${NAME}.tar.gz" --pattern "${NAME}.tar.gz.sha256"
+          ( cd dl && sha256sum -c "${NAME}.tar.gz.sha256" )
+          tar -C dl -xzf "dl/${NAME}.tar.gz"
+          cp "dl/${NAME}/quipu" "dl/${NAME}/quipu-server" oci-context/
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docker build --platform linux/amd64 -f packaging/oci/Dockerfile \
+            -t "${IMAGE}:${VERSION}" oci-context
+
+      # The exact command VS Code writes after an Install click, including the
+      # named volume, run twice so a database that does not persist is caught.
+      # This is also what refuses a tag that predates `quipu mcp` (anything up
+      # to 0.8.1): the entrypoint cannot start, and nothing gets pushed.
+      - name: Smoke-test the image as a registry client runs it
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          VOL="quipu-smoke-${GITHUB_RUN_ID}"
+          trap 'docker volume rm -f "$VOL" >/dev/null' EXIT
+          timeout 180 python3 scripts/ci/mcp-stdio-smoke.py -- \
+            docker run -i --rm -v "${VOL}:/data" "${IMAGE}:${VERSION}"
+
+      # `latest` moves only for the newest release, so re-running this for an
+      # old tag cannot roll `docker run ...:latest` users backwards.
+      - name: Push to ghcr.io
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "${IMAGE}:${VERSION}"
+          NEWEST="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
+          if [ "$NEWEST" = "$TAG" ]; then
+            docker tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
+            docker push "${IMAGE}:latest"
+          else
+            echo "not moving :latest; the newest release is ${NEWEST}"
+          fi
+
+  registry:
+    name: MCP Registry
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # `mcp-publisher login github-oidc` trades this for a registry token
+      # scoped to io.github.scbrown/*; no secret is stored anywhere.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned and checksum-verified: this job holds a token that can publish
+      # every io.github.scbrown/* server, so "latest" from a curl is not good
+      # enough. Bump both lines together. If publish ever fails with "invalid
+      # audience", the pin has fallen behind the registry.
+      - name: Install mcp-publisher
+        env:
+          MCP_PUBLISHER_VERSION: "1.8.1"
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+        run: |
+          set -euo pipefail
+          curl -fsSLo mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c
+          tar -xzf mcp-publisher.tar.gz mcp-publisher
+          ./mcp-publisher --version
+
+      # The committed version is a placeholder (see scripts/ci/mcp-registry.py
+      # for why nobody hand-edits it); the tag is the source of truth.
+      - name: Stamp and validate server.json
+        env:
+          VERSION: ${{ needs.image.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/mcp-registry.py check
+          python3 scripts/ci/mcp-registry.py stamp "$VERSION" server.json server.json
+          python3 scripts/ci/mcp-registry.py check
+          ./mcp-publisher validate server.json
+          cat server.json
+
+      # Only from main: a dispatch from a branch runs that branch's copy of this
+      # file with the same OIDC identity, and must not be able to publish.
+      - name: Publish
+        if: inputs.publish && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish server.json
+
+      - name: Report a skipped publish
+        if: ${{ !(inputs.publish && github.ref == 'refs/heads/main') }}
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          echo "::notice::image pushed and server.json validated; NOT published (publish=${PUBLISH}, ref=${GITHUB_REF}). Releases publish once the repository variable MCP_REGISTRY_PUBLISH is 'true'."

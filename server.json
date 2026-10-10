@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.scbrown/quipu",
+  "title": "Quipu",
+  "description": "Local knowledge graph memory for agents. SHACL rules refuse bad facts; SPARQL and time travel.",
+  "repository": {
+    "url": "https://github.com/scbrown/quipu",
+    "source": "github"
+  },
+  "websiteUrl": "https://scbrown.github.io/quipu/",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/scbrown/quipu/main/assets/logo.svg",
+      "mimeType": "image/svg+xml"
+    }
+  ],
+  "version": "0.8.1",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/scbrown/quipu:0.8.1",
+      "runtimeHint": "docker",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-v",
+          "value": "quipu-data:/data",
+          "description": "Named Docker volume that holds the knowledge graph at /data/quipu.db, so it survives restarts"
+        }
+      ]
+    }
+  ]
+}

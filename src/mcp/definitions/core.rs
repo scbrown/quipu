@@ -98,6 +98,37 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "required": ["set_tsv", "graph_a", "graph_b", "expected_version"]
             }
         }),
+        // Share-merge conflict resolution (aegis-yavo9c): a READ that emits and
+        // proposes decisions, and the single writer that applies them.
+        serde_json::json!({
+            "name": "quipu_merge_decisions",
+            "description": "READ. The conflicts of merging an incoming share into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to ROOT's graph hash. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. Writes nothing.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "incoming": { "type": "object", "description": "The share to merge. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
+                    "base": { "type": "object", "description": "Its parent share. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
+                    "propose": { "type": "boolean", "description": "Fill each row's proposal (never its decision)." }
+                },
+                "required": ["incoming", "base"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_merge_apply",
+            "description": "WRITE. Finish a share merge: the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (ROOT or the share moved), more values than sh:maxCount, or a value that is not an RDF term.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "incoming": { "type": "object", "description": "The share to merge. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
+                    "base": { "type": "object", "description": "Its parent share. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
+                    "decisions": { "type": "object", "description": "The file from merge_decisions with each row's decision set: {choose: ours|theirs|base} or {values: [N-Triples terms]}." },
+                    "reviewer": { "type": "string", "description": "Who decided. Recorded in provenance." },
+                    "actor": { "type": "string", "description": "Who is applying." },
+                    "dry_run": { "type": "boolean", "description": "Run every check and report the counts it would write; write nothing." }
+                },
+                "required": ["incoming", "base", "decisions", "reviewer"]
+            }
+        }),
         serde_json::json!({
             "name": "quipu_knot",
             "description": "Assert facts into the knowledge graph (with optional SHACL validation)",
@@ -112,6 +143,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "shapes": { "type": "string", "description": "Optional SHACL shapes in Turtle for validation" },
                     "graph": { "type": "string", "description": "Named-graph IRI to write into. Must already be registered committed-class (graph_create). Unknown IRI is an error, never interned. Omit for ROOT." },
                     "replace_snapshot": { "type": "boolean", "description": "Replace the prior facts written under this snapshot key (diffed: unchanged facts stay live). Requires 'snapshot'." },
+                    "blank_node_scope": { "type": "string", "description": "Explicit document scope: distinct IDs separate identical loads; the same ID shares nodes across graphs only for identical input bytes." },
                     "snapshot": { "type": "string", "description": "Stable producer key scoping replace_snapshot (e.g. 'bobbin-chunks:myrepo'). Scoped to the target graph." }
                 },
                 "required": ["turtle"]

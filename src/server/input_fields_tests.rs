@@ -179,21 +179,47 @@ async fn query_json_reports_fields_and_standard_json_preserves_format() {
     assert!(value.get("results").is_some());
 }
 
+async fn export_status(input: JsonValue) -> (axum::http::StatusCode, axum::body::Bytes) {
+    use axum::response::IntoResponse;
+    let response = match super::super::publication::export(State(store()), Json(input)).await {
+        Ok(response) => response,
+        Err(error) => error.into_response(),
+    };
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, body)
+}
+
 #[tokio::test]
-async fn export_preserves_rdf_and_reports_unknown_fields_in_header() {
-    let response = super::super::publication::export(
-        State(store()),
-        Json(json!({
-            "format":"ntriples", "dry_run":true
-        })),
+async fn export_refuses_unrecognised_scope_fields_instead_of_exporting_root() {
+    // Measured live: both bodies returned 200 with the WHOLE store.
+    for input in [
+        json!({"scope_kind":"graph", "scope_value":"urn:example:graph"}),
+        json!({"scope":{"kind":"graph", "value":"urn:example:graph"}}),
+        json!({"format":"ntriples", "dry_run":true}),
+        json!([{"graph":"urn:example:graph"}]),
+    ] {
+        let (status, body) = export_status(input.clone()).await;
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{input}");
+        let text = String::from_utf8_lossy(&body);
+        assert!(text.contains("nothing was exported"), "{input}: {text}");
+    }
+}
+
+#[tokio::test]
+async fn export_with_no_scope_is_still_the_documented_root_export() {
+    let (status, body) = export_status(json!({"format":"ntriples"})).await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let expected = quipu::export_rdf_subset(
+        &quipu::Store::open_in_memory().unwrap(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
     )
-    .await
-    .unwrap();
-    assert_eq!(response.headers()["content-type"], "application/n-triples");
-    assert_eq!(
-        response.headers()["x-quipu-ignored-fields"],
-        "[\"dry_run\"]"
-    );
+    .unwrap()
+    .0;
+    assert_eq!(body.as_ref(), expected.as_slice());
 }
 
 #[test]

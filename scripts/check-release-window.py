@@ -42,7 +42,16 @@ def main():
         sections = re.split(r"(?m)^## \[", Path("CHANGELOG.md").read_text())
         if len(sections) < 2:
             raise ValueError("no changelog section")
+        # An empty Unreleased placeholder precedes the pending release section
+        # on a release-plz commit; skip it exactly as verify-changelog.sh does,
+        # or the guard reads nothing and blocks the step that mints the tag.
         section = sections[1]
+        if (
+            len(sections) > 2
+            and section.startswith("Unreleased]")
+            and not section.split("\n", 1)[-1].strip()
+        ):
+            section = sections[2]
     documented = set(re.findall(r"\[([0-9a-f]{7})\]", section))
     prefix = re.compile(r"^[a-zA-Z]+(?:\([^\r\n()]+\))?!?: .+")
     bare = []

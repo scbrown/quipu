@@ -26,8 +26,13 @@ use super::{
     tools::finish_deferred_embed,
 };
 
+// Share-merge conflict resolution: shares in, like /import (aegis-yavo9c).
+#[path = "merge_decisions.rs"]
+mod merge_decisions;
+
 pub(crate) fn routes() -> Router<SharedStore> {
     Router::new()
+        .merge(merge_decisions::routes())
         .route("/import", post(super::publication::import_share))
         .route("/import/promote", post(super::publication::promote_import))
         .route("/knot", post(super::publication::knot))
@@ -77,35 +82,42 @@ async fn promote(
         .insert(upload_id.clone(), PromotionState::Running);
     let response_upload_id = upload_id.clone();
     let identity = super::auth::request_identity();
+    let kind = super::request_middleware::request_write_kind();
+    let provenance = super::request_middleware::request_write_provenance();
     tokio::task::spawn_blocking(move || {
         quipu::transaction_auth::with_identity(identity, || {
-            let (result, work) = {
-                let mut locked = store.lock();
-                let result = match snapshot_upload::promote_snapshot_upload(&mut locked, &input) {
-                    Ok(result) => result,
-                    Err(error) => {
+            quipu::write_provenance::scoped(provenance, || {
+                quipu::write_kind::scoped(kind, || {
+                    let (result, work) = {
+                        let mut locked = store.lock();
+                        let result =
+                            match snapshot_upload::promote_snapshot_upload(&mut locked, &input) {
+                                Ok(result) => result,
+                                Err(error) => {
+                                    promotions().lock().expect("promotion state lock").insert(
+                                        upload_id,
+                                        PromotionState::Failed(error.to_string()),
+                                    );
+                                    return;
+                                }
+                            };
+                        (result, locked.take_deferred_embed())
+                    };
+                    if let Some(work) = work
+                        && let Err(error) = finish_deferred_embed(&store, &work)
+                    {
                         promotions()
                             .lock()
                             .expect("promotion state lock")
-                            .insert(upload_id, PromotionState::Failed(error.to_string()));
+                            .insert(upload_id, PromotionState::Failed(format!("{error:?}")));
                         return;
                     }
-                };
-                (result, locked.take_deferred_embed())
-            };
-            if let Some(work) = work
-                && let Err(error) = finish_deferred_embed(&store, &work)
-            {
-                promotions()
-                    .lock()
-                    .expect("promotion state lock")
-                    .insert(upload_id, PromotionState::Failed(format!("{error:?}")));
-                return;
-            }
-            promotions()
-                .lock()
-                .expect("promotion state lock")
-                .insert(upload_id, PromotionState::Complete(result));
+                    promotions()
+                        .lock()
+                        .expect("promotion state lock")
+                        .insert(upload_id, PromotionState::Complete(result));
+                });
+            });
         });
     });
     Ok(Json(

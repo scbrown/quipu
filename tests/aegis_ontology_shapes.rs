@@ -35,8 +35,57 @@ fn internal_identifier_patterns_are_declared_as_text_rules() {
     assert!(SHAPES.contains("aegis:InternalIdentifierPattern rdfs:subClassOf aegis:TextRule ."));
 }
 
+fn text_rule_case_fixture(kind: &str, cases: &str) -> String {
+    format!(
+        r#"
+            @prefix aegis: <http://aegis.gastown.local/ontology/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+            aegis:test-rule a aegis:{kind} ;
+                rdfs:label "Example rule" ;
+                aegis:regex "example" ;
+                aegis:enforcementTier "advise" .
+            {cases}
+        "#
+    )
+}
+
+#[test]
+fn text_rule_cases_are_optional_and_allow_multiple_strings() {
+    for kind in ["TextRule", "InternalIdentifierPattern"] {
+        for cases in [
+            "",
+            r#"aegis:test-rule aegis:mustMatch "example", "another example" ;
+                aegis:mustNotMatch "near miss", ""^^xsd:string ."#,
+        ] {
+            let data = text_rule_case_fixture(kind, cases);
+            assert!(quipu::validate_shapes(SHAPES, &data).unwrap().conforms);
+        }
+    }
+}
+
+#[test]
+fn text_rule_cases_reject_non_string_values_for_both_polarities() {
+    for kind in ["TextRule", "InternalIdentifierPattern"] {
+        for predicate in ["mustMatch", "mustNotMatch"] {
+            for value in ["42", "aegis:example", r#""example"@en"#] {
+                let cases = format!("aegis:test-rule aegis:{predicate} {value} .");
+                let data = text_rule_case_fixture(kind, &cases);
+                assert!(
+                    !quipu::validate_shapes(SHAPES, &data).unwrap().conforms,
+                    "{kind}.{predicate} must reject {value}"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
+    // The REJECT half: what the write gate enforces. The full file also carries
+    // the emit-mode DirectiveTraceabilityShape (aegis-4c3ppi), which reports this
+    // untraced fixture by design; that is `quipu validate`'s job, not this test's.
+    let reject = quipu::shacl::split_shapes_by_policy(SHAPES).reject;
     let fixture = |issuer: &str| {
         format!(
             r#"
@@ -50,17 +99,17 @@ fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
     };
 
     assert!(
-        quipu::validate_shapes(SHAPES, &fixture("\"Stiwi\""))
+        quipu::validate_shapes(&reject, &fixture("\"Stiwi\""))
             .unwrap()
             .conforms
     );
     assert!(
-        quipu::validate_shapes(SHAPES, &fixture("aegis:Stiwi"))
+        quipu::validate_shapes(&reject, &fixture("aegis:Stiwi"))
             .unwrap()
             .conforms
     );
     assert!(
-        !quipu::validate_shapes(SHAPES, &fixture("42"))
+        !quipu::validate_shapes(&reject, &fixture("42"))
             .unwrap()
             .conforms
     );
@@ -253,4 +302,235 @@ fn desired_crew_shape_refuses_bad_floor_and_unknown_harness() {
     let report = quipu::validate_shapes(SHAPES, invalid).unwrap();
     assert!(!report.conforms);
     assert!(report.violations >= 2);
+}
+
+const CRED_PREFIXES: &str = r#"
+    @prefix aegis: <http://aegis.gastown.local/ontology/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    aegis:h1 a aegis:Host ; rdfs:label "h1" .
+"#;
+
+#[test]
+fn credential_inventory_fields_are_optional_and_constrained_when_present() {
+    // aegis-zjpqjr: legacy Credential nodes carry none of these; the seeded ones carry all.
+    let valid = format!(
+        "{CRED_PREFIXES}
+        aegis:legacy a aegis:Credential ; rdfs:label \"legacy\" .
+        aegis:seeded a aegis:Credential ; rdfs:label \"seeded\" ; aegis:status \"retired\" ;
+            aegis:expiresAt \"unknown\" ; aegis:keeper \"dearing\" ; aegis:probe \"none\" ;
+            aegis:heldOn aegis:h1 .
+        aegis:dated a aegis:Credential ; rdfs:label \"dated\" ;
+            aegis:expiresAt \"2026-10-01T00:00:00-04:00\" .
+        aegis:v1 a aegis:Verification ; rdfs:label \"v1\" ; aegis:result \"works\" ;
+            aegis:verifiedAt \"2026-09-23T21:30:00-04:00\" ."
+    );
+    assert!(quipu::validate_shapes(SHAPES, &valid).unwrap().conforms);
+
+    for bad in [
+        "aegis:c a aegis:Credential ; rdfs:label \"c\" ; aegis:status \"deleted\" .",
+        "aegis:c a aegis:Credential ; rdfs:label \"c\" ; aegis:expiresAt \"next tuesday\" .",
+        "aegis:c a aegis:Credential ; rdfs:label \"c\" ; aegis:heldOn aegis:not-a-host .",
+        "aegis:v a aegis:Verification ; rdfs:label \"v\" ; aegis:result \"probably\" .",
+        "aegis:v a aegis:Verification ; rdfs:label \"v\" ; aegis:verifiedAt \"yesterday\" .",
+    ] {
+        let data = format!("{CRED_PREFIXES}\n{bad}");
+        assert!(
+            !quipu::validate_shapes(SHAPES, &data).unwrap().conforms,
+            "should be refused: {bad}"
+        );
+    }
+}
+
+// aegis:leadFor (aegis-cpfw7a): a lead paired 1:1 with a keeper.
+fn lead_for_fixture(body: &str) -> String {
+    format!(
+        r#"
+            @prefix aegis: <http://aegis.gastown.local/ontology/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            aegis:lead a aegis:CrewRole ; rdfs:label "lead" .
+            aegis:keeper a aegis:CrewRole ; rdfs:label "keeper" .
+            aegis:worker a aegis:CrewRole ; rdfs:label "worker" .
+            aegis:ian a aegis:CrewMember ; rdfs:label "ian" ; aegis:hasRole aegis:lead .
+            aegis:harding a aegis:CrewMember ; rdfs:label "harding" ; aegis:hasRole aegis:lead .
+            aegis:wu a aegis:CrewMember ; rdfs:label "wu" ; aegis:hasRole aegis:keeper .
+            aegis:dearing a aegis:CrewMember ; rdfs:label "dearing" ; aegis:hasRole aegis:keeper .
+            aegis:kelly a aegis:CrewMember ; rdfs:label "kelly" ; aegis:hasRole aegis:worker .
+            aegis:products rdfs:label "products" .
+            aegis:a-service rdfs:label "a service" ; aegis:hasRole aegis:keeper .
+            {body}
+        "#
+    )
+}
+
+/// The report's violations, as (focus, path) pairs.
+fn lead_for_violations(body: &str) -> Vec<(String, Option<String>)> {
+    quipu::validate_shapes(SHAPES, &lead_for_fixture(body))
+        .unwrap()
+        .results
+        .into_iter()
+        .map(|r| (r.focus_node, r.path))
+        .collect()
+}
+
+#[test]
+fn lead_for_accepts_the_two_planned_pairings() {
+    assert_eq!(
+        lead_for_violations(""),
+        vec![],
+        "control: the fixture alone conforms"
+    );
+    assert_eq!(
+        lead_for_violations(
+            "aegis:ian aegis:leadFor aegis:wu . aegis:harding aegis:leadFor aegis:dearing ."
+        ),
+        vec![]
+    );
+}
+
+#[test]
+fn lead_for_refuses_every_broken_pairing() {
+    const NS: &str = "http://aegis.gastown.local/ontology/";
+    for (why, body, path) in [
+        (
+            "subject is not a lead",
+            "aegis:kelly aegis:leadFor aegis:wu .",
+            "hasRole",
+        ),
+        (
+            "target is not a keeper",
+            "aegis:ian aegis:leadFor aegis:kelly .",
+            "leadFor",
+        ),
+        (
+            "target is not a CrewMember",
+            "aegis:ian aegis:leadFor aegis:products .",
+            "leadFor",
+        ),
+        // Claims the keeper role but is not a CrewMember: only sh:class catches it.
+        (
+            "a keeper that is not a CrewMember",
+            "aegis:ian aegis:leadFor aegis:a-service .",
+            "leadFor",
+        ),
+        (
+            "a lead with two keepers",
+            "aegis:ian aegis:leadFor aegis:wu , aegis:dearing .",
+            "leadFor",
+        ),
+        (
+            "a keeper with two leads",
+            "aegis:ian aegis:leadFor aegis:wu . aegis:harding aegis:leadFor aegis:wu .",
+            "leadFor",
+        ),
+    ] {
+        let v = lead_for_violations(body);
+        assert!(!v.is_empty(), "{why} must not conform");
+        assert!(
+            v.iter()
+                .all(|(_, p)| p.as_deref().is_some_and(|p| p.ends_with(path))
+                    || p.as_deref()
+                        .is_some_and(|p| p.contains(&format!("{NS}leadFor")))),
+            "{why}: every violation must come from the leadFor pairing, got {v:?}"
+        );
+    }
+}
+
+#[test]
+fn lead_for_shapes_route_to_the_rejecting_document_together() {
+    // Emit only OBSERVES; 1:1 must gate the write. All three shapes must also
+    // land in ONE routed document, or the sh:node reference dangles.
+    let split = quipu::shacl::split_shapes_by_policy(SHAPES);
+    for shape in [
+        "aegis:LeadForShape",
+        "aegis:KeeperRoleShape",
+        "aegis:LeadForKeeperShape",
+    ] {
+        assert!(
+            split.reject.contains(&format!("{shape} a sh:NodeShape")),
+            "{shape} must reject"
+        );
+        assert!(
+            !split.emit.contains(&format!("{shape} a sh:NodeShape")),
+            "{shape} must not emit"
+        );
+    }
+    assert!(
+        split.emit.contains("aegis:HasRoleShape a sh:NodeShape"),
+        "control: the splitter does route emit shapes"
+    );
+}
+
+/// aegis-1mv0to: the production `DirectiveTraceabilityShape` REPORTS an
+/// untraced directive as a warning, and the warning does not BLOCK. Validated
+/// against the FULL file (both halves), the path share import and compose take.
+/// If this fails, a release's repository share quarantines again.
+#[test]
+fn directive_traceability_is_a_warning_on_the_full_shapes_file() {
+    let data = r#"
+        @prefix aegis: <http://aegis.gastown.local/ontology/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        aegis:untraced-directive a aegis:Directive ;
+            rdfs:label "Untraced directive" ;
+            aegis:issuedBy "Stiwi" .
+    "#;
+    let feedback = quipu::validate_shapes(SHAPES, data).unwrap();
+    assert!(
+        !feedback.blocks(),
+        "an untraced directive must not block: {:?}",
+        feedback.results
+    );
+    assert_eq!(feedback.violations, 0);
+    // SHACL's own sh:conforms stays false on a warning; only the gate is narrower.
+    assert!(!feedback.conforms);
+    assert!(
+        feedback
+            .results
+            .iter()
+            .any(|r| r.severity.contains("Warning")
+                && r.source_shape
+                    .as_deref()
+                    .is_some_and(|s| s.contains("DirectiveTraceabilityShape"))),
+        "the traceability gap must still be reported: {:?}",
+        feedback.results
+    );
+}
+
+const BEAD_PREFIXES: &str = r#"
+    @prefix aegis: <http://aegis.gastown.local/ontology/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+"#;
+
+#[test]
+fn a_legacy_bead_that_is_also_a_work_item_conforms() {
+    // The 2631 live Bead nodes carry both types (aegis-ks4oph).
+    let data = format!(
+        r#"{BEAD_PREFIXES}
+        aegis:aegis-legacy a aegis:Bead, aegis:WorkItem ; rdfs:label "aegis-legacy" ."#
+    );
+    assert!(quipu::validate_shapes(SHAPES, &data).unwrap().conforms);
+}
+
+#[test]
+fn a_bead_only_node_fails_even_though_bead_is_a_subclass_of_work_item() {
+    // A new Bead write would be Bead-ONLY. The shapes declare
+    // `aegis:Bead rdfs:subClassOf aegis:WorkItem`, so this is the case where
+    // inference could make the WorkItem requirement vacuous. It must not: the
+    // shape reads the data's own rdf:type, and the axiom lives in the shapes
+    // graph. This test runs under every feature set CI builds, owl included.
+    let data = format!(
+        r#"{BEAD_PREFIXES}
+        aegis:aegis-new a aegis:Bead ; rdfs:label "aegis-new" ."#
+    );
+    let report = quipu::validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        !report.conforms,
+        "a Bead-only node must violate BeadLegacyShape"
+    );
+}
+
+#[test]
+fn bead_is_declared_a_deprecated_subclass_of_work_item() {
+    assert!(
+        SHAPES.contains("aegis:Bead rdfs:subClassOf aegis:WorkItem ;\n    owl:deprecated true .")
+    );
 }

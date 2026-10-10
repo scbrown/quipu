@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"/></a>
   <a href="https://github.com/scbrown/quipu/actions/workflows/ci.yml"><img src="https://github.com/scbrown/quipu/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://github.com/scbrown/caboodle"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Part of the caboodle stack"/></a>
   <a href="https://doi.org/10.5281/zenodo.21878428"><img src="https://zenodo.org/badge/1201016929.svg" alt="DOI"/></a>
@@ -32,9 +32,10 @@ cords are entities, knots are facts.
   fails with the rule it broke, so an agent can correct it on the spot.
 - **Nothing is overwritten.** Every fact carries when it was recorded and when
   it was true, so you can query the graph as it was at any moment.
-- **Standard, and measured.** It passes all Working Group–approved W3C SPARQL
-  1.1 Query, Update, Protocol and Results tests, scored alongside other stores
-  in [the conformance report](docs/book/src/benchmarks/conformance.md).
+- **Standard, and scored.** Its SPARQL 1.1 conformance is measured against the
+  Working Group–approved W3C tests, class by class with every exception named,
+  and scored alongside other stores in
+  [the conformance report](docs/book/src/benchmarks/conformance.md).
 
 The long form (sharing between stores, the feature list, the architecture and
 a comparison): [Why Quipu](docs/book/src/why-quipu.md).
@@ -122,25 +123,51 @@ Quipu is for.
 | you want to | run |
 |---|---|
 | load Turtle, checked against your shapes | `quipu knot <file.ttl> --shapes <shapes.ttl>` |
+| bulk-load a lot of data at once, validated before it touches your graph | `quipu share --output <dir>` from a scratch store, then `quipu import <dir>` (staged and shape-checked; failures are quarantined), then `quipu import promote <share-id>` (one transaction into ROOT) |
+| migrate or move a dataset between stores | the same three steps: `share`, `import`, `import promote` |
 | ask a SPARQL question | `quipu read '<sparql>'` |
 | see the graph as it was on a date | `quipu read '<sparql>' --valid-at 2026-09-01` |
 | see what depends on an entity | `quipu impact <entity-IRI>` |
 | keep shapes in the store, so every write is checked | `quipu shapes load <name> <shapes.ttl>` |
 | explore it in a browser, or over HTTP | `quipu-server --db <file> --bind 127.0.0.1:3030` |
 
+For a bulk load, a migration or a backfill, use **import + promote**, not
+thousands of `knot` or SPARQL Update writes. `import` validates the whole dataset
+in its own staging graph and never touches ROOT. `promote` then admits it in a
+single transaction, and one fork rollback undoes it. Walkthrough:
+[Bulk loads and migrations](docs/book/src/recipes/bulk-loads.md).
+
 Every command and flag: [CLI reference](docs/book/src/reference/cli.md). The HTTP
 endpoints: [REST API](docs/book/src/reference/rest-api.md).
 
 ## Wire it into your agent
 
-Agents reach Quipu through [bobbin](https://github.com/scbrown/bobbin), whose MCP
-server carries the knowledge tools (`knowledge_context`, `knowledge_query`, and
-the rest) next to its code search. Quipu itself defines 46 MCP tools (48 with the
-`owl` feature). Set up bobbin with the knowledge layer, then register it:
+Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, and
+`quipu mcp --db store.db` provides stdio using the companion server binary.
+Build both with `cargo build --release --features full`. Protected stdio writes use
+`--mcp-token-file /path/to/private-token`; HTTP writes use the existing bearer policy.
+Quipu defines 48 MCP tools (50 with `owl`), from one shared schema manifest.
+Bobbin's `knowledge_*` tools and existing REST-backed proxies remain compatible.
+See the [connection and authentication guide](docs/book/src/reference/mcp-tools.md#connect-directly).
 
 ```bash
-claude mcp add bobbin -- bobbin serve
+claude mcp add quipu -- /absolute/path/to/quipu mcp --db /absolute/path/to/store.db
 ```
+
+No binaries? Quipu is in the [MCP Registry](https://registry.modelcontextprotocol.io),
+so VS Code's `@mcp` Extensions search (and other registry-aware clients) can
+install it in one click. That runs the published image, which needs Docker and
+nothing else:
+
+```bash
+docker run -i --rm -v quipu-data:/data ghcr.io/scbrown/quipu:latest
+```
+
+The graph lives at `/data/quipu.db` in the `quipu-data` volume, so it survives
+restarts and starts empty. Change the volume name in your client's MCP config to
+keep one graph per project.
+
+- MCP Registry name: `mcp-name: io.github.scbrown/quipu`
 
 Setup and every tool: [bobbin's Quipu integration guide](https://github.com/scbrown/bobbin/blob/main/docs/book/src/guides/quipu-integration.md)
 and [Quipu's MCP tools reference](docs/book/src/reference/mcp-tools.md). Any other
@@ -187,4 +214,4 @@ See [RELEASING.md](docs/RELEASING.md) for how a release is cut.
 
 ## 📜 License
 
-[MIT](LICENSE)
+Licensed under the Apache License, Version 2.0 (see [LICENSE](LICENSE)). Releases up to and including quipu-ai v0.11.0 were MIT-licensed and remain available under MIT.

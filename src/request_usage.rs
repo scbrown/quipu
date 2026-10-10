@@ -22,6 +22,8 @@ pub enum AuthOutcome {
     AuthenticatedPrevious,
     /// An additive named credential authenticated the write.
     AuthenticatedNamed,
+    /// A signed write (session attestation) authenticated the write.
+    AuthenticatedAttested,
     /// The write lacked the configured bearer or supplied the wrong one.
     Unauthorized,
     /// Server read-only mode refused the write regardless of credentials.
@@ -39,6 +41,7 @@ impl AuthOutcome {
             Self::AuthenticatedCurrent => "authenticated_current",
             Self::AuthenticatedPrevious => "authenticated_previous",
             Self::AuthenticatedNamed => "authenticated_named",
+            Self::AuthenticatedAttested => "authenticated_attested",
             Self::Unauthorized => "unauthorized",
             Self::ReadOnly => "read_only",
         }
@@ -180,9 +183,58 @@ pub fn structured_request_log(
     record.to_string()
 }
 
+/// Add bounded caller-declared host/agent metadata, never authenticated identity.
+/// These values belong in logs, not high-cardinality metric labels.
+#[must_use]
+pub fn with_declared_attribution(log: String, host: Option<&str>, agent: Option<&str>) -> String {
+    let clean = |value: Option<&str>| {
+        value
+            .map(|s| {
+                s.chars()
+                    .filter(|c| c.is_ascii_alphanumeric() || "._-".contains(*c))
+                    .take(64)
+                    .collect::<String>()
+            })
+            .filter(|s| !s.is_empty())
+    };
+    let (host, agent) = (clean(host), clean(agent));
+    if host.is_none() && agent.is_none() {
+        return log;
+    }
+    let Ok(mut record) = serde_json::from_str::<Value>(&log) else {
+        return log;
+    };
+    if !record.is_object() {
+        return log;
+    }
+    if let Some(host) = host {
+        record["client_host"] = json!(host);
+    }
+    if let Some(agent) = agent {
+        record["agent"] = json!(agent);
+    }
+    record["attribution_source"] = json!("declared_headers");
+    record.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn declared_attribution_is_bounded_optional_and_distinguished_from_identity() {
+        assert_eq!(with_declared_attribution("{}".into(), None, None), "{}");
+        let log = with_declared_attribution("{}".into(), Some("runner-a"), Some(&"x".repeat(200)));
+        let record: Value = serde_json::from_str(&log).unwrap();
+        assert_eq!(record["client_host"], "runner-a");
+        assert_eq!(record["agent"].as_str().unwrap().len(), 64);
+        assert_eq!(record["attribution_source"], "declared_headers");
+        assert!(record.get("authorization").is_none());
+        assert_eq!(
+            with_declared_attribution("[]".into(), Some("runner-a"), None),
+            "[]"
+        );
+    }
 
     #[test]
     fn query_shape_skips_prefix_declarations() {

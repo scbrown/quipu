@@ -1946,15 +1946,18 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_graph_list"));
     assert!(names.contains(&"quipu_graph_freeze"));
     assert!(names.contains(&"quipu_graph_thaw"));
+    // Share-merge conflict resolution (aegis-yavo9c): a read and its writer.
+    assert!(names.contains(&"quipu_merge_decisions"));
+    assert!(names.contains(&"quipu_merge_apply"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 48);
+        assert_eq!(defs.len(), 50);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 46);
+        assert_eq!(defs.len(), 48);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }
@@ -2038,7 +2041,7 @@ fn readme_mcp_tool_counts_match_the_manifest() {
 #[test]
 fn book_mcp_reference_matches_the_manifest() {
     let base = tool_definitions().len();
-    let with_owl = base + 1;
+    let with_owl = base + 2; // load_ontology and explain
     let page = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("docs/book/src/reference/mcp-tools.md"),
@@ -4571,3 +4574,540 @@ fn a_stamp_sqlite_cannot_parse_makes_the_lag_unknown_through_the_store() {
 
 #[path = "snapshot_identity_tests.rs"]
 mod snapshot_identity;
+
+// Explicit vocabulary alternatives must cover each edge independently: one
+// commit can use the old modifies predicate and the new implements predicate.
+fn assert_namespace_reader(name: &str, params: &serde_json::Value, expected_count: u64) {
+    let old = crate::namespace::DEFAULT_BASE_NS;
+    let new = "https://scbrown.github.io/quechua/ns#";
+    let facts = [
+        ("workA", "identifier", "\"ITEM-A\""),
+        ("workB", "identifier", "\"ITEM-B\""),
+        ("commitA", "implements", "<urn:reader:workA>"),
+        ("commitA", "modifies", "<urn:reader:e1>"),
+        ("commitA", "modifies", "<urn:reader:e2>"),
+        ("commitB", "implements", "<urn:reader:workB>"),
+        ("commitB", "modifies", "<urn:reader:e1>"),
+        ("e1", "filePath", "\"src/one.rs\""),
+        ("e2", "filePath", "\"src/two.rs\""),
+    ];
+    for mode in ["old", "new", "mixed", "both"] {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut turtle = String::new();
+        for (i, (subject, predicate, object)) in facts.iter().enumerate() {
+            let namespaces: Vec<&str> = match mode {
+                "old" => vec![old],
+                "new" => vec![new],
+                "mixed" => vec![if i % 2 == 0 { old } else { new }],
+                "both" => vec![old, new],
+                _ => unreachable!(),
+            };
+            for ns in namespaces {
+                turtle.push_str(&format!(
+                    "<urn:reader:{subject}> <{ns}{predicate}> {object} .\n"
+                ));
+            }
+            // Same local names in an unrelated namespace must never join.
+            turtle.push_str(&format!(
+                "<urn:other:{subject}> <https://example.org/foreign#{predicate}> {object} .\n"
+            ));
+        }
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let out = if name == "cooccurrence" {
+            super::governance::tool_cooccurrence(&store, params)
+        } else {
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":params}))
+        }
+        .unwrap();
+        assert_eq!(out["count"], expected_count, "{name}/{mode}: {out}");
+        match name {
+            "brief_ground" => {
+                let paths: std::collections::BTreeSet<_> = out["rows"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["path"].as_str().unwrap())
+                    .collect();
+                assert_eq!(paths, ["src/one.rs", "src/two.rs"].into_iter().collect());
+            }
+            "brief_related" => {
+                assert_eq!(out["rows"][0]["other"], "ITEM-B");
+                assert_eq!(out["rows"][0]["shared_entities"], 1);
+            }
+            "cochanged_with" => {
+                assert_eq!(out["rows"][0]["other"], "urn:reader:e2");
+                assert_eq!(out["rows"][0]["shared_workitems"], 1);
+            }
+            "cooccurrence" => {
+                assert_eq!(out["cooccurring"][0]["work_item"], "urn:reader:workB");
+                assert_eq!(out["cooccurring"][0]["shared_entities"], 1);
+            }
+            "entity_work" => {
+                let commits: std::collections::BTreeSet<_> = out["rows"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["commit"].as_str().unwrap())
+                    .collect();
+                assert_eq!(
+                    commits,
+                    ["urn:reader:commitA", "urn:reader:commitB"]
+                        .into_iter()
+                        .collect()
+                );
+            }
+            _ => unreachable!(),
+        }
+        let missing = if params.get("item").is_some() {
+            serde_json::json!({"item":"ABSENT"})
+        } else if name == "cooccurrence" {
+            serde_json::json!({"work_item":"urn:reader:absent"})
+        } else {
+            serde_json::json!({"entity":"urn:reader:absent"})
+        };
+        let control = if name == "cooccurrence" {
+            super::governance::tool_cooccurrence(&store, &missing)
+        } else {
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":missing}))
+        }
+        .unwrap();
+        assert_eq!(
+            control["count"], 0,
+            "{name}/{mode} negative control: {control}"
+        );
+    }
+}
+
+#[test]
+fn brief_ground_dual_namespace_reader() {
+    assert_namespace_reader("brief_ground", &serde_json::json!({"item":"ITEM-A"}), 2);
+}
+
+#[test]
+fn brief_related_dual_namespace_reader() {
+    assert_namespace_reader("brief_related", &serde_json::json!({"item":"ITEM-A"}), 1);
+}
+
+#[test]
+fn entity_work_dual_namespace_reader() {
+    assert_namespace_reader(
+        "entity_work",
+        &serde_json::json!({"entity":"urn:reader:e1"}),
+        2,
+    );
+}
+
+#[test]
+fn cochanged_with_dual_namespace_reader() {
+    assert_namespace_reader(
+        "cochanged_with",
+        &serde_json::json!({"entity":"urn:reader:e1"}),
+        1,
+    );
+}
+
+#[test]
+fn cooccurrence_dual_namespace_reader() {
+    assert_namespace_reader(
+        "cooccurrence",
+        &serde_json::json!({"work_item":"urn:reader:workA"}),
+        1,
+    );
+}
+
+fn assert_group_namespace_reader(reader: &str) {
+    let old = crate::namespace::DEFAULT_BASE_NS;
+    let new = "https://scbrown.github.io/quechua/ns#";
+    for namespaces in [vec![old], vec![new], vec![old, new]] {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut turtle = String::from(
+            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+             @prefix prov: <http://www.w3.org/ns/prov#> .\n\
+             <urn:group-reader:hit> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:hit> .\n\
+             <urn:group-reader:other> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:other> .\n\
+             <urn:group-reader:foreign> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:foreign> .\n\
+             <urn:group-reader:ungrouped> rdfs:label \"needle\" .\n\
+             <urn:episode:foreign> <https://example.org/foreign#groupId> \"wanted\" .\n",
+        );
+        for ns in &namespaces {
+            turtle.push_str(&format!(
+                "<urn:episode:hit> <{ns}groupId> \"wanted\" .\n\
+                 <urn:episode:other> <{ns}groupId> \"different\" .\n"
+            ));
+        }
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let embedding = vec![0.5_f32; 8];
+        for name in ["hit", "other", "foreign", "ungrouped"] {
+            let id = store.intern(&format!("urn:group-reader:{name}")).unwrap();
+            store
+                .embed_entity(id, "needle", &embedding, "2026-01-01T00:00:00Z")
+                .unwrap();
+        }
+        for (group, count) in [("wanted", 1), ("absent", 0)] {
+            let input = serde_json::json!({"query":"needle", "embedding":embedding,
+                "group_ids":[group], "max_results":20, "limit":20, "verbose":true});
+            let (out, field, entity_field) = match reader {
+                "nodes" => (
+                    super::search::tool_search_nodes(&store, &input).unwrap(),
+                    "nodes",
+                    "iri",
+                ),
+                "facts" => (
+                    super::search::tool_search_facts(&store, &input).unwrap(),
+                    "facts",
+                    "source",
+                ),
+                "semantic" => (tool_search(&store, &input).unwrap(), "results", "entity"),
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                out["count"], count,
+                "{reader}/{namespaces:?}/{group}: {out}"
+            );
+            if count == 1 {
+                assert_eq!(out[field][0][entity_field], "urn:group-reader:hit");
+            }
+        }
+    }
+}
+
+#[test]
+fn search_nodes_dual_namespace_group_reader() {
+    assert_group_namespace_reader("nodes");
+}
+
+#[test]
+fn search_facts_dual_namespace_group_reader() {
+    assert_group_namespace_reader("facts");
+}
+
+#[test]
+fn semantic_search_dual_namespace_group_reader() {
+    assert_group_namespace_reader("semantic");
+}
+
+// ── signing-plane S1 (aegis-kzt0ql.9.1): verify as-of the recorded signature ──
+#[test]
+fn test_verdict_verify_answers_as_of_the_recorded_signature() {
+    use crate::store::Datum;
+    use crate::types::{Op, Value};
+    use std::sync::Arc;
+    let ns = "http://aegis.gastown.local/ontology/";
+    let mut store = Store::open_in_memory().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
+    let old_key = id.public_key_hex();
+    store.set_signing_identity(Arc::new(id));
+    let ttl = format!(
+        "@prefix a: <{ns}> .\n\
+         a:reg a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" ; a:publicKey \"{old_key}\" .\n\
+         a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n"
+    );
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let claim = format!("PREFIX a: <{ns}> ASK {{ $target a:hasTest ?t }}");
+    let v = super::tool_policy_check(
+        &store,
+        &serde_json::json!({
+            "claim": claim, "target": format!("{ns}sym1"), "predicate_id": "has-test"
+        }),
+    )
+    .unwrap();
+    let sig = v["signature"].as_str().unwrap().to_string();
+
+    // Record the verdict, then rotate the key (close-then-insert).
+    let verdict = format!("{ns}verdict_s1");
+    let rec = Datum {
+        entity: store.intern(&verdict).unwrap(),
+        attribute: store.intern(&format!("{ns}signature")).unwrap(),
+        value: Value::Str(sig.clone()),
+        valid_from: "2026-02-01T00:00:00Z".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact(&[rec], "2026-02-01T00:00:00Z", None, None)
+        .unwrap();
+    let reg = store.lookup(&format!("{ns}reg")).unwrap().unwrap();
+    let pk = store.lookup(&format!("{ns}publicKey")).unwrap();
+    store
+        .retract_triples(
+            reg,
+            pk,
+            Some(&Value::Str(old_key)),
+            "2026-03-01T00:00:00Z",
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+    let next = Datum {
+        entity: reg,
+        attribute: pk.unwrap(),
+        value: Value::Str("00".repeat(32)),
+        valid_from: "2026-03-01T00:00:00Z".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact(&[next], "2026-03-01T00:00:00Z", None, None)
+        .unwrap();
+
+    let mut recorded = v.clone();
+    recorded["verdict"] = serde_json::json!(verdict);
+    let then = super::tool_verdict_verify(&store, &recorded).unwrap();
+    assert_eq!(
+        then["trusted"], true,
+        "recorded before the rotation: {then:#?}"
+    );
+    assert_eq!(then["as_of"]["basis"], "recorded");
+
+    let now = super::tool_verdict_verify(&store, &v).unwrap();
+    assert_eq!(
+        now["trusted"], false,
+        "the old key is not registered now: {now:#?}"
+    );
+    assert_eq!(now["as_of"]["basis"], "now");
+
+    // A caller cannot name a verdict that was never recorded with this signature.
+    let mut unknown = v.clone();
+    unknown["verdict"] = serde_json::json!(format!("{ns}verdict_never"));
+    assert!(super::tool_verdict_verify(&store, &unknown).is_err());
+}
+
+// sattler review of #344: a caller-chosen instant is a what-if, never trust.
+#[test]
+fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
+    use crate::types::Value;
+    use std::sync::Arc;
+    let ns = "http://aegis.gastown.local/ontology/";
+    let mut store = Store::open_in_memory().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
+    let key = id.public_key_hex();
+    store.set_signing_identity(Arc::new(id));
+    let ttl = format!(
+        "@prefix a: <{ns}> .\n\
+         a:reg a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" ; a:publicKey \"{key}\" .\n\
+         a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n"
+    );
+    let pre_revocation_tx = crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap()
+    .0;
+    let claim = format!("PREFIX a: <{ns}> ASK {{ $target a:hasTest ?t }}");
+    let v = super::tool_policy_check(
+        &store,
+        &serde_json::json!({
+            "claim": claim, "target": format!("{ns}sym1"), "predicate_id": "has-test"
+        }),
+    )
+    .unwrap();
+    // Revoke the key (compromise).
+    let reg = store.lookup(&format!("{ns}reg")).unwrap().unwrap();
+    let pk = store.lookup(&format!("{ns}publicKey")).unwrap();
+    store
+        .retract_triples(
+            reg,
+            pk,
+            Some(&Value::Str(key)),
+            "2026-03-01T00:00:00Z",
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+
+    // The forger names a transaction from before the revocation.
+    let mut what_if = v.clone();
+    what_if["tx"] = serde_json::json!(pre_revocation_tx);
+    what_if["signed_at"] = serde_json::json!("2026-02-01T00:00:00Z");
+    let r = super::tool_verdict_verify(&store, &what_if).unwrap();
+    assert_eq!(r["as_of"]["basis"], "caller-supplied");
+    assert_eq!(
+        r["trusted"], false,
+        "a caller-chosen instant must never yield trust: {r:#?}"
+    );
+    assert_eq!(
+        r["would_verify_as_of_supplied_instant"], true,
+        "the what-if answer is still reported"
+    );
+}
+
+/// aegis-4c3ppi: `/knot` routes stored shapes by `quipu:onViolation` exactly as
+/// `/episode` does. Before the fix, `/knot` validated the combined document
+/// whole, so an emit shape was a hard reject here (measured: an untraced
+/// Directive came back `conforms: false`, `OrConstraintComponent`, nothing
+/// written).
+#[cfg(feature = "shacl")]
+mod knot_on_violation {
+    use super::*;
+
+    const REAL: &str = include_str!("../../shapes/aegis-ontology.shapes.ttl");
+    // Both soft markers: the emit route AND the Warning severity (aegis-1mv0to).
+    // Flipping to reject means dropping both; Warning alone never blocks.
+    const EMIT_LINE: &str = "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:severity sh:Warning ;\n";
+    const UNTRACED: &str = "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+        aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
+
+    fn store_with(shapes: &str) -> Store {
+        let store = Store::open_in_memory().unwrap();
+        store
+            .load_shapes("aegis-ontology", shapes, "2026-10-01T00:00:00Z")
+            .unwrap();
+        store
+    }
+
+    fn knot(store: &mut Store, turtle: &str) -> JsonValue {
+        tool_knot(
+            store,
+            &serde_json::json!({
+                "turtle": turtle,
+                "timestamp": "2026-10-01T01:00:00Z",
+                "actor": "test",
+                "source": "unit-test"
+            }),
+        )
+        .unwrap()
+    }
+
+    fn traceability_events(store: &Store) -> Vec<crate::store::events::EventRow> {
+        store
+            .events_after(0, 1000, None, None)
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.event_type == "shacl.violation")
+            .filter(|e| e.payload.contains("DirectiveTraceabilityShape"))
+            .collect()
+    }
+
+    #[test]
+    fn emit_shape_violation_commits_and_emits_event() {
+        let mut store = store_with(REAL);
+        let result = knot(&mut store, UNTRACED);
+        assert_eq!(
+            result["conforms"], true,
+            "emit must not gate /knot: {result}"
+        );
+        let tx = result["tx_id"].as_i64().unwrap();
+        assert!(tx > 0, "write committed");
+        let evs = traceability_events(&store);
+        assert_eq!(evs.len(), 1, "exactly one traceability event");
+        assert_eq!(evs[0].tx_id, tx, "event rides the knot write's own tx");
+        let payload: serde_json::Value = serde_json::from_str(&evs[0].payload).unwrap();
+        assert_eq!(payload["mode"], "emit");
+    }
+
+    /// Mutation arm: the SAME real shape with its emit annotation and Warning
+    /// severity removed is a reject shape again, and /knot refuses the same write.
+    #[test]
+    fn without_emit_annotation_the_same_shape_rejects() {
+        assert!(
+            REAL.contains(EMIT_LINE),
+            "fixture drifted from the shapes file"
+        );
+        let mutated = REAL.replacen(
+            EMIT_LINE,
+            "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n",
+            1,
+        );
+        let mut store = store_with(&mutated);
+        let result = knot(&mut store, UNTRACED);
+        assert_eq!(
+            result["conforms"], false,
+            "reject shape must gate: {result}"
+        );
+        assert!(
+            traceability_events(&store).is_empty(),
+            "a refused write leaves no violation event"
+        );
+    }
+
+    /// Control: a reject-mode (unannotated) shape still gates /knot with emit
+    /// shapes loaded beside it.
+    #[test]
+    fn reject_shape_still_gates() {
+        let mut store = store_with(REAL);
+        let result = tool_knot(
+            &mut store,
+            &serde_json::json!({
+                "turtle": UNTRACED,
+                "shapes": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+                    aegis:KnotHardControlShape a sh:NodeShape ;\n    sh:targetClass aegis:Directive ;\n    \
+                    sh:property [ sh:path aegis:knotControlRequired ; sh:minCount 1 ] .\n",
+                "timestamp": "2026-10-01T01:00:00Z",
+                "actor": "test",
+                "source": "unit-test"
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            result["conforms"], false,
+            "reject shape must still gate: {result}"
+        );
+    }
+
+    /// Latency of the emit half on /knot (aegis-4c3ppi, malcolm's ask). Ignored;
+    /// run with `--release -- --ignored --nocapture knot_emit_latency`.
+    #[test]
+    #[ignore]
+    fn knot_emit_latency() {
+        let reject_only = crate::shacl::split_shapes_by_policy(REAL).reject;
+        for (label, shapes) in [
+            ("with emit half", REAL.to_string()),
+            ("reject half only", reject_only),
+        ] {
+            let mut store = store_with(&shapes);
+            let n = 300;
+            let mut ms: Vec<f64> = Vec::with_capacity(n);
+            for i in 0..n {
+                let turtle = UNTRACED.replace("knot-untraced-rule", &format!("lat-rule-{i}"));
+                let t0 = std::time::Instant::now();
+                let r = knot(&mut store, &turtle);
+                ms.push(t0.elapsed().as_secs_f64() * 1e3);
+                assert_eq!(r["conforms"], true);
+            }
+            ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            eprintln!(
+                "LATENCY {label}: n={n} p50={:.3}ms p95={:.3}ms max={:.3}ms",
+                ms[n / 2],
+                ms[n * 95 / 100],
+                ms[n - 1]
+            );
+        }
+    }
+}

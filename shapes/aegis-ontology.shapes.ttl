@@ -10,7 +10,9 @@
 
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
 @prefix quipu:  <http://quipu.dev/ontology/> .
 @prefix aegis:  <http://aegis.gastown.local/ontology/> .
 
@@ -797,6 +799,70 @@ aegis:DirectiveShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── Directive traceability ────────────────────────────────────────
+#
+# Stiwi 2026-09-24 (verbatim): "For each directive, we should have workitems
+# and policy attached to direct to it. Create the shape and work it to true."
+# Tracking: aegis-q9m5mp.
+#
+# Every directive names the WORK that carries it out (aegis:trackedBy a
+# WorkItem, i.e. a bead) and the POLICY that governs it (aegis:governedBy a
+# Policy). Policy and AlertRule are subclasses of Directive but ARE the
+# executable form, so they are exempt; OperationalRule and plain Directive
+# are not.
+#
+# EMIT, deliberately, while the backfill runs: measured 2026-09-24, about
+# 1,030 directives are untraced, so a reject shape would refuse every
+# directive write in the fleet. Emitted violations become shacl.violation
+# events and the write commits. Those events depend on the write path and on
+# shacl.validate_on_write, so they are NOT the progress metric: progress is
+# `quipu validate` (or SPARQL) over the stored graph (ian ruling, aegis-4c3ppi).
+# Drop the annotation (enforcement reverts to reject) once that count reads
+# zero AND both predicates are in REQUIRED_PREDICATE_PROVEN at measured 100%:
+# "work it to true". When it flips to reject, drop sh:severity too.
+#
+# sh:severity sh:Warning (aegis-1mv0to): emit protects only the write paths
+# that route by onViolation. Share import and compose gate on conforms, and a
+# defaulted sh:Violation quarantined the whole v0.10.0 repository share for 2
+# untraced directives. Warning is the spec's word for "report, do not block",
+# and the 4c3ppi spec already said Warning until 100%.
+#
+# Store-context validation (emit path) is what lets
+# sh:class see the linked WorkItem/Policy types that are not in the payload.
+#
+# Pilot, proven end to end 2026-09-24: directive-patent-filings-private-no-
+# history-rewrite -> trackedBy aegis-vqf0p5, governedBy
+# policy_no-patent-filings-in-public-repos -> enforcedBy
+# textrule_patent-application-number (projected and executed by yupana).
+
+aegis:DirectiveTraceabilityShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:severity sh:Warning ;
+    sh:targetClass aegis:Directive ;
+    # I2 label floor. DirectiveShape already requires it, so this asserts
+    # nothing new about the data; it keeps every targetClass shape honest.
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] ;
+    sh:or (
+        [ sh:class aegis:Policy ]
+        [ sh:class aegis:AlertRule ]
+        [
+            sh:property [
+                sh:path aegis:trackedBy ;
+                sh:minCount 1 ;
+                sh:class aegis:WorkItem ;
+            ] ;
+            sh:property [
+                sh:path aegis:governedBy ;
+                sh:minCount 1 ;
+                sh:class aegis:Policy ;
+            ] ;
+        ]
+    ) ;
+    sh:message "Untraced directive: it needs aegis:trackedBy a WorkItem and aegis:governedBy a Policy (aegis-q9m5mp)" .
+
 # ── Observation ─────���────────────────────────────────────────────
 #
 # An agent observation from Pensieve.
@@ -1255,10 +1321,47 @@ aegis:WorkItemScopeShape a sh:NodeShape ;
 # Media
 # ══════���════════════════════════════════════════════════════════════
 
+# ── FileCollection ───────────────────────────────────────────────
+#
+# A folder on a filesystem export, summarised: how many files, how many
+# bytes, the newest mtime, and every file extension present anywhere in its
+# SUBTREE (aegis-1v555n, Stiwi 2026-09-27). It is how the graph answers
+# "where is my GoldenEye 64 cart backup" without crawling 255k files over
+# NFS: ask which collection hasExtension ".z64".
+#
+# ONE generic class on purpose (sattler, 2026-09-30): not Show / Season /
+# Album / Book. A season is a FileCollection whose parentCollection is its
+# show. MediaLibrary is a subclass rather than a second media concept.
+# Tied to the existing NFSExport through inExport; no parallel export class.
+#
+# Only the label is required, so a MediaLibrary that is not a folder (a
+# Plex library, say) is not forced to invent a path. Measured 2026-09-30:
+# 0 FileCollection and 0 MediaLibrary instances, so this rejects safely.
+aegis:MediaLibrary rdfs:subClassOf aegis:FileCollection .
+
+aegis:FileCollectionShape a sh:NodeShape ;
+    sh:targetClass aegis:FileCollection ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path aegis:inExport ; sh:class aegis:NFSExport ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:parentCollection ; sh:class aegis:FileCollection ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:relativePath ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:fileCount ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 0 ; ] ;
+    sh:property [ sh:path aegis:byteCount ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 0 ; ] ;
+    sh:property [ sh:path aegis:newestMtime ; sh:datatype xsd:string ; sh:maxCount 1 ;
+        sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" ; ] ;
+    sh:property [ sh:path aegis:hasExtension ; sh:datatype xsd:string ;
+        sh:pattern "^\\.[a-z0-9_+-]{1,16}$" ; ] ;
+    sh:property [ sh:path aegis:extensionCounts ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
+
 # ── MediaLibrary ─────────────────────────────────────────────────
 
 aegis:MediaLibraryShape a sh:NodeShape ;
     sh:targetClass aegis:MediaLibrary ;
+    # A MediaLibrary IS a FileCollection (the subClassOf above gives query-time
+    # inference). The validator does not carry a shapes-graph subClassOf onto
+    # data instances (measured, aegis-1v555n), so the constraints are applied
+    # explicitly here rather than silently skipped.
+    sh:node aegis:FileCollectionShape ;
     sh:property [
         sh:path aegis:platform ;
         sh:datatype xsd:string ;
@@ -1479,10 +1582,15 @@ aegis:TextRuleShape a sh:NodeShape ;
     sh:targetClass aegis:TextRule ;
     sh:property [ sh:path aegis:regex ; sh:minCount 1 ; ] ;
     sh:property [ sh:path aegis:enforcementTier ; sh:minCount 1 ; ] ;
+    # Optional text-only examples; readiness requires both polarities to pass.
+    sh:property [ sh:path aegis:mustMatch ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:mustNotMatch ; sh:datatype xsd:string ; ] ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
 
 aegis:InternalIdentifierPatternShape a sh:NodeShape ;
     sh:targetClass aegis:InternalIdentifierPattern ;
+    sh:property [ sh:path aegis:mustMatch ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:mustNotMatch ; sh:datatype xsd:string ; ] ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
 
 aegis:ConfigSettingShape a sh:NodeShape ;
@@ -1552,7 +1660,26 @@ aegis:ComponentShape a sh:NodeShape ;
 
 aegis:CredentialShape a sh:NodeShape ;
     sh:targetClass aegis:Credential ;
-    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    # aegis-zjpqjr: every property below is OPTIONAL (legacy Credential nodes carry none) and
+    # constrained only when present. LOCATIONS AND METADATA ONLY — never a value.
+    sh:property [ sh:path aegis:status ; sh:maxCount 1 ; sh:in ( "active" "retired" ) ; ] ;
+    sh:property [ sh:path aegis:expiresAt ; sh:maxCount 1 ;
+                  sh:pattern "^(none|unknown|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2}))$" ; ] ;
+    sh:property [ sh:path aegis:keeper ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:probe ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:heldOn ; sh:class aegis:Host ; ] .
+
+# Adds result/verifiedAt. camayoc-core's CamayocVerificationShape already requires
+# rdfs:label, sourceKind and falsifier on every aegis:Verification; both shapes apply.
+# The rdfs:label floor is restated here because every shape file must carry it on its
+# own (invariant I2): the union enforces it today, but a file is checked alone.
+aegis:VerificationShape a sh:NodeShape ;
+    sh:targetClass aegis:Verification ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path aegis:result ; sh:maxCount 1 ; sh:in ( "works" "dead" "unknown" ) ; ] ;
+    sh:property [ sh:path aegis:verifiedAt ; sh:maxCount 1 ;
+                  sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$" ; ] .
 
 aegis:SSHKeyShape a sh:NodeShape ;
     sh:targetClass aegis:SSHKey ;
@@ -1713,6 +1840,26 @@ aegis:FailureMode rdfs:subClassOf aegis:FailureKnowledge .
 aegis:FailurePattern rdfs:subClassOf aegis:FailureKnowledge .
 aegis:IncidentClass rdfs:subClassOf aegis:FailureKnowledge .
 aegis:Directive rdfs:subClassOf aegis:OperationalKnowledge .
+
+# ── Legacy aegis:Bead: deprecated, governed, never written (aegis-ks4oph) ──
+#
+# 2631 nodes still carry aegis:Bead beside aegis:WorkItem. aegis-ykuhen kept the
+# old type deliberately as auditable history when it moved them to WorkItem, and
+# the ruling on aegis-ks4oph (2026-10-07) keeps it: Bead is a DEPRECATED LEGACY
+# subclass of WorkItem. Producers emit WorkItem; nothing writes Bead.
+#
+# The shape exists so the live census (I7) sees a governed legacy kind, not an
+# unshaped one, and it asserts the one thing that makes a Bead legitimate: it is
+# ALSO a WorkItem. A Bead-only node, which is what a new Bead write would be,
+# violates it. Note that the vocabulary gate admits any targeted class, so this
+# shape does not by itself refuse such a write at /episode. It makes one visible.
+aegis:Bead rdfs:subClassOf aegis:WorkItem ;
+    owl:deprecated true .
+
+aegis:BeadLegacyShape a sh:NodeShape ;
+    sh:targetClass aegis:Bead ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue aegis:WorkItem ; ] .
 
 # ── Asserted in the store before they were ever written down ─────
 #
@@ -1898,9 +2045,10 @@ aegis:ClaudeCodeHookShape a sh:NodeShape ;
 #
 # Every shape below is TARGETED (sh:targetSubjectsOf) and annotated
 # quipu:onViolation "emit" — on a binary with event P3, violations become
-# shacl.violation events without gating the write; on the current deployed
-# binary the annotation is inert and enforcement is reject, which is SAFE
-# because every wired shape was measured at ZERO live violations first
+# shacl.violation events without gating the write. P3 IS NOW LIVE (src/shacl.rs
+# split_shapes_by_policy; corrected 2026-09-30, aegis-cpfw7a): these shapes
+# OBSERVE and do not enforce. When wired they were measured at ZERO live
+# violations first
 # (ranges widened to cover legitimate emergent usage; three data-bug edges
 # repaired; the un-wireable four held below).
 #
@@ -1909,6 +2057,8 @@ aegis:ClaudeCodeHookShape a sh:NodeShape ;
 #   committed_to += GitRepository, Repo (the class-name drift family, vt9m)
 #   authored_by  += Polecat (historical polecat-era authors)
 #   triggered_by += GitCommit (bead provenance), CLI (tool-invoked scripts)
+#   triggered_by += SystemdTimer (a .timer activating its .service is the
+#                   canonical trigger sense, same as CronJob; aegis-6bh4g4)
 #
 # STILL UNWIRED — HELD, with the measured blocker for each (fmt5-class
 # semantic-migration work, not range tweaks):
@@ -1968,6 +2118,40 @@ aegis:HasRoleShape a sh:NodeShape ;
     sh:targetSubjectsOf aegis:hasRole ;
     sh:property [ sh:path aegis:hasRole ; sh:class aegis:CrewRole ; ] .
 
+# aegis:leadFor — a review/design LEAD paired 1:1 with the KEEPER whose
+# domain it reviews (aegis-cpfw7a, for the aegis-vj3uet role redesign;
+# quipu proposal 26). NOT reports_to: it routes design/review work, not the
+# stop-event tree. WIRED at birth: measured 0 live aegis:leadFor edges on
+# 2026-09-30, so the zero-violations precondition holds trivially.
+#
+# 1:1 is enforced from BOTH ends: a lead names at most one keeper
+# (LeadForShape), and a keeper is named by at most one lead
+# (LeadForKeeperShape). Roles are matched by VALUE (sh:hasValue on
+# aegis:hasRole), so the shape does not depend on aegis:keeper also being
+# used as a predicate elsewhere (a pre-existing pun, measured live).
+#
+# REJECT, deliberately NOT "emit" (wu, review of quipu#354). "emit" now only
+# OBSERVES (event P3 is live; the header above predates it), so an emit shape
+# would not enforce 1:1 at all. Reject is safe because nothing violates it
+# yet. It also keeps all three shapes in ONE routed document: the splitter is
+# textual, and an emit LeadForShape would reference, via sh:node, a
+# KeeperRoleShape routed to the reject document instead.
+aegis:LeadForShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:leadFor ;
+    sh:property [ sh:path aegis:hasRole ; sh:hasValue aegis:lead ;
+        sh:message "only a CrewMember holding aegis:lead may declare aegis:leadFor" ] ;
+    sh:property [ sh:path aegis:leadFor ; sh:maxCount 1 ; sh:class aegis:CrewMember ;
+        sh:node aegis:KeeperRoleShape ;
+        sh:message "aegis:leadFor names exactly one CrewMember holding aegis:keeper" ] .
+
+aegis:KeeperRoleShape a sh:NodeShape ;
+    sh:property [ sh:path aegis:hasRole ; sh:hasValue aegis:keeper ] .
+
+aegis:LeadForKeeperShape a sh:NodeShape ;
+    sh:targetObjectsOf aegis:leadFor ;
+    sh:property [ sh:path [ sh:inversePath aegis:leadFor ] ; sh:maxCount 1 ;
+        sh:message "a keeper is paired with at most one lead" ] .
+
 aegis:CommittedToShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
     sh:targetSubjectsOf aegis:committed_to ;
@@ -1989,7 +2173,7 @@ aegis:TriggeredByShape a sh:NodeShape ;
     sh:targetSubjectsOf aegis:triggered_by ;
     sh:property [
         sh:path aegis:triggered_by ;
-        sh:or ( [ sh:class aegis:CronJob ] [ sh:class aegis:Script ] [ sh:class aegis:GitCommit ] [ sh:class aegis:CLI ] ) ;
+        sh:or ( [ sh:class aegis:CronJob ] [ sh:class aegis:SystemdTimer ] [ sh:class aegis:Script ] [ sh:class aegis:GitCommit ] [ sh:class aegis:CLI ] ) ;
     ] .
 
 # The ten structure-only relationship guards: objects must be IRIs (an entity
@@ -2044,3 +2228,59 @@ aegis:ModifiesShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
     sh:targetSubjectsOf aegis:modifies ;
     sh:property [ sh:path aegis:modifies ; sh:nodeKind sh:IRI ; ] .
+
+# chaski (aegis-1mqrob) — a Reaction is a governed, bitemporal rule that chaski
+# evaluates post-commit (triggerKind "event", over GET /events) or on a schedule
+# (triggerKind "schedule", over POST /query). A ReactionFiring records one
+# TRANSITION of a (reaction, focus) pair — never an evaluation — so steady state
+# writes nothing. Reuses the existing string predicates aegis:severity,
+# aegis:owner and aegis:schedule rather than minting near-duplicates.
+
+aegis:ReactionShape a sh:NodeShape ;
+    sh:targetClass aegis:Reaction ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    sh:property [
+        sh:path aegis:triggerKind ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "event" "schedule" ) ;
+    ] ;
+    sh:property [
+        # event triggers only: comma-separated quipu.event/v1 types
+        # (entity.added, entity.updated, edge.added, edge.retracted, ...)
+        sh:path aegis:eventTypes ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # schedule triggers only: an ISO-8601 duration, e.g. "PT5M"
+        sh:path aegis:schedule ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # SPARQL SELECT ?focus — the nodes for which the reaction is FIRING now.
+        # Absent from the result = resolved. A timeout/error is UNKNOWN, never resolved.
+        sh:path aegis:condition ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:severity ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "info" "warning" "critical" "page" ) ;
+    ] ;
+    sh:property [
+        # what happens on a false->true transition, beyond the metric every
+        # reaction exports; "page" never dedupes (escalate-verified semantics)
+        sh:path aegis:action ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:in ( "alert" "page" "bead" "webhook" ) ;
+    ] ;
+    sh:property [ sh:path aegis:owner ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:enabled ; sh:datatype xsd:boolean ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path rdfs:comment ; sh:maxCount 1 ; ] .
+
+aegis:ReactionFiringShape a sh:NodeShape ;
+    sh:targetClass aegis:ReactionFiring ;
+    sh:property [ sh:path aegis:firedBy ; sh:class aegis:Reaction ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    # the focus node the condition returned; any IRI
+    sh:property [ sh:path aegis:focus ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:startedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    # absent while firing; set once (via /set) on the true->false transition
+    sh:property [ sh:path aegis:resolvedAt ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+    # Optional delivery identity. The producer derives the firing IRI from
+    # (reaction label, eventId) and freezes the payload before its first send.
+    # SHACL does not prove deterministic identity or receiver idempotence.
+    sh:property [ sh:path aegis:eventId ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .

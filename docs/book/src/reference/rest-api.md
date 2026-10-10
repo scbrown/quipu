@@ -98,6 +98,13 @@ Authorization: Bearer <token>
 Reads — `/query`, `/search`, entity lookups, `/health`, `/version` — need no
 credential and answer normally.
 
+A bearer refusal returns HTTP 401 with a JSON `reason` of
+`missing_or_invalid_bearer_token`, `credential_type: "bearer"`, the endpoint,
+and provisioning guidance. Clients should configure a matching
+`QUIPU_AUTH_TOKEN` or `QUIPU_AUTH_TOKEN_FILE`; retrying an absent or rejected
+credential does not repair it. Signed authentication is available only on
+signed-write routes with a registered, unexpired identity and write scope.
+
 ### Additive named credentials
 
 `[quipu.server].crew_credentials_file` optionally points to a local JSON registry
@@ -262,6 +269,28 @@ curl localhost:3030/update -X POST \
   --data 'INSERT DATA { <http://example/s> <http://example/p> "value" }'
 ```
 
+A successful update returns `200` with what it committed:
+
+```json
+{"tx": 4182, "asserted": 1, "retracted": 0,
+ "graphs": [{"graph": null, "tx": 4182, "asserted": 1, "retracted": 0}]}
+```
+
+`asserted` and `retracted` count the triples the update changed, so a
+conditional `DELETE`/`INSERT ... WHERE` used as a compare-and-swap (claim if
+unassigned, release if still mine) can tell whether it won without a read-back:
+both zero means the `WHERE` matched nothing, or the update changed nothing, and
+`tx` is `null`. Each graph with changes commits its own transaction (`graph` is
+`null` for the default graph); `tx` is the last of them, usable with `--at` /
+`tx` reads. The SPARQL 1.1 Protocol leaves this body to the implementation.
+
+Attribute a write with the optional `actor` and `source` query parameters (or
+form fields beside `update=`), each at most once, 1–256 characters, no control
+characters: `POST /update?actor=agent:wu&source=seeds:claim`. They are recorded
+on the transaction as declared, like `/knot`'s fields; the verified caller is
+recorded separately as its `authenticated` principal. Without `actor` the
+transaction's actor is unknown (`null`); `source` defaults to `sparql-update`.
+
 Quipu's JSON extension compacts result IRIs to CURIEs by default using prefixes
 declared by the currently loaded shape sets; unknown namespaces remain full
 IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=1` on GET, to
@@ -364,6 +393,14 @@ curl -s localhost:3030/episode -X POST \
     "edges": [{"source": "myapp", "target": "kota", "relation": "runs_on"}]
   }'
 ```
+
+A bare node `type` such as `WebApplication` names a class under the store's
+`base_ns`. To name a class in the public Quechua vocabulary instead, prefix it:
+`"type": "quechua:WorkItem"` asserts
+`<https://scbrown.github.io/quechua/ns#WorkItem>`. The prefix changes only the
+class. The node's own IRI is still minted under `base_ns`. Like any other type, a
+Quechua class is refused until a loaded shape sanctions it. No other prefix is
+accepted.
 
 Set `"replace_snapshot": true` for producers whose payload is the complete
 current state of an inventory. Facts previously asserted by the same episode
@@ -563,6 +600,14 @@ The response reports `planned`, the affected `entities` count, a bounded `sample
 `sample_truncated`, and `repair_source`. A preview has `applied: false` and null
 `tx_id`/`retracted`; an applied result reports the actual retraction transaction.
 
+Source cleanup removes only that source's ownership claims. A statement remains
+visible while another recorded claim survives. **This protection is forward-only
+for newly recorded claims.** Older versions skipped identical assertions from
+later producers, leaving no recoverable claim. Reassert the relevant producer
+snapshots before cleaning up old shared data; this release does not backfill it.
+The `retracted` count reports source-owned statements processed, not necessarily
+statements removed from the visible graph.
+
 ### `POST /episode/retract`
 
 Episode-scoped **logical** retraction. Retracts the facts an episode's ingest
@@ -743,7 +788,70 @@ curl -s localhost:3030/explain -X POST \
 ### `POST /search`
 
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
-`valid_at`, and best-effort scoping by `group_ids` / `entity_type`.
+`valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
+Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
+omitted mode or `mode: "semantic"` preserves vector search.
+
+#### Keyword index
+
+Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
+activation installs an empty FTS5 index and same-transaction fact triggers; it
+never backfills during startup or a read. Writes, source replacement, closure,
+rollback and physical deletion are reflected atomically. Index documents are
+ROOT assertion rows; `valid_at` checks their original valid-time intervals,
+with an exclusive `valid_to` boundary. Named-graph/attached-pack search is not
+part of this initial lexical stage.
+
+Backfill is explicit and resumable:
+
+```bash
+quipu search-index backfill --batch-size 500 --db /path/to/store.db
+quipu search-index status --db /path/to/store.db
+quipu search '"complete episode phrase"' --mode keyword --db /path/to/store.db
+```
+
+One command commits one batch (1–10000 scanned fact rows), then releases the
+writer. A durable cursor/highwater bounds historical work, while insertion
+triggers index newer writes. The CLI refuses backfill during UTC minutes
+10–20, inclusive. Repeat calls outside ingestion lanes until `complete` is
+true; an incomplete index returns an error instead of a partial answer.
+
+`mode: "keyword"` requires query text and needs no embedding provider. It
+accepts literal terms and double-quoted phrases, with conjunctions scoped to
+one fact document; it does not interpret field/boolean syntax yet. All literal
+codecs are decoded, full comments/body text is retained, and type/entity local
+names include CamelCase tokens. Scores are positive BM25 relevance (`score`,
+higher first); `bm25` exposes SQLite's negative raw rank. Entity duplicates
+are collapsed and group/type scope is filtered before applying the limit.
+Embedding arrays, anchors and content reranking are refused in this mode.
+
+Rollback: disable the flag, then `quipu search-index drop --db <path>` to remove
+the derived index and its triggers/progress only. Existing facts/vectors are
+preserved. A previously activated index continues following writes until it
+is dropped, even when keyword queries are disabled; no query silently serves
+stale documents after a flag toggle. Index size/RSS depend on the corpus and
+must be measured on an isolated restored store before production backfill.
+
+#### Semantic ranking
+
+Opt-in `ranking: "content"` reranks the oversampled candidates before the
+result limit. A `Section`, `Chunk`, or `CodeSymbol` with no explanatory comment
+or content beyond its label/name is demoted: positive cosine similarity is
+halved, and negative similarity is reduced by half its magnitude. Metadata such
+as paths, line numbers and revisions does not count as content. Exact label/name
+queries are exempt. Artifacts with explanatory text and other entity types keep
+their similarity score. This is a relevance heuristic, not a trust classification.
+
+The default `ranking: "semantic"` preserves the original cosine order.
+Choose `content` when retrieving explanatory operational knowledge; keep
+`semantic` for general search or locating code and documentation. An identifier
+can be the correct answer without any body text, so content ranking must not
+be applied indiscriminately. Each result exposes
+`similarity` (raw cosine), `score` (ranking score), and `ranking_reason`
+(`semantic` or `contentless_artifact`). No vectors are deleted or re-embedded.
+Only the existing bounded candidate pool is reranked: this cannot recover an
+entity outside that pool or guarantee semantic equivalence detection. Historical
+searches classify candidates using facts valid at the requested `valid_at`.
 
 ```bash
 curl -s localhost:3030/search -X POST \
@@ -777,6 +885,36 @@ no episode to trace). `entity_type` restricts to an rdf:type IRI. See
 > Altering the separator changes the text every stored vector was computed from, so it
 > would need a full re-embed backfill to stay coherent — a much larger change than it
 > looks. Documented here rather than "fixed" cheaply and inconsistently.
+
+#### Anchored search
+
+Off unless the server sets `[quipu.search] anchored = true`. An `anchor` sent to
+a server with it off is refused rather than answered unanchored. A request
+without `anchor` is unchanged.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `anchor` | | One entity, as an IRI, a CURIE or an exact `rdfs:label`. Ambiguity or absence is refused, with the candidates named. |
+| `max_hops` | 3 (cap 4) | Neighbourhood radius |
+| `anchor_mode` | `decay` | `decay`: score × `decay`^hops, unreachable × `decay`^(max_hops+1). `sort`: hops first, then score. `filter`: reachable only. |
+| `decay` | 0.5 | Per-hop multiplier, in (0, 1] |
+| `via` | | Traverse only these predicates (replaces the default exclusions) |
+| `direction` | `both` | `out`, `in` or `both` |
+| `explain` | false | Adds one shortest `path` per result |
+
+The neighbourhood is walked with bound single-pattern lookups over current ROOT
+facts (`valid_at` applies). `owl:sameAs` costs no hop. `rdf:type`,
+`rdfs:subClassOf`, PROV links, `distinctFrom`, `mentions` and `inDocument` are
+not traversed. Without that, everything is two hops from everything through a
+class, an activity or a document. A node with more than 150 edges is reached
+but not expanded; the anchor itself is always expanded. The walk stops at 5,000
+nodes. The response's `anchor` block reports `reached`, `hubs_not_expanded`,
+`truncated` and `truncated_at_hop`. A truncated ring is never presented as
+complete.
+
+Each result gains `hops` (null when unreachable) and `text_score` (the
+unanchored score). The 200 best unanchored candidates are reordered, so an
+entity outside that pool is not added by being near the anchor.
 
 ### `POST /hybrid_search`
 
@@ -947,6 +1085,13 @@ Search relationships/edges by natural-language query. Body: `query`, optional
 
 Graphiti-compatible node search (mirrors Graphiti's `search_nodes` shape).
 
+The optional `group_ids` filter matches direct group labels or episode provenance
+in ROOT. It recognizes the configured vocabulary, the legacy vocabulary, and
+`https://scbrown.github.io/quechua/ns#groupId`; unrelated predicates with the same
+local name do not match. This is a provenance filter, not an access boundary.
+Results include distinct `group_ids` and retain scalar `group_id` when exactly
+one group is known. Property keys use the local name for both slash and hash IRIs.
+
 ### `POST /episodes/complete`
 
 Graphiti-compatible flat episode ingestion. Body: `name`, optional
@@ -1083,6 +1228,24 @@ background task scans the live root graph at startup and again five minutes
 after each refresh completes. Scrapes neither acquire database connections nor
 trigger scans. WAL size still comes from a current filesystem metadata read.
 
+`quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
+including pending requests, cancelled requests and metrics scrapes. It has no
+labels and resets when the process restarts. Use it to measure arrival rate:
+`quipu_http_requests_total` and `quipu_http_client_requests_total` count completed
+responses, so low completion rates alone do not establish low traffic.
+
+`quipu_http_auth_refusals_total{client,endpoint,method,expected_probe}` counts
+completed HTTP 401 responses, including protected GET requests. Observed
+successful requests initialize the corresponding counter at zero. Methods
+are bounded to GET, POST, HEAD and OTHER; routes use templates and caller
+overflow folds into `other`. `expected_probe` is operational attribution,
+not an authenticated identity: it is true for the designated link-check GET
+caller and the designated negative-auth POST caller on `/episode` or `/shapes`.
+Exclude these controls when measuring unexpected authentication failures,
+and retain a separate check that the metric is being scraped. A newly seen
+counter can start above zero, so an increase-only alert may miss its first
+refusal.
+
 Before the first successful refresh, graph-size gauges are omitted and
 `quipu_graph_counts_ready` is zero. A failed refresh retains the last successful
 snapshot and increments `quipu_graph_counts_refresh_failures_total`; it never
@@ -1101,6 +1264,24 @@ folds into `other` rather than creating unbounded Prometheus cardinality:
 - `quipu_store_wait_seconds_total{client,endpoint}` — time waiting to acquire a
   store connection;
 - `quipu_store_held_seconds_total{client,endpoint}` — store capacity consumed.
+
+Writers declare structured provenance in five headers: `X-Quipu-Agent`,
+`X-Quipu-Harness`, `X-Quipu-Model`, `X-Quipu-Session` and `X-Quipu-Host`. Their
+values are never metric labels. On write routes the server classifies how
+completely they were declared, and counts each COMMITTED write transaction once,
+at commit. A refused or rolled-back request counts nothing, and commits the
+engine makes on a request's behalf (verdicts, reasoner materialization,
+migration) are not counted as that client's writes:
+
+- `quipu_write_provenance_total{client,endpoint,provenance}` — `provenance` is
+  `complete` (agent, harness and host, plus session and model when the harness
+  is `claude` or `codex`), `partial`, or `absent` (none of the five headers);
+- `quipu_write_provenance_missing_total{client,field}` — commits missing a
+  required field (`agent`, `harness`, `host`, `session`, `model`).
+
+A header that is present but blank counts as missing. Coverage per client is
+`rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
+the process restarts, so use rates rather than raw values.
 
 The server also writes one-line JSON request events to stderr for journald/Loki.
 `request_start` makes a request that never completes visible. `request_complete`
@@ -1290,8 +1471,11 @@ attest this predicate, per the Phase-0 verifier registry?
 
 Verify a signed Verdict against the Phase-0 root of trust:
 `{"predicate_id", "target_ref", "outcome", "evidence_hash", "tier"?,
-"verifier", "signature"}` → `{"signature_valid", "verifier_registered",
-"verifier_authorized", "trusted"}` — `trusted` is the conjunction to gate on.
+"verifier", "signature", "verdict"?, "signed_at"?, "tx"?}` →
+`{"signature_valid", "verifier_registered", "verifier_authorized", "trusted",
+"as_of"}` — `trusted` is the conjunction to gate on. The registry is read as of
+the signature: pass `verdict` (the stored verdict IRI) to use the instant the
+store recorded it.
 
 ## Overlays
 
@@ -1331,6 +1515,15 @@ The durable graph-change event log (at-least-once delivery; consumers dedup
 by offset).
 
 ### `GET /events`
+
+Feed reads (`/events`, `/changes`, `/transactions`) use the WAL read pool when
+available, so a writer holding the store mutex does not block them. An empty
+read pool falls back to the writer. `POST /events/commit` remains a write.
+The `quipu_store_wait_seconds_total` and `quipu_store_held_seconds_total` metrics
+attribute each feed read to its normalized `X-Quipu-Client` and endpoint,
+including requests that return an error. An event page and its lag gauge are
+separate reads: a concurrent commit may increase the reported lag without
+changing the page's `next_offset` cursor.
 
 Pull a batch of events in offset order.
 
@@ -1404,7 +1597,10 @@ context.
 DBpedia-Spotlight-style annotation: `{"text", "confidence"?}` → mentions of
 known entities found in the text, with offsets and IRIs. The labeled-entity
 list it scans against is generation-cached, so a burst pays the expensive
-fetch once.
+fetch once. The fetch reads current ROOT labels and asserted types; named
+graphs and attached packs are excluded. Cold fills stream indexed rows,
+retain the existing query deadline and row limits, and avoid intermediate
+SPARQL binding tables.
 
 ### `GET /fragments`
 
@@ -1416,3 +1612,5 @@ selectors, each optional — a paged triple-pattern read for TPF clients.
 OpenRefine Reconciliation API: a body without `queries` returns the service
 manifest; `{"queries": {...}}` runs the batch and returns candidates per
 query, scored the way `/resolve` scores.
+
+RDF `/knot` loads accept `blank_node_scope`: distinct IDs separate repeated identical input; the same ID shares blank nodes across graphs only for byte-identical input. By default, whole-document bytes and destination graph define scope.
