@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
 - *(search)* Transactional SQLite FTS5 keyword index (#449)([adc448c](https://github.com/scbrown/quipu/commit/adc448cd9ddf53ab9f6c82ed185b0c9b422e6581))
 - *(shapes)* TextRule exemptions: exemptRepo, exemptLineMarker, and declare exemptPathRegex (#274)([a2bbd72](https://github.com/scbrown/quipu/commit/a2bbd727a512b08a93f10e27429c20a662333e2b))
 
+
+
 ### Documentation
 
 - Make share -> import -> promote the obvious bulk-load path (#436)([467ed2e](https://github.com/scbrown/quipu/commit/467ed2ebc03eba3803a0455ab4968c94d71312f5))
@@ -28,6 +30,7 @@ All notable changes to this project will be documented in this file.
 - *(update)* Bound the whole-store copy an unsliceable update needs (#460)([a0c9b71](https://github.com/scbrown/quipu/commit/a0c9b714c523591d272081e2731c7d9fa6365083))
 - *(metrics)* Attribute authentication refusals and clarify provisioning (#457)([4bfed20](https://github.com/scbrown/quipu/commit/4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4))
 - *(server)* Log observed transport peer and request provenance gaps([b6804aa](https://github.com/scbrown/quipu/commit/b6804aa77bed966b542eea733e51b847505d6d8f))
+- *(owl)* Derive scheduled closure outside the writer lock (#297)([d8b6757](https://github.com/scbrown/quipu/commit/d8b6757c379c31840aef1105bcd9cb0e2b8122a6))
 
 ### Miscellaneous
 
@@ -38,6 +41,7 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive ledgers at adc448cd (#454)([b81f3da](https://github.com/scbrown/quipu/commit/b81f3dacf636fc365d471bd11cb42b99b405e247))
 - *(conformance)* Re-derive ledgers at 1aa8de71 (#456)([c901b2b](https://github.com/scbrown/quipu/commit/c901b2b55f90e1fd392d3dc86c1a50c4fbd7abb6))
 - *(conformance)* Re-derive ledgers at 4bfed20a (#466)([83cdb96](https://github.com/scbrown/quipu/commit/83cdb961a3dbb69549d21be855c3cd66f42f5631))
+- *(conformance)* Re-derive ledgers at d8b6757c (#486)([50ae3a7](https://github.com/scbrown/quipu/commit/50ae3a7c19389d1b472327005154791ad037be1f))
 
 ### Perf
 
