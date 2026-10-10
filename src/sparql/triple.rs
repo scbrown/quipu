@@ -185,6 +185,11 @@ fn eval_triple_pattern_limited(
         }
     }
 
+    // aegis-tl2q4j: string FILTERs over this BGP narrow the scan. Only an
+    // UNBOUND variable position; a bound one is already an id lookup.
+    let narrows_active =
+        push_string_narrows(store, tp, bindings, ctx, &mut conditions, &mut sql_params);
+
     // Temporal filtering.
     conditions.push("op = 1".to_string());
     // Graph scope (quipu #36). `Default` matches the default-graph set (service
@@ -301,6 +306,10 @@ fn eval_triple_pattern_limited(
 
     let param_refs: Vec<&dyn rusqlite::types::ToSql> =
         sql_params.iter().map(std::convert::AsRef::as_ref).collect();
+    // The scalar functions read the predicates while this statement steps.
+    let _narrows = narrows_active.then(|| {
+        super::string_pushdown::Active::install(ctx.string_narrows.clone().unwrap_or_default())
+    });
     let mut rows = stmt.query(param_refs.as_slice())?;
 
     let mut results = Vec::new();
@@ -549,4 +558,78 @@ pub(super) fn eval_triple_pattern_from_model(
         }
     }
     Ok(results)
+}
+
+/// Add one SQL condition per string narrowing on an unbound variable of `tp`
+/// (aegis-tl2q4j). Returns whether any was added.
+fn push_string_narrows(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    ctx: &TemporalContext,
+    conditions: &mut Vec<String>,
+    sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+) -> bool {
+    let Some(narrows) = &ctx.string_narrows else {
+        return false;
+    };
+    let unbound = |name: &str| !bindings.contains_key(name);
+    let subject = match &tp.subject {
+        TermPattern::Variable(v) if unbound(v.as_str()) => Some(v.as_str()),
+        _ => None,
+    };
+    let predicate = match &tp.predicate {
+        NamedNodePattern::Variable(v) if unbound(v.as_str()) => Some(v.as_str()),
+        NamedNodePattern::NamedNode(_) | NamedNodePattern::Variable(_) => None,
+    };
+    let object = match &tp.object {
+        TermPattern::Variable(v) if unbound(v.as_str()) => Some(v.as_str()),
+        _ => None,
+    };
+    // A `terms` scan costs ~0.06 s on the production store, once per
+    // statement. With the subject or object already bound this statement is a
+    // cheap lookup that runs once PER OUTER ROW, so a scan per statement turned
+    // a 0.5 s join into a 30 s timeout (measured). There, narrow only by value.
+    let scan_terms = subject.is_some() && object.is_some();
+    let mut added = false;
+    for (k, narrow) in narrows.iter().enumerate() {
+        let var = Some(narrow.var.as_str());
+        let n = sql_params.len() + 1;
+        // Every term space the composed `facts` source can return.
+        let mut ids = vec![format!(
+            "SELECT id FROM main.terms WHERE quipu_narrow_text(iri, ?{n})"
+        )];
+        for a in store.attachments() {
+            ids.push(format!(
+                "SELECT id FROM {}.terms WHERE quipu_narrow_text(iri, ?{n})",
+                a.alias
+            ));
+        }
+        let ids = ids.join(" UNION ALL ");
+        let mut pushed = false;
+        if scan_terms {
+            for (position, column) in [(subject, "e"), (predicate, "a")] {
+                if position == var {
+                    conditions.push(format!("{column} IN ({ids})"));
+                    pushed = true;
+                }
+            }
+        }
+        if object == var {
+            conditions.push(if scan_terms {
+                format!(
+                    "quipu_narrow_value(v, ?{n}) AND \
+                     (quipu_ref_id(v) IS NULL OR quipu_ref_id(v) IN ({ids}))"
+                )
+            } else {
+                format!("quipu_narrow_value(v, ?{n})")
+            });
+            pushed = true;
+        }
+        if pushed {
+            sql_params.push(Box::new(i64::try_from(k).unwrap_or(i64::MAX)));
+            added = true;
+        }
+    }
+    added
 }

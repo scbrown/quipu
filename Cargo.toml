@@ -1,10 +1,10 @@
 [package]
 name = "quipu-ai"
-version = "0.11.0"
+version = "0.11.1"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/scbrown/quipu"
 keywords = ["knowledge-graph", "rdf", "sparql", "ontology", "ai"]
 categories = ["database", "data-structures"]
@@ -99,7 +99,7 @@ tar = "0.4"
 # `serialize` carries the wasm export/import story (quipu-2l5,
 # docs/design/wasm-support.md §6): sqlite3_serialize IS the .db interchange
 # format, on native and wasm alike.
-rusqlite = { version = "0.40", features = ["bundled", "hooks", "serialize"] }
+rusqlite = { version = "0.40", features = ["bundled", "functions", "hooks", "serialize"] }
 thiserror = "2"
 oxrdf = { version = "0.3", features = ["rdfc-10"] }
 oxttl = "0.2"
@@ -150,6 +150,7 @@ tempfile = "3"
 # Target-gated — native builds never see it. See docs/design/wasm-support.md §4.4.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
+
 # getrandom's wasm backends are opt-in (docs/design/wasm-support.md §4.4): the
 # 0.3 series needs its `wasm_js` feature (plus the `getrandom_backend` cfg the
 # §4.4 build line carries), and `ring` gates its own getrandom-0.2 JS entropy
@@ -157,6 +158,14 @@ js-sys = "0.3"
 # already has — nothing new ships natively.
 getrandom = { version = "0.3", features = ["wasm_js"] }
 ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
+
+# The server's global allocator (aegis-67p0lj). glibc malloc kept freed
+# transients resident in its per-thread arenas: production quipu-server held
+# >=93% of its heap as free-but-retained memory (3.3G free vs 0.24G used) and
+# was recycled 9x a day at the memory ceiling. jemalloc returns freed pages.
+# Native, non-MSVC only; the bin opts in, the library never changes allocator.
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_env = "msvc")))'.dependencies]
+tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [features]
 default = ["shacl"]
@@ -172,7 +181,10 @@ owl = []
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
 mcp = ["dep:libc", "dep:url", "dep:rmcp", "dep:tower", "dep:axum", "dep:tokio", "dep:tower-http"]
-server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "remote"]
+server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "remote", "jemalloc"]
+# quipu-server's global allocator; implied by `server` so every deployed build
+# carries it (aegis-67p0lj). Reported in /version features as `jemalloc`.
+jemalloc = ["dep:tikv-jemallocator"]
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
 reactive-reasoner = []

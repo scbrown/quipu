@@ -438,3 +438,40 @@ fn a_variable_predicate_on_a_constant_subject_slices_to_that_subject() {
     );
     assert_eq!(touched.len(), 1, "{touched:?}");
 }
+
+/// aegis-odm5yt: the CI counterexample, verbatim.
+#[test]
+fn odm5yt_delete_and_insert_of_the_same_quad_across_solutions() {
+    differential(&[
+        "DELETE { GRAPH <http://ex.org/g/1> { e:s1 p:dependsOn 2 } } INSERT { GRAPH <http://ex.org/g/1> { e:s1 p:dependsOn ?o } . GRAPH <http://ex.org/g/1> { ?s p:dependsOn \"agentA\" } } WHERE { ?s p:priority ?o OPTIONAL { GRAPH <http://ex.org/g/1> { e:s1 p:dependsOn 2 } } }",
+        "DELETE { GRAPH <http://ex.org/g/1> { e:s3 p:claimedBy \"agentA\" } . GRAPH <http://ex.org/g/1> { e:s1 p:priority \"closed\" } } INSERT { GRAPH <http://ex.org/g/1> { e:s1 p:claimedBy 2 } } WHERE { { e:s3 p:status \"closed\" } UNION { GRAPH <http://ex.org/g/1> { ?s p:status \"closed\" } } }",
+    ]);
+}
+
+/// aegis-odm5yt, deterministic: an INSERT that varies by solution and a
+/// DELETE that hits another solution's insert. SPARQL 1.1 §3.1.3 keeps BOTH
+/// tags; Oxigraph's per-solution order kept exactly one, in either order.
+/// (A GROUND insert template, e.g. seeds' CAS rewrite, is re-emitted by every
+/// solution and was never affected; this shape is the one that lost data.)
+#[test]
+fn odm5yt_swap_keeps_both_inserted_values() {
+    let swap = "DELETE { e:s1 p:tag ?a } INSERT { e:s1 p:tag ?b } \
+        WHERE { VALUES (?a ?b) { (\"x\" \"y\") (\"y\" \"x\") } }";
+    let text = format!("{PREFIXES}{swap}");
+    for force_full in [true, false] {
+        let shared = seeded();
+        apply_update_as(&shared, &text, force_full).unwrap();
+        let tags: Vec<String> = state(&shared)
+            .into_iter()
+            .filter(|f| f.contains("/p/tag "))
+            .collect();
+        assert_eq!(
+            tags,
+            [
+                "default http://ex.org/e/s1 http://ex.org/p/tag \"x\"",
+                "default http://ex.org/e/s1 http://ex.org/p/tag \"y\"",
+            ],
+            "force_full={force_full}"
+        );
+    }
+}

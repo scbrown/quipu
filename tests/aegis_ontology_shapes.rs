@@ -494,3 +494,43 @@ fn directive_traceability_is_a_warning_on_the_full_shapes_file() {
         feedback.results
     );
 }
+
+const BEAD_PREFIXES: &str = r#"
+    @prefix aegis: <http://aegis.gastown.local/ontology/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+"#;
+
+#[test]
+fn a_legacy_bead_that_is_also_a_work_item_conforms() {
+    // The 2631 live Bead nodes carry both types (aegis-ks4oph).
+    let data = format!(
+        r#"{BEAD_PREFIXES}
+        aegis:aegis-legacy a aegis:Bead, aegis:WorkItem ; rdfs:label "aegis-legacy" ."#
+    );
+    assert!(quipu::validate_shapes(SHAPES, &data).unwrap().conforms);
+}
+
+#[test]
+fn a_bead_only_node_fails_even_though_bead_is_a_subclass_of_work_item() {
+    // A new Bead write would be Bead-ONLY. The shapes declare
+    // `aegis:Bead rdfs:subClassOf aegis:WorkItem`, so this is the case where
+    // inference could make the WorkItem requirement vacuous. It must not: the
+    // shape reads the data's own rdf:type, and the axiom lives in the shapes
+    // graph. This test runs under every feature set CI builds, owl included.
+    let data = format!(
+        r#"{BEAD_PREFIXES}
+        aegis:aegis-new a aegis:Bead ; rdfs:label "aegis-new" ."#
+    );
+    let report = quipu::validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        !report.conforms,
+        "a Bead-only node must violate BeadLegacyShape"
+    );
+}
+
+#[test]
+fn bead_is_declared_a_deprecated_subclass_of_work_item() {
+    assert!(
+        SHAPES.contains("aegis:Bead rdfs:subClassOf aegis:WorkItem ;\n    owl:deprecated true .")
+    );
+}

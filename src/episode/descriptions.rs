@@ -12,13 +12,29 @@ pub(super) fn current_content_hash(
     store: &Store,
     ep_iri: &str,
     base_ns: &str,
+    graph: Option<&str>,
 ) -> Result<Option<String>> {
-    let query = format!("SELECT ?h WHERE {{ <{ep_iri}> <{base_ns}contentHash> ?h }} LIMIT 1");
+    let pattern = in_graph(&format!("<{ep_iri}> <{base_ns}contentHash> ?h"), graph);
+    let query = format!("SELECT ?h WHERE {{ {pattern} }} LIMIT 1");
     let result = crate::sparql::query(store, &query)?;
     Ok(result.rows().first().and_then(|row| match row.get("h") {
         Some(Value::Str(s)) => Some(s.clone()),
         _ => None,
     }))
+}
+
+/// Scope a pattern to the episode's named graph; `None` is ROOT, as before.
+///
+/// An episode written into a named graph keeps its activity (contentHash,
+/// generatedAtTime, provenance) in THAT graph. An unscoped lookup reads ROOT
+/// only, so it never found the hash: every byte-identical re-post was a full
+/// write reported `created`, and each left another `generatedAtTime` behind
+/// (aegis-z1i5on; 160,247 values on 25,213 activities in one plane).
+fn in_graph(pattern: &str, graph: Option<&str>) -> String {
+    match graph {
+        Some(g) => format!("GRAPH <{g}> {{ {pattern} }}"),
+        None => pattern.to_string(),
+    }
 }
 
 /// Is a content-hash match really "it is already there"? (aegis-7oswq4)
@@ -44,6 +60,7 @@ pub(super) fn is_unchanged(
     store: &Store,
     ep_iri: &str,
     base_ns: &str,
+    graph: Option<&str>,
     episode: &Episode,
     existing_hash: &Option<String>,
     new_hash: &str,
@@ -59,10 +76,11 @@ pub(super) fn is_unchanged(
     if expected.is_empty() {
         return Ok(true);
     }
-    let query = format!(
-        "SELECT ?s WHERE {{ ?s <{}wasGeneratedBy> <{ep_iri}> }}",
-        namespace::PROV,
+    let pattern = in_graph(
+        &format!("?s <{}wasGeneratedBy> <{ep_iri}>", namespace::PROV),
+        graph,
     );
+    let query = format!("SELECT ?s WHERE {{ {pattern} }}");
     Ok(crate::sparql::query(store, &query)?.rows().len() >= expected.len())
 }
 
@@ -216,6 +234,41 @@ pub(super) fn reconcile_node_descriptions(
                 op: Op::Assert,
             });
         }
+    }
+    Ok(())
+}
+
+/// Retract an existing episode activity's facts before its changed content is
+/// re-asserted. `retract_entity` is ROOT-scoped (quipu #56), but a graph-scoped
+/// activity's facts live in its own graph, so they are retracted there
+/// (aegis-z1i5on). This is a separate transaction, as on ROOT: one transaction
+/// cannot both retract and re-assert the same (e, a, v).
+pub(super) fn retract_activity(
+    store: &mut Store,
+    ep_id: i64,
+    graph: i64,
+    timestamp: &str,
+    actor: Option<&str>,
+    source: &str,
+) -> Result<()> {
+    if graph == crate::schema::ROOT_GRAPH {
+        store.retract_entity(ep_id, None, timestamp, actor)?;
+        return Ok(());
+    }
+    let stale: Vec<crate::store::Datum> = store
+        .entity_facts_in_graph(ep_id, graph)?
+        .into_iter()
+        .map(|f| crate::store::Datum {
+            entity: f.entity,
+            attribute: f.attribute,
+            value: f.value,
+            valid_from: timestamp.to_string(),
+            valid_to: None,
+            op: crate::types::Op::Retract,
+        })
+        .collect();
+    if !stale.is_empty() {
+        store.transact_to_graph(&stale, timestamp, actor, Some(source), graph)?;
     }
     Ok(())
 }
