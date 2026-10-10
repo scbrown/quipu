@@ -821,3 +821,23 @@ fn a_respaced_store_can_be_respaced_again() {
         "two hops must still read back as the original store"
     );
 }
+
+#[test]
+fn future_import_review_columns_are_text_and_unknown_columns_still_refuse() {
+    let store = Store::open_in_memory().unwrap();
+    store.conn.execute_batch("CREATE TABLE IF NOT EXISTS import_reviews (share_id TEXT PRIMARY KEY,state TEXT NOT NULL,first_seen TEXT NOT NULL,updated_at TEXT NOT NULL,notice_policy TEXT,payload TEXT NOT NULL)").unwrap();
+    assert!(crate::store::respace::classify_live_schema(&store.conn).is_ok());
+    assert_eq!(
+        crate::share_completeness::disposition("import_reviews"),
+        Some(crate::share_completeness::Disposition::Excluded)
+    );
+    store
+        .conn
+        .execute_batch("ALTER TABLE import_reviews ADD COLUMN future_term_id INTEGER")
+        .unwrap();
+    let error = match crate::store::respace::classify_live_schema(&store.conn) {
+        Err(error) => error.to_string(),
+        Ok(_) => panic!("unclassified review column was admitted"),
+    };
+    assert!(error.contains("import_reviews.future_term_id"), "{error}");
+}
