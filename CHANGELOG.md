@@ -45,7 +45,7 @@ All notable changes to this project will be documented in this file.
 - Describe current installs, native MCP and inference behavior (#439)([68199f1](https://github.com/scbrown/quipu/commit/68199f1ba82c405c6939d107701aa8d99896c89f))
 - *(conformance)* Name non-passing SPARQL 1.0 cases (#469)([7c10e26](https://github.com/scbrown/quipu/commit/7c10e26fc87ea5b4406d1d9767a9444b54d31970))
 - *(conformance)* Record measured MIN term discrepancy with disclosure (#492)([9002821](https://github.com/scbrown/quipu/commit/9002821cab5c6285520c6fb0146efe99e262bca2))
-- *(conformance)* Publish actual current-source derivation and repair heading spacing([1454c7a](https://github.com/scbrown/quipu/commit/1454c7a50b606f6568285316d851b6dafaa4b90c))
+- *(conformance)* Publish actual current-source derivation and repair heading spacing (#494)([b353bc2](https://github.com/scbrown/quipu/commit/b353bc2eb733966aa692bd6f0d33691d19720eee))
 
 ### Fixed
 
