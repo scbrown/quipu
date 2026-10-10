@@ -402,6 +402,11 @@ jobs:
       # scoring oracle (true / FALSE / evasion-caught / abstained) is what turns
       # model runs into the paper's table, so it is pinned here. Pure Python,
       # no model call and no build.
+      - name: Verify the CI to Release contract
+        run: |
+          python3 scripts/test_release_ci_gate.py
+          python3 scripts/test_release_ci_gate_controls.py
+
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
 

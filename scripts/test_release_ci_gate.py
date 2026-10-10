@@ -2,6 +2,7 @@
 """Static contract connecting CI correctness to Release."""
 
 from pathlib import Path
+import re
 
 
 ci = Path(".github/workflows/ci.yml").read_text()
@@ -23,10 +24,20 @@ for required in (
     "wasm",
     "source-size",
     "load-test",
-    "shapes",
     "lint-markdown",
 ):
     assert required in extended_header, f"extended surface {required} must remain covered"
+
+# Shape checks share the source-size runner; the aggregate must still require it.
+combined = ci[ci.index("  source-size:\n") :].split("\n  load-test:", 1)[0]
+combined_header = combined.split("    steps:", 1)[0]
+assert "    if:" not in combined_header, "combined invariants must not be conditional"
+for name, command in (
+    ("Self-test the invariant checker", "python3 shapes/verify_shape_invariants.py --selftest"),
+    ("Verify shape invariants (static)", "python3 shapes/verify_shape_invariants.py"),
+):
+    step = rf"^      - name: {re.escape(name)}\n        run: {re.escape(command)}$"
+    assert re.search(step, combined, re.MULTILINE), f"unconditional shape command missing: {name}"
 
 assert "  ci-correctness:\n" in release
 assert "python3 scripts/test_wait_release_correctness.py" in release
