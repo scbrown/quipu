@@ -292,6 +292,11 @@ fn routes_in_server_source() -> Vec<String> {
     let sources = [
         ("server.rs", include_str!("../server.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        // Handler-only today; scan it so a future route cannot escape classification.
+        (
+            "server/graph_store_compact.rs",
+            include_str!("../server/graph_store_compact.rs"),
+        ),
         (
             "server/merge_decisions.rs",
             include_str!("../server/merge_decisions.rs"),
