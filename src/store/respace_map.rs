@@ -107,6 +107,30 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("schema_terms", "term", TermIdKind::None),
     ("schema_terms", "kind", TermIdKind::None),
     ("schema_terms", "first_offset", TermIdKind::None),
+    // Denial quarantine (GS6). IRIs and digests, never term ids — `graph` and
+    // `verdict` are IRIs precisely so an entry means the same thing in any
+    // space. `post_digest` IS computed over this store's term ids, so a
+    // respaced copy replays its denials as "post-state differs"; that is the
+    // digest being honest about a store whose ids moved, not a column respace
+    // should rewrite. `base_tx` is a transaction id, like `facts.tx`.
+    ("denial_quarantine", "id", TermIdKind::None),
+    ("denial_quarantine", "verdict", TermIdKind::None),
+    ("denial_quarantine", "attempt", TermIdKind::None),
+    ("denial_quarantine", "graph", TermIdKind::None),
+    ("denial_quarantine", "base_tx", TermIdKind::None),
+    ("denial_quarantine", "at", TermIdKind::None),
+    ("denial_quarantine", "actor", TermIdKind::None),
+    ("denial_quarantine", "source", TermIdKind::None),
+    ("denial_quarantine", "chain", TermIdKind::None),
+    ("denial_quarantine", "gate_now", TermIdKind::None),
+    ("denial_quarantine", "rules_digest", TermIdKind::None),
+    ("denial_quarantine", "post_digest", TermIdKind::None),
+    ("denial_quarantine", "retention", TermIdKind::None),
+    ("denial_quarantine", "verifier", TermIdKind::None),
+    ("denial_quarantine", "seal", TermIdKind::None),
+    ("denial_quarantine", "purged_at", TermIdKind::None),
+    ("quarantine_deltas", "attempt", TermIdKind::None),
+    ("quarantine_deltas", "delta", TermIdKind::None),
     ("term_spaces", "space", TermIdKind::None),
     ("term_spaces", "db", TermIdKind::None),
     ("term_spaces", "local", TermIdKind::None),

@@ -187,6 +187,73 @@ impl PolicyRegistry {
         Self { by_type }
     }
 
+    /// A digest of the compiled rule set: `sha256:<hex>` over every policy's
+    /// canonical line, sorted, so it names WHAT was in force rather than when
+    /// it was built. The denial quarantine records it at the gate and a replay
+    /// recomputes it over the store as of the same transaction — equal digests
+    /// are the evidence that the replay judged by the same rules.
+    #[must_use]
+    pub fn digest(&self) -> String {
+        let mut lines: Vec<String> = self
+            .by_type
+            .values()
+            .flatten()
+            .map(|p| {
+                format!(
+                    "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+                    p.policy_iri,
+                    p.target_type_iri,
+                    p.claim,
+                    p.effect,
+                    p.evidence_probe.as_deref().unwrap_or(""),
+                    p.reversibility_window
+                        .map_or(String::new(), |w| w.to_string()),
+                    p.exemplar.as_deref().unwrap_or(""),
+                )
+            })
+            .collect();
+        lines.sort();
+        let digest = ring::digest::digest(&ring::digest::SHA256, lines.join("\n").as_bytes());
+        format!("sha256:{}", hex::encode(digest.as_ref()))
+    }
+
+    /// Whether a blocking action-boundary policy by this IRI is in the
+    /// registry — over an as-of store, whether it was in force then.
+    #[must_use]
+    pub fn in_force(&self, policy_iri: &str) -> bool {
+        self.by_type
+            .values()
+            .flatten()
+            .any(|p| p.policy_iri == policy_iri && effect_blocks(&p.effect))
+    }
+
+    /// What the gate would record for `policy_iri` judging `target_iri` against
+    /// the store as it stands: `satisfied`, `unsatisfied` or `unknown`, or
+    /// `None` when no blocking action-boundary policy by that IRI is in the
+    /// registry at all — which, over an as-of store, means the rule was not in
+    /// force then. Runs the same probe-then-claim the write gate runs, and
+    /// never consults the router: the router decides whether an unsatisfied
+    /// escalation BLOCKS, not what the verdict says.
+    pub fn judge(
+        &self,
+        store: &Store,
+        policy_iri: &str,
+        target_iri: &str,
+    ) -> Result<Option<String>> {
+        let Some(policy) = self
+            .by_type
+            .values()
+            .flatten()
+            .find(|p| p.policy_iri == policy_iri && effect_blocks(&p.effect))
+        else {
+            return Ok(None);
+        };
+        guard_iri(target_iri)?;
+        Ok(judge_claim(&EvalCtx::live(store), target_iri, policy)?
+            .verdict()
+            .map(str::to_owned))
+    }
+
     /// Evaluate the applicable action-boundary policies for a write. Returns
     /// `Err(PolicyDenied)` on the first blocking policy whose claim is
     /// unsatisfied for a touched target; otherwise `Ok(())`.
@@ -319,7 +386,7 @@ impl<'a> EvalCtx<'a> {
         Self {
             store,
             at: TemporalContext::default(),
-            now: None,
+            now: store.gate_clock,
         }
     }
 
