@@ -111,32 +111,43 @@ async fn log_request_with_sequence(
         .get("x-quipu-agent")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
+    let peer = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|info| info.0);
+    let provenance = write_provenance_of(req.headers(), &client, &endpoint);
+    let attributed = |log| {
+        quipu::request_usage::with_request_context(
+            quipu::request_usage::with_declared_attribution(
+                log,
+                declared_host.as_deref(),
+                declared_agent.as_deref(),
+            ),
+            peer,
+            provenance.as_deref(),
+        )
+    };
     eprintln!(
         "{}",
-        quipu::request_usage::with_declared_attribution(
-            quipu::request_usage::structured_request_log(
-                "request_start",
-                id,
-                &client,
-                &task,
-                method.as_str(),
-                &path,
-                &endpoint,
-                None,
-                None,
-                quipu::request_usage::AuthOutcome::Pending,
-                None,
-            ),
-            declared_host.as_deref(),
-            declared_agent.as_deref()
-        )
+        attributed(quipu::request_usage::structured_request_log(
+            "request_start",
+            id,
+            &client,
+            &task,
+            method.as_str(),
+            &path,
+            &endpoint,
+            None,
+            None,
+            quipu::request_usage::AuthOutcome::Pending,
+            None,
+        ))
     );
     let started = std::time::Instant::now();
-    let provenance = write_provenance_of(req.headers(), &client, &endpoint);
     let resp = REQUEST_WRITE_KIND
         .scope(
             quipu::write_kind::WriteKind::for_route(&endpoint),
-            REQUEST_WRITE_PROVENANCE.scope(provenance, next.run(req)),
+            REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
         )
         .await;
     let status = resp.status().as_u16();
@@ -155,23 +166,19 @@ async fn log_request_with_sequence(
         .copied();
     eprintln!(
         "{}",
-        quipu::request_usage::with_declared_attribution(
-            quipu::request_usage::structured_request_log(
-                "request_complete",
-                id,
-                &client,
-                &task,
-                method.as_str(),
-                &path,
-                &endpoint,
-                Some(status),
-                Some(started.elapsed().as_millis()),
-                auth,
-                usage,
-            ),
-            declared_host.as_deref(),
-            declared_agent.as_deref()
-        )
+        attributed(quipu::request_usage::structured_request_log(
+            "request_complete",
+            id,
+            &client,
+            &task,
+            method.as_str(),
+            &path,
+            &endpoint,
+            Some(status),
+            Some(started.elapsed().as_millis()),
+            auth,
+            usage,
+        ))
     );
     resp
 }

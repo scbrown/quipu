@@ -1,5 +1,20 @@
 # REST API
 
+Request logs distinguish caller-declared host and agent from the receiver's
+observed network hop. Direct HTTP requests include `transport_peer` and
+`transport_peer_source: "socket"`; unavailable transport context is `null` with
+source `"unavailable"`. A proxy's socket identifies that proxy, not the originating
+agent. Internal MCP or stdio dispatch may have no socket context. Forwarded
+headers do not establish this observation, and neither a socket address nor a
+declared agent authenticates a writer. Credentials and request bodies are not
+included in these fields. Existing authorization outcomes remain separate.
+
+Write-route logs also include the bounded declaration class in
+`request_provenance` and missing required field names in
+`request_provenance_missing`. These describe requests, including refusals;
+they do not assert that a transaction committed and must not replace committed
+write-coverage metrics. Model and session values are not added to logs.
+
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
 ## Unrecognized request fields
