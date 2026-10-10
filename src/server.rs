@@ -404,6 +404,7 @@ async fn main() {
         // not prevention.
         .route("/resolve", post(resolve_probe))
         .route("/hybrid_search", post(hybrid_search))
+        .route("/search_query", post(search_query))
         .route("/unified_search", post(unified_search))
         .route("/ask", post(ask))
         .route("/search_nodes", post(search_nodes))
