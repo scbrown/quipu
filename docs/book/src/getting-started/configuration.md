@@ -72,6 +72,7 @@ stops being read.
 | `labels.deny_data_kinds` | `[]` | Refuse queries composing graphs of these `dataKind` tokens (a blocklist — undeclared kinds pass) |
 | `search.default_limit` | `10` | Result limit when the caller passes none |
 | `search.keyword` | `false` | Opt-in SQLite FTS5 keyword search; activation installs schema/triggers without a bulk startup migration. Existing facts require explicit bounded backfill; reads refuse until complete. |
+| `search.named_graphs` | `false` | Explicit graph search and automatic named-only embedding text. Prepare existing named-only vectors with bounded backfill before enabling. Disabling retains the ROOT exclusion for prepared vectors. |
 | `search.max_limit` | `1000` | Hard cap on requested result limits |
 | `search.max_sparql_rows` | `10000` | Cap on SPARQL result rows |
 | `search.query_timeout_ms` | `30000` | SPARQL evaluation deadline |

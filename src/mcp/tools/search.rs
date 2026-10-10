@@ -7,7 +7,6 @@ use crate::error::{Error, Result};
 use crate::sparql;
 use crate::store::Store;
 use crate::types::Value;
-use crate::vector::KnowledgeVectorStore;
 
 /// MCP tool: `quipu_search` -- Semantic vector search over entity embeddings.
 ///
@@ -15,6 +14,7 @@ use crate::vector::KnowledgeVectorStore;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
     match input.get("mode") {
         None => {}
         Some(JsonValue::String(mode)) if mode == "semantic" => {}
@@ -29,6 +29,9 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     }
     let content_ranking = super::search_ranking::ranking_mode(input)?;
     let anchored = super::search_anchor::AnchorRequest::parse(input)?;
+    if graph_scope.explicit && (content_ranking || anchored.is_some()) {
+        return Err(Error::InvalidValue("explicit graph scope currently supports semantic or keyword ranking, not ROOT content/anchor ranking".into()));
+    }
     if anchored.is_some() && !store.search_config().anchored {
         return Err(Error::InvalidValue(
             "anchored search is disabled on this server ([quipu.search] anchored = false)".into(),
@@ -87,7 +90,14 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect());
 
-    let scope = scoped_entity_iris(store, entity_type, group_ids.as_deref())?;
+    let scope = scoped_entity_iris_at(
+        store,
+        entity_type,
+        group_ids.as_deref(),
+        valid_at,
+        true,
+        Some(&graph_scope),
+    )?;
 
     // Oversample in both paths: an entity has one embedding row per fact/text,
     // so the raw top-N can be several rows of the same entity (aegis-a1s5).
@@ -98,24 +108,32 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         oversampled = oversampled.max(ANCHOR_POOL);
     }
 
-    let matches = if let Some(ref allowed) = scope {
-        // Keep only in-scope entities (works for both the SQLite backend and as
-        // a safety net over LanceDB pushdown). entity_type is also pushed down
-        // to LanceDB for efficiency.
-        let pushdown = entity_type.map(|t| format!("entity_type = '{t}'"));
+    // The in-scope predicate is applied while walking the full ranking
+    // (vector_search_where), so a small graph or group is never starved by a
+    // top-N cut taken over the whole store.
+    let graph_entities = graph_scope
+        .explicit
+        .then(|| graph_scope.entities(store, valid_at))
+        .transpose()?;
+    let mut keep = |entity_id: i64| -> Result<bool> {
+        let in_graph = if let Some(entities) = &graph_entities {
+            entities.contains(&entity_id)
+        } else {
+            !store.entity_is_named_graph_only(entity_id)?
+        };
+        if !in_graph {
+            return Ok(false);
+        }
+        Ok(scope.as_ref().is_none_or(|allowed| {
+            store
+                .resolve(entity_id)
+                .is_ok_and(|iri| allowed.contains(&iri))
+        }))
+    };
+    let matches =
         store
             .vector_store()
-            .vector_search_filtered(&embedding, oversampled, pushdown.as_deref(), valid_at)?
-            .into_iter()
-            .filter(|m| {
-                store
-                    .resolve(m.entity_id)
-                    .is_ok_and(|iri| allowed.contains(&iri))
-            })
-            .collect::<Vec<_>>()
-    } else {
-        store.vector_search(&embedding, oversampled, valid_at)?
-    };
+            .vector_search_where(&embedding, oversampled, valid_at, &mut keep)?;
 
     // Dedupe by entity, keeping the highest-scoring occurrence. Matches arrive
     // score-descending, so the first row seen for an entity is its best one.
@@ -149,7 +167,7 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             let iri = prefixes
                 .as_ref()
                 .map_or(iri.clone(), |map| map.compact(&iri));
-            serde_json::json!({
+            let mut result = serde_json::json!({
                 "entity": iri,
                 "text": m.text,
                 "score": ranked.score,
@@ -158,19 +176,26 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "source": "knowledge",
                 "valid_from": m.valid_from,
                 "valid_to": m.valid_to
-            })
+            });
+            if graph_scope.explicit {
+                let graphs = graph_scope.names(store, m.entity_id, valid_at)?;
+                result["graph"] = serde_json::json!(graphs.first());
+                result["graphs"] = serde_json::json!(graphs);
+            }
+            Ok(result)
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
     Ok(serde_json::json!({
         "results": results,
         "count": results.len(),
-        "scoped": scope.is_some(),
+        "scoped": scope.is_some() || graph_scope.explicit,
         "ranking": if content_ranking { "content" } else { "semantic" }
     }))
 }
 
 fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
     if !store.search_config().keyword {
         return Err(Error::InvalidValue(
             "keyword search is disabled ([quipu.search] keyword = false)".into(),
@@ -210,8 +235,15 @@ fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         groups.as_deref(),
         valid_at,
         infer_types,
+        Some(&graph_scope),
     )?;
-    let matches = store.keyword_search_hits(query, limit, valid_at, scope.as_ref())?;
+    let matches = store.keyword_search_hits_in_graphs(
+        query,
+        limit,
+        valid_at,
+        scope.as_ref(),
+        &graph_scope.ids,
+    )?;
     let prefixes = if input
         .get("verbose")
         .and_then(JsonValue::as_bool)
@@ -226,18 +258,24 @@ fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .map(|hit| {
             let m = hit.matched;
             let iri = store.resolve(m.entity_id)?;
-            Ok(serde_json::json!({
+            let mut result = serde_json::json!({
                 "entity": prefixes.as_ref().map_or(iri.clone(), |p| p.compact(&iri)),
                 "text": m.text, "score": m.score, "bm25": -m.score,
                 "ranking_reason": "keyword", "source": "knowledge",
                 "valid_from": m.valid_from, "valid_to": m.valid_to,
                 "language": hit.language, "datatype":hit.datatype, "type_iri":hit.type_iri,
-                "plane":"ROOT"
-            }))
+                "plane": if hit.graph_id == 0 { "ROOT" } else { "named" }
+            });
+            if graph_scope.explicit {
+                result["graph"] = serde_json::json!(store.graph_display_name(hit.graph_id));
+                result["graphs"] =
+                    serde_json::json!(graph_scope.names(store, m.entity_id, valid_at)?);
+            }
+            Ok(result)
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(
-        serde_json::json!({"count":results.len(),"results":results,"scoped":scope.is_some(),"ranking":"keyword","indexed_types":"asserted","infer_types":infer_types}),
+        serde_json::json!({"count":results.len(),"results":results,"scoped":scope.is_some() || graph_scope.explicit,"ranking":"keyword","indexed_types":"asserted","infer_types":infer_types}),
     )
 }
 
@@ -267,20 +305,13 @@ fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 /// it silently drops legitimate in-scope entities from every scoped search. The
 /// old `LIMIT oversample(limit)` capped one populous group at 100 of its
 /// 457 entities, so ~78% of that group's graph was unsearchable.
-fn scoped_entity_iris(
-    store: &Store,
-    entity_type: Option<&str>,
-    group_ids: Option<&[&str]>,
-) -> Result<Option<std::collections::HashSet<String>>> {
-    scoped_entity_iris_at(store, entity_type, group_ids, None, true)
-}
-
 fn scoped_entity_iris_at(
     store: &Store,
     entity_type: Option<&str>,
     group_ids: Option<&[&str]>,
     valid_at: Option<&str>,
     infer_types: bool,
+    graphs: Option<&crate::search_graph_scope::GraphScope>,
 ) -> Result<Option<std::collections::HashSet<String>>> {
     let has_group = group_ids.is_some_and(|g| !g.is_empty());
     if entity_type.is_none() && !has_group {
@@ -314,7 +345,13 @@ fn scoped_entity_iris_at(
         }
     }
 
-    let sparql = format!("SELECT DISTINCT ?s WHERE {{ {patterns}{filters}}}");
+    let body = format!("{patterns}{filters}");
+    let body = if let Some(g) = graphs {
+        g.patterns(store, &body)?
+    } else {
+        body
+    };
+    let sparql = format!("SELECT DISTINCT ?s WHERE {{ {body} }}");
     let result = if let Some(at) = valid_at {
         sparql::query_temporal(
             store,

@@ -29,6 +29,7 @@ pub mod migration;
 pub mod namespace;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+mod search_graph_scope;
 pub mod transaction_auth;
 pub mod write_kind;
 pub mod write_provenance;
@@ -141,7 +142,10 @@ pub use context::{
     KnowledgeRelevance, tool_context, tool_unified_search,
 };
 pub use derivation::{DerivationMethod, Rederivation};
-pub use embedding::{DeferredEmbed, EmbeddingProvider, NO_PROVIDER_HELP, build_entity_text};
+pub use embedding::{
+    DeferredEmbed, EmbeddingProvider, NO_PROVIDER_HELP, build_entity_text,
+    build_entity_text_for_graph_backfill,
+};
 pub use episode::{
     Episode, IngestResolutionOpts, IngestResult, episode_provenance, ingest_batch, ingest_episode,
     ingest_episode_with_resolution,

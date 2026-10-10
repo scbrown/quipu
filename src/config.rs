@@ -139,6 +139,9 @@ pub struct SearchConfig {
     /// SQLite FTS5 keyword search. Default off; activation creates only empty
     /// schema/triggers. Historical rows require explicit bounded backfill.
     pub keyword: bool,
+    /// Explicit graph search and automatic named-only embedding fallback.
+    /// Default off: prepare vectors through bounded maintenance before enabling.
+    pub named_graphs: bool,
 }
 
 impl Default for SearchConfig {
@@ -153,6 +156,7 @@ impl Default for SearchConfig {
             max_join_rows: 1_000_000,
             anchored: false,
             keyword: false,
+            named_graphs: false,
         }
     }
 }

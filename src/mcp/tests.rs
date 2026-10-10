@@ -5111,3 +5111,6 @@ mod knot_on_violation {
         }
     }
 }
+
+#[path = "search_graph_tests.rs"]
+mod search_graph_tests;
