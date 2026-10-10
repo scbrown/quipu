@@ -17,6 +17,8 @@ use quipu::governance::namespace;
 use quipu::governance::replay;
 use quipu::governance::tree;
 
+mod git;
+
 /// Run a checker: `audit <trace.jsonl>` against a trace, `audit inventory`
 /// against the dispatch graph, `audit replay <trace.jsonl>` for promotion
 /// readiness, `audit namespace` for base-namespace drift.
@@ -28,6 +30,10 @@ pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
         );
         std::process::exit(1);
     };
+    let git_window = git::options(args, subject).unwrap_or_else(|e| {
+        eprintln!("cannot verify Git coverage: {e}");
+        std::process::exit(2);
+    });
     let store = crate::cli_open::open_store(db_path);
 
     if subject == "replay" {
@@ -63,7 +69,9 @@ pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
         return;
     }
 
-    let report = if subject == "inventory" {
+    let mut trace = Vec::new();
+    let mut unreadable = 0;
+    let mut report = if subject == "inventory" {
         inventory::check(&store).unwrap_or_else(|e| {
             eprintln!("error checking inventory: {e}");
             std::process::exit(1);
@@ -73,18 +81,25 @@ pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
             eprintln!("error reading {subject}: {e}");
             std::process::exit(1);
         });
-        audit::check_jsonl(&store, &jsonl).unwrap_or_else(|e| {
+        (trace, unreadable) = audit::parse_trace(&jsonl);
+        audit::check(&store, &trace, unreadable).unwrap_or_else(|e| {
             eprintln!("error checking trace: {e}");
             std::process::exit(1);
         })
     };
+
+    let scope =
+        git_window.map(|window| git::check(&trace, unreadable, &store, &window, &mut report));
 
     let headline = if subject == "inventory" {
         inventory::summary(&report)
     } else {
         report.summary()
     };
-    emit(args, &report, &headline);
+    git::emit(args, &report, &headline, scope.as_ref());
+    if scope.as_ref().is_some_and(|s| s.unresolved > 0) && report.conforms() {
+        std::process::exit(2);
+    }
     // Only a contradiction fails the gate. See the module doc.
     if !report.conforms() {
         std::process::exit(1);
