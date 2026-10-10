@@ -391,7 +391,8 @@ Two limits worth stating before reading a `T ⊨ Σ` result as reassurance. Cove
 is checked in the direction quipu can decide — nothing is cited that Σ does not
 define — because the other direction, *was every constraint that applied
 evaluated*, means re-running the selector against the file as it stood, and quipu
-has neither the file nor the parser. And the report counts lines it could not
+has neither by default. The opt-in Git and Yupana passes below supply that
+evidence. The report counts lines it could not
 read rather than skipping them, so `N line(s) unreadable` is always part of the
 summary: conformance over a window that was only partly read is not conformance.
 
@@ -412,7 +413,12 @@ The additional **git-coverage** pass reads ROOT's **current** action policies
 with `appliesTo` path globs. Globs use the same `glob::Pattern` matching as
 Yupana tripwires. It checks each commit, not just the window's net diff: a
 crossing followed by a revert is still visible. Renames check both old and new
-paths; merges check every parent and the window includes side-branch commits.
+paths. The window includes side-branch commits. A merge only contributes paths
+whose committed state differs from **every** parent (including mode changes
+and deletions): inherited content is audited where it was introduced, while
+new merge content still needs its own evaluation. This also handles octopus
+merges; comparing against just one parent would either duplicate evidence or
+miss a new merge change.
 Policy scope is the supplied repository; use a store containing the policies
 intended for that repository. Policies introduced after the audited commits
 also apply: this is a current-policy retrospective audit, not historical policy
@@ -434,10 +440,39 @@ with the current tip. This reader does not authenticate such bindings.
 Git mode exits **1** for a violation, **2** when Git coverage cannot be verified
 (including malformed trace lines, invalid refs/globs, no path policies, or
 unsupported selector replay without another violation), and **0** otherwise.
-Trace-only incompleteness retains its original semantics. Selector/predicate
-policies with matching `appliesTo` are explicitly unresolved; selectors without
-path scope are outside this pass. Selector replay against committed blobs is a
-separate layer, not a capability claimed by this path-only check.
+Trace-only incompleteness retains its original semantics. Without `--yupana`,
+selector/predicate policies with matching `appliesTo` are unresolved and
+selectors without path scope remain outside the path-only pass.
+
+### Replay tree-sitter policies at each commit
+
+```bash
+quipu audit trace.jsonl --repo . --from BASE --to HEAD --db my.db \
+  --yupana /trusted/path/to/yupana --json
+```
+
+The explicit executable must provide Yupana's `audit-rule` JSON interface,
+schema version 1. Quipu loads each policy's current selector and predicate
+from ROOT and supplies the exact regular-file blob from each commit to that
+parser. It never reads the working tree's contents or follows committed
+symlinks. Unscoped structural policies are included in this mode; Yupana's
+own path-to-language classifier decides language applicability. `appliesTo`
+still narrows a policy when present.
+
+A replayed unsatisfied claim is a violation even if its trace claims success.
+Successful replay does not erase a missing enforcement record. The `git`
+object reports `selectors_checked` separately from paths and commits. Deleted
+paths, non-UTF-8 or oversized blobs, malformed/ambiguous selector definitions,
+unsupported grammars, invalid syntax, a missing executable, and protocol or
+process failures are unresolved. A pure path policy still covers deletions.
+Source blobs are limited to 8 MiB; each evaluator invocation has a 10-second
+limit and a 1-MiB output limit. Only `tree-sitter` selector definitions with
+regex predicates are supported; entity-grounding and other selector tiers
+remain unresolved.
+
+This is an agent-invoked audit library/CLI, not an installed scheduler or forge
+gate. Select and pin a trusted Yupana build: invoking a caller-selected executable
+does not authenticate that executable or the response it produces.
 
 This catches only changes reaching the selected Git window. Uncommitted edits,
 ignored files and writes outside the repository remain invisible. Authors,

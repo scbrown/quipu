@@ -14,7 +14,9 @@ use crate::store::Store;
 use super::audit::{Discrepancy, Pass, Report, Severity, TraceRecord};
 
 mod policies;
+mod replay;
 mod repository;
+mod selectors;
 
 /// Measured scope of the Git pass, separate from trace-record counts.
 #[derive(Debug, Default, serde::Serialize)]
@@ -25,11 +27,13 @@ pub struct Scope {
     pub to: String,
     /// Commits actually enumerated, including side-branch commits.
     pub commits_checked: usize,
-    /// Changed paths enumerated per commit (deduplicated across merge parents).
+    /// Changed paths per commit, excluding states inherited at a merge.
     pub paths_checked: usize,
-    /// Path policies loaded from ROOT.
+    /// Path/structural policies loaded from ROOT.
     pub policies_checked: usize,
-    /// Coverage the path-only implementation could not establish.
+    /// Structural evaluations completed on committed source.
+    pub selectors_checked: usize,
+    /// Coverage the implementation could not establish.
     pub unresolved: usize,
 }
 
@@ -49,8 +53,30 @@ pub fn reconcile(
     to: &str,
     report: &mut Report,
 ) -> Result<Scope> {
+    reconcile_with_yupana(store, trace, repo, from, to, None, report)
+}
+
+/// Reconcile paths and optionally replay selectors using an explicit executable.
+///
+/// # Errors
+/// Same repository and policy failures as [`reconcile`]. Individual selector
+/// errors are reported as unresolved coverage, never as a successful replay.
+pub fn reconcile_with_yupana(
+    store: &Store,
+    trace: &[TraceRecord],
+    repo: &Path,
+    from: &str,
+    to: &str,
+    yupana: Option<&Path>,
+    report: &mut Report,
+) -> Result<Scope> {
     let window = repository::window(repo, from, to)?;
-    let policies = policies::load(store)?;
+    let policies = policies::load(store, yupana.is_some())?;
+    let selectors = if yupana.is_some() {
+        selectors::load(store)?
+    } else {
+        Default::default()
+    };
     let mut scope = Scope {
         from: window.from,
         to: window.to,
@@ -72,10 +98,54 @@ pub fn reconcile(
         let attribution = repository::attribution(repo, &commit)?;
         for path in paths {
             for policy in &policies {
-                if !policy.globs.iter().any(|g| g.matches(&path)) {
+                if !policy.globs.is_empty() && !policy.globs.iter().any(|g| g.matches(&path)) {
                     continue;
                 }
                 let context = format!("commit {commit}, path {path:?}, {attribution}");
+                let mut replayed = false;
+                if policy.has_selector
+                    && let Some(executable) = yupana
+                {
+                    let result = (|| {
+                        let rule = selectors
+                            .get(&policy.iri)
+                            .ok_or_else(|| invalid("selector definition absent"))?
+                            .as_ref()
+                            .map_err(|e| invalid(e.clone()))?;
+                        let source = repository::blob(repo, &commit, &path)?;
+                        replay::run(executable, rule, &path, &source)
+                    })();
+                    match result {
+                        Ok(response) if response.verdict == "not_applicable" => continue,
+                        Ok(response) if response.verdict == "unknown" => unresolved(
+                            report,
+                            &mut scope,
+                            Some(&policy.iri),
+                            format!("{context}; selector replay unknown: {:?}", response.errors),
+                        ),
+                        Ok(response) => {
+                            scope.selectors_checked += 1;
+                            if response.verdict == "unsatisfied" {
+                                finding(
+                                    report,
+                                    Severity::Violation,
+                                    Some(&policy.iri),
+                                    format!(
+                                        "selector claim unsatisfied: {context}; {:?}",
+                                        response.violations
+                                    ),
+                                );
+                            }
+                        }
+                        Err(error) => unresolved(
+                            report,
+                            &mut scope,
+                            Some(&policy.iri),
+                            format!("{context}; selector replay unavailable: {error}"),
+                        ),
+                    }
+                    replayed = true;
+                }
                 let matched = trace.iter().any(|r| {
                     r.git_commit.as_deref() == Some(commit.as_str())
                         && r.path.as_deref() == Some(path.as_str())
@@ -100,7 +170,7 @@ pub fn reconcile(
                         ),
                     );
                 }
-                if policy.has_selector {
+                if policy.has_selector && !replayed {
                     unresolved(
                         report,
                         &mut scope,
@@ -109,7 +179,7 @@ pub fn reconcile(
                             "{context}; selector/predicate replay is unsupported by the path-only pass"
                         ),
                     );
-                } else if policy.effect.as_deref() == Some("deny") {
+                } else if !policy.has_selector && policy.effect.as_deref() == Some("deny") {
                     // Even a trace saying 'blocked' cannot excuse a crossing
                     // Git proves happened. Signed exceptions are not inferred.
                     finding(
@@ -120,10 +190,12 @@ pub fn reconcile(
                             "denied path committed: {context}; a trace record is not an exception verdict"
                         ),
                     );
-                } else if !matches!(
-                    policy.effect.as_deref(),
-                    Some("record" | "warn" | "throttle" | "escalate" | "allow")
-                ) {
+                } else if !policy.has_selector
+                    && !matches!(
+                        policy.effect.as_deref(),
+                        Some("record" | "warn" | "throttle" | "escalate" | "allow")
+                    )
+                {
                     unresolved(
                         report,
                         &mut scope,
@@ -162,3 +234,7 @@ fn invalid(message: impl Into<String>) -> Error {
 #[cfg(test)]
 #[path = "git_audit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "git_audit/merge_tests.rs"]
+mod merge_tests;
