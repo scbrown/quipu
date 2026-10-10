@@ -102,6 +102,7 @@ pub mod share_merge_decisions_view;
 pub mod share_mint;
 mod share_promotion;
 pub mod share_queries;
+pub mod share_review;
 pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;

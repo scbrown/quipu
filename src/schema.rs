@@ -143,6 +143,17 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_type  ON events(type, "offset");
 CREATE INDEX IF NOT EXISTS idx_events_group ON events(group_id, "offset");
 
+-- Import review state survives pruning of the delivery log.
+CREATE TABLE IF NOT EXISTS import_reviews (
+    share_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    notice_policy TEXT,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_import_reviews_pending ON import_reviews(state, first_seen);
+
 -- Durable consumer cursor registry (pull-resume). committed_offset is the
 -- HIGHEST offset the consumer has processed; resume returns events AFTER it.
 CREATE TABLE IF NOT EXISTS consumers (

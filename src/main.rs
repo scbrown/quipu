@@ -63,6 +63,7 @@ mod cli_policy;
 mod cli_propose;
 mod cli_search;
 mod cli_share_diff;
+mod cli_share_review;
 mod hook_session_capture;
 mod hooks_install;
 

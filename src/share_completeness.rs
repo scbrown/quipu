@@ -84,6 +84,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("attestation_nonces", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
+    // Receiver-local review decisions and notice routes. A foreign pack must
+    // not install its producer's review position or silence local notices.
+    ("import_reviews", Disposition::Excluded),
     // Local derived-index cursor/highwater. A reconstructed store has its
     // own fact rowids and must start a new bounded backfill.
     ("lexical_progress", Disposition::Excluded),

@@ -91,6 +91,13 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("events", "group_id", TermIdKind::None),
     ("events", "tx_id", TermIdKind::None),
     ("events", "payload", TermIdKind::None),
+    // Review identifiers and payloads are text/JSON, never dictionary IDs.
+    ("import_reviews", "share_id", TermIdKind::None),
+    ("import_reviews", "state", TermIdKind::None),
+    ("import_reviews", "first_seen", TermIdKind::None),
+    ("import_reviews", "updated_at", TermIdKind::None),
+    ("import_reviews", "notice_policy", TermIdKind::None),
+    ("import_reviews", "payload", TermIdKind::None),
     ("consumers", "consumer_id", TermIdKind::None),
     ("consumers", "committed_offset", TermIdKind::None),
     ("consumers", "filter", TermIdKind::None),
