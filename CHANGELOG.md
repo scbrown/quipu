@@ -45,6 +45,7 @@ All notable changes to this project will be documented in this file.
 - Describe current installs, native MCP and inference behavior (#439)([68199f1](https://github.com/scbrown/quipu/commit/68199f1ba82c405c6939d107701aa8d99896c89f))
 - *(conformance)* Name non-passing SPARQL 1.0 cases (#469)([7c10e26](https://github.com/scbrown/quipu/commit/7c10e26fc87ea5b4406d1d9767a9444b54d31970))
 - *(conformance)* Record measured MIN term discrepancy with disclosure (#492)([9002821](https://github.com/scbrown/quipu/commit/9002821cab5c6285520c6fb0146efe99e262bca2))
+- *(conformance)* Publish actual current-source derivation and repair heading spacing([1454c7a](https://github.com/scbrown/quipu/commit/1454c7a50b606f6568285316d851b6dafaa4b90c))
 
 ### Fixed
 
@@ -69,7 +70,7 @@ All notable changes to this project will be documented in this file.
 - *(sparql)* CONSTRUCT template blank nodes are fresh per solution (#309)([e8a82b2](https://github.com/scbrown/quipu/commit/e8a82b2980d1bed5049fede3dd8011873da2ab8c))
 - *(provenance)* Govern episode references to existing work items (#329)([a404b89](https://github.com/scbrown/quipu/commit/a404b89698dbf5e0273ff5d3ca80932519364126))
 - Repair main release, conformance and governance checks (#491)([dfa6663](https://github.com/scbrown/quipu/commit/dfa66635fd4ed6d5641292d5b7f79ed225b038e6))
-- *(governance)* Preserve trust-root deduplication in Clippy-clean condition([7ca784a](https://github.com/scbrown/quipu/commit/7ca784ae1f76b712048345424dce5c819bd23ade))
+- *(governance)* Preserve trust-root deduplication in Clippy-clean condition (#493)([f4e9834](https://github.com/scbrown/quipu/commit/f4e9834a25aa4b49fa4fbb1e689f23d80ae90d7b))
 
 ### Miscellaneous
 
