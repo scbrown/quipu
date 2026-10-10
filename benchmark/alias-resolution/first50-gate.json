@@ -1,0 +1,9 @@
+{
+  "items": 50,
+  "first_attempt_available": 48,
+  "eventual_available": 50,
+  "pass": true,
+  "attempts": 52,
+  "known_usd_including_pilot": "0.004174002",
+  "unknown_attempts_including_pilot": 4
+}

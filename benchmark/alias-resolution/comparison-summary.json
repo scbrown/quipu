@@ -1,0 +1,2204 @@
+{
+  "all": {
+    "all": {
+      "jev": {
+        "all_original": {
+          "n": 248,
+          "positives": 93,
+          "negatives": 155,
+          "tp": 14,
+          "fp": 1,
+          "fn": 79,
+          "tn": 132,
+          "abstain": 65,
+          "unavailable": 36,
+          "identity_proposals": 15,
+          "actual_merges": 0,
+          "precision": 0.9333333333333333,
+          "recall": 0.15053763440860216,
+          "abstention_rate": 0.40725806451612906,
+          "precision_wilson95": [
+            0.7018347012621998,
+            0.9881331045067315
+          ],
+          "recall_wilson95": [
+            0.0918417702189162,
+            0.23695809719788796
+          ]
+        },
+        "eligible_only": {
+          "n": 214,
+          "positives": 60,
+          "negatives": 154,
+          "tp": 14,
+          "fp": 1,
+          "fn": 46,
+          "tn": 132,
+          "abstain": 65,
+          "unavailable": 2,
+          "identity_proposals": 15,
+          "actual_merges": 0,
+          "precision": 0.9333333333333333,
+          "recall": 0.23333333333333334,
+          "abstention_rate": 0.3130841121495327,
+          "precision_wilson95": [
+            0.7018347012621998,
+            0.9881331045067315
+          ],
+          "recall_wilson95": [
+            0.1443956173664283,
+            0.35436270377601964
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 248,
+          "positives": 93,
+          "negatives": 155,
+          "tp": 4,
+          "fp": 0,
+          "fn": 89,
+          "tn": 154,
+          "abstain": 0,
+          "unavailable": 34,
+          "identity_proposals": 4,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.043010752688172046,
+          "abstention_rate": 0.13709677419354838,
+          "precision_wilson95": [
+            0.5101091635454027,
+            1
+          ],
+          "recall_wilson95": [
+            0.016851153993758472,
+            0.10542559570513925
+          ]
+        },
+        "eligible_only": {
+          "n": 214,
+          "positives": 60,
+          "negatives": 154,
+          "tp": 4,
+          "fp": 0,
+          "fn": 56,
+          "tn": 154,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 4,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.06666666666666667,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.5101091635454027,
+            1
+          ],
+          "recall_wilson95": [
+            0.026228698724506214,
+            0.1592535731319717
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 248,
+          "positives": 93,
+          "negatives": 155,
+          "tp": 0,
+          "fp": 2,
+          "fn": 93,
+          "tn": 152,
+          "abstain": 0,
+          "unavailable": 34,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.13709677419354838,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.03966750261173514
+          ]
+        },
+        "eligible_only": {
+          "n": 214,
+          "positives": 60,
+          "negatives": 154,
+          "tp": 0,
+          "fp": 2,
+          "fn": 60,
+          "tn": 152,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.06017185214208986
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 248,
+          "positives": 93,
+          "negatives": 155,
+          "tp": 4,
+          "fp": 2,
+          "fn": 89,
+          "tn": 152,
+          "abstain": 0,
+          "unavailable": 34,
+          "identity_proposals": 6,
+          "actual_merges": 0,
+          "precision": 0.6666666666666666,
+          "recall": 0.043010752688172046,
+          "abstention_rate": 0.13709677419354838,
+          "precision_wilson95": [
+            0.299993315138392,
+            0.9032285888942195
+          ],
+          "recall_wilson95": [
+            0.016851153993758472,
+            0.10542559570513925
+          ]
+        },
+        "eligible_only": {
+          "n": 214,
+          "positives": 60,
+          "negatives": 154,
+          "tp": 4,
+          "fp": 2,
+          "fn": 56,
+          "tn": 152,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 6,
+          "actual_merges": 0,
+          "precision": 0.6666666666666666,
+          "recall": 0.06666666666666667,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.299993315138392,
+            0.9032285888942195
+          ],
+          "recall_wilson95": [
+            0.026228698724506214,
+            0.1592535731319717
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 248,
+          "positives": 93,
+          "negatives": 155,
+          "tp": 11,
+          "fp": 0,
+          "fn": 82,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 212,
+          "identity_proposals": 11,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.11827956989247312,
+          "abstention_rate": 0.8548387096774194,
+          "precision_wilson95": [
+            0.7411670330319684,
+            1
+          ],
+          "recall_wilson95": [
+            0.06734437805470361,
+            0.19949855404672862
+          ]
+        },
+        "eligible_only": {
+          "n": 214,
+          "positives": 60,
+          "negatives": 154,
+          "tp": 11,
+          "fp": 0,
+          "fn": 49,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 178,
+          "identity_proposals": 11,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.18333333333333332,
+          "abstention_rate": 0.8317757009345794,
+          "precision_wilson95": [
+            0.7411670330319684,
+            1
+          ],
+          "recall_wilson95": [
+            0.10557796889197638,
+            0.2991975374646805
+          ]
+        }
+      }
+    },
+    "id-form": {
+      "jev": {
+        "all_original": {
+          "n": 160,
+          "positives": 46,
+          "negatives": 114,
+          "tp": 12,
+          "fp": 0,
+          "fn": 34,
+          "tn": 96,
+          "abstain": 43,
+          "unavailable": 9,
+          "identity_proposals": 12,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2608695652173913,
+          "abstention_rate": 0.325,
+          "precision_wilson95": [
+            0.7575059933447592,
+            1
+          ],
+          "recall_wilson95": [
+            0.156008864456426,
+            0.4025915352801559
+          ]
+        },
+        "eligible_only": {
+          "n": 153,
+          "positives": 39,
+          "negatives": 114,
+          "tp": 12,
+          "fp": 0,
+          "fn": 27,
+          "tn": 96,
+          "abstain": 43,
+          "unavailable": 2,
+          "identity_proposals": 12,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.3076923076923077,
+          "abstention_rate": 0.29411764705882354,
+          "precision_wilson95": [
+            0.7575059933447592,
+            1
+          ],
+          "recall_wilson95": [
+            0.18565932306911137,
+            0.4642125437414931
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 160,
+          "positives": 46,
+          "negatives": 114,
+          "tp": 0,
+          "fp": 0,
+          "fn": 46,
+          "tn": 114,
+          "abstain": 0,
+          "unavailable": 7,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.04375,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.07707356308558039
+          ]
+        },
+        "eligible_only": {
+          "n": 153,
+          "positives": 39,
+          "negatives": 114,
+          "tp": 0,
+          "fp": 0,
+          "fn": 39,
+          "tn": 114,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.08966685370757144
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 160,
+          "positives": 46,
+          "negatives": 114,
+          "tp": 0,
+          "fp": 2,
+          "fn": 46,
+          "tn": 112,
+          "abstain": 0,
+          "unavailable": 7,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.04375,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.07707356308558039
+          ]
+        },
+        "eligible_only": {
+          "n": 153,
+          "positives": 39,
+          "negatives": 114,
+          "tp": 0,
+          "fp": 2,
+          "fn": 39,
+          "tn": 112,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.08966685370757144
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 160,
+          "positives": 46,
+          "negatives": 114,
+          "tp": 0,
+          "fp": 2,
+          "fn": 46,
+          "tn": 112,
+          "abstain": 0,
+          "unavailable": 7,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.04375,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.07707356308558039
+          ]
+        },
+        "eligible_only": {
+          "n": 153,
+          "positives": 39,
+          "negatives": 114,
+          "tp": 0,
+          "fp": 2,
+          "fn": 39,
+          "tn": 112,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.08966685370757144
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 160,
+          "positives": 46,
+          "negatives": 114,
+          "tp": 11,
+          "fp": 0,
+          "fn": 35,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 124,
+          "identity_proposals": 11,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2391304347826087,
+          "abstention_rate": 0.775,
+          "precision_wilson95": [
+            0.7411670330319684,
+            1
+          ],
+          "recall_wilson95": [
+            0.13912177777277826,
+            0.3793513855762203
+          ]
+        },
+        "eligible_only": {
+          "n": 153,
+          "positives": 39,
+          "negatives": 114,
+          "tp": 11,
+          "fp": 0,
+          "fn": 28,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 117,
+          "identity_proposals": 11,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.28205128205128205,
+          "abstention_rate": 0.7647058823529411,
+          "precision_wilson95": [
+            0.7411670330319684,
+            1
+          ],
+          "recall_wilson95": [
+            0.16543492088847678,
+            0.43775319483020825
+          ]
+        }
+      }
+    },
+    "semantic": {
+      "jev": {
+        "all_original": {
+          "n": 88,
+          "positives": 47,
+          "negatives": 41,
+          "tp": 2,
+          "fp": 1,
+          "fn": 45,
+          "tn": 36,
+          "abstain": 22,
+          "unavailable": 27,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 0.6666666666666666,
+          "recall": 0.0425531914893617,
+          "abstention_rate": 0.5568181818181818,
+          "precision_wilson95": [
+            0.2076596008020477,
+            0.9385080552796037
+          ],
+          "recall_wilson95": [
+            0.011748275966789345,
+            0.1424852767789945
+          ]
+        },
+        "eligible_only": {
+          "n": 61,
+          "positives": 21,
+          "negatives": 40,
+          "tp": 2,
+          "fp": 1,
+          "fn": 19,
+          "tn": 36,
+          "abstain": 22,
+          "unavailable": 0,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 0.6666666666666666,
+          "recall": 0.09523809523809523,
+          "abstention_rate": 0.36065573770491804,
+          "precision_wilson95": [
+            0.2076596008020477,
+            0.9385080552796037
+          ],
+          "recall_wilson95": [
+            0.02651876743807452,
+            0.2891413907391826
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 88,
+          "positives": 47,
+          "negatives": 41,
+          "tp": 4,
+          "fp": 0,
+          "fn": 43,
+          "tn": 40,
+          "abstain": 0,
+          "unavailable": 27,
+          "identity_proposals": 4,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.0851063829787234,
+          "abstention_rate": 0.3068181818181818,
+          "precision_wilson95": [
+            0.5101091635454027,
+            1
+          ],
+          "recall_wilson95": [
+            0.03359412345792552,
+            0.19931537786964587
+          ]
+        },
+        "eligible_only": {
+          "n": 61,
+          "positives": 21,
+          "negatives": 40,
+          "tp": 4,
+          "fp": 0,
+          "fn": 17,
+          "tn": 40,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 4,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.19047619047619047,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.5101091635454027,
+            1
+          ],
+          "recall_wilson95": [
+            0.07667565052761793,
+            0.40000564690204926
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 88,
+          "positives": 47,
+          "negatives": 41,
+          "tp": 0,
+          "fp": 0,
+          "fn": 47,
+          "tn": 40,
+          "abstain": 0,
+          "unavailable": 27,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.3068181818181818,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.07555760416399632
+          ]
+        },
+        "eligible_only": {
+          "n": 61,
+          "positives": 21,
+          "negatives": 40,
+          "tp": 0,
+          "fp": 0,
+          "fn": 21,
+          "tn": 40,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.154639018924847
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 88,
+          "positives": 47,
+          "negatives": 41,
+          "tp": 4,
+          "fp": 0,
+          "fn": 43,
+          "tn": 40,
+          "abstain": 0,
+          "unavailable": 27,
+          "identity_proposals": 4,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.0851063829787234,
+          "abstention_rate": 0.3068181818181818,
+          "precision_wilson95": [
+            0.5101091635454027,
+            1
+          ],
+          "recall_wilson95": [
+            0.03359412345792552,
+            0.19931537786964587
+          ]
+        },
+        "eligible_only": {
+          "n": 61,
+          "positives": 21,
+          "negatives": 40,
+          "tp": 4,
+          "fp": 0,
+          "fn": 17,
+          "tn": 40,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 4,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.19047619047619047,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.5101091635454027,
+            1
+          ],
+          "recall_wilson95": [
+            0.07667565052761793,
+            0.40000564690204926
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 88,
+          "positives": 47,
+          "negatives": 41,
+          "tp": 0,
+          "fp": 0,
+          "fn": 47,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 88,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 1.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.07555760416399632
+          ]
+        },
+        "eligible_only": {
+          "n": 61,
+          "positives": 21,
+          "negatives": 40,
+          "tp": 0,
+          "fp": 0,
+          "fn": 21,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 61,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 1.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.154639018924847
+          ]
+        }
+      }
+    }
+  },
+  "held-out": {
+    "all": {
+      "jev": {
+        "all_original": {
+          "n": 238,
+          "positives": 88,
+          "negatives": 150,
+          "tp": 11,
+          "fp": 1,
+          "fn": 77,
+          "tn": 128,
+          "abstain": 64,
+          "unavailable": 34,
+          "identity_proposals": 12,
+          "actual_merges": 0,
+          "precision": 0.9166666666666666,
+          "recall": 0.125,
+          "abstention_rate": 0.4117647058823529,
+          "precision_wilson95": [
+            0.646120088858883,
+            0.9851349055950829
+          ],
+          "recall_wilson95": [
+            0.07125274152192247,
+            0.21011755847674674
+          ]
+        },
+        "eligible_only": {
+          "n": 204,
+          "positives": 55,
+          "negatives": 149,
+          "tp": 11,
+          "fp": 1,
+          "fn": 44,
+          "tn": 128,
+          "abstain": 64,
+          "unavailable": 0,
+          "identity_proposals": 12,
+          "actual_merges": 0,
+          "precision": 0.9166666666666666,
+          "recall": 0.2,
+          "abstention_rate": 0.3137254901960784,
+          "precision_wilson95": [
+            0.646120088858883,
+            0.9851349055950829
+          ],
+          "recall_wilson95": [
+            0.11552214909761245,
+            0.32364879157263937
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 238,
+          "positives": 88,
+          "negatives": 150,
+          "tp": 3,
+          "fp": 0,
+          "fn": 85,
+          "tn": 149,
+          "abstain": 0,
+          "unavailable": 34,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.03409090909090909,
+          "abstention_rate": 0.14285714285714285,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.011660997199585459,
+            0.09549604219270044
+          ]
+        },
+        "eligible_only": {
+          "n": 204,
+          "positives": 55,
+          "negatives": 149,
+          "tp": 3,
+          "fp": 0,
+          "fn": 52,
+          "tn": 149,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.05454545454545454,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.01872321555468448,
+            0.14853060544053792
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 238,
+          "positives": 88,
+          "negatives": 150,
+          "tp": 0,
+          "fp": 2,
+          "fn": 88,
+          "tn": 147,
+          "abstain": 0,
+          "unavailable": 34,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.14285714285714285,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.0418270666648922
+          ]
+        },
+        "eligible_only": {
+          "n": 204,
+          "positives": 55,
+          "negatives": 149,
+          "tp": 0,
+          "fp": 2,
+          "fn": 55,
+          "tn": 147,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.06528490111708637
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 238,
+          "positives": 88,
+          "negatives": 150,
+          "tp": 3,
+          "fp": 2,
+          "fn": 85,
+          "tn": 147,
+          "abstain": 0,
+          "unavailable": 34,
+          "identity_proposals": 5,
+          "actual_merges": 0,
+          "precision": 0.6,
+          "recall": 0.03409090909090909,
+          "abstention_rate": 0.14285714285714285,
+          "precision_wilson95": [
+            0.2307242812760128,
+            0.882379225767352
+          ],
+          "recall_wilson95": [
+            0.011660997199585459,
+            0.09549604219270044
+          ]
+        },
+        "eligible_only": {
+          "n": 204,
+          "positives": 55,
+          "negatives": 149,
+          "tp": 3,
+          "fp": 2,
+          "fn": 52,
+          "tn": 147,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 5,
+          "actual_merges": 0,
+          "precision": 0.6,
+          "recall": 0.05454545454545454,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.2307242812760128,
+            0.882379225767352
+          ],
+          "recall_wilson95": [
+            0.01872321555468448,
+            0.14853060544053792
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 238,
+          "positives": 88,
+          "negatives": 150,
+          "tp": 10,
+          "fp": 0,
+          "fn": 78,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 203,
+          "identity_proposals": 10,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.11363636363636363,
+          "abstention_rate": 0.8529411764705882,
+          "precision_wilson95": [
+            0.7224672001371107,
+            0.9999999999999999
+          ],
+          "recall_wilson95": [
+            0.06290800375101355,
+            0.1966856386718577
+          ]
+        },
+        "eligible_only": {
+          "n": 204,
+          "positives": 55,
+          "negatives": 149,
+          "tp": 10,
+          "fp": 0,
+          "fn": 45,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 169,
+          "identity_proposals": 10,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.18181818181818182,
+          "abstention_rate": 0.8284313725490197,
+          "precision_wilson95": [
+            0.7224672001371107,
+            0.9999999999999999
+          ],
+          "recall_wilson95": [
+            0.10187670434449676,
+            0.3033045963663764
+          ]
+        }
+      }
+    },
+    "id-form": {
+      "jev": {
+        "all_original": {
+          "n": 154,
+          "positives": 43,
+          "negatives": 111,
+          "tp": 10,
+          "fp": 0,
+          "fn": 33,
+          "tn": 94,
+          "abstain": 43,
+          "unavailable": 7,
+          "identity_proposals": 10,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.23255813953488372,
+          "abstention_rate": 0.3246753246753247,
+          "precision_wilson95": [
+            0.7224672001371107,
+            0.9999999999999999
+          ],
+          "recall_wilson95": [
+            0.1315367847938448,
+            0.37744520297809003
+          ]
+        },
+        "eligible_only": {
+          "n": 147,
+          "positives": 36,
+          "negatives": 111,
+          "tp": 10,
+          "fp": 0,
+          "fn": 26,
+          "tn": 94,
+          "abstain": 43,
+          "unavailable": 0,
+          "identity_proposals": 10,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2777777777777778,
+          "abstention_rate": 0.2925170068027211,
+          "precision_wilson95": [
+            0.7224672001371107,
+            0.9999999999999999
+          ],
+          "recall_wilson95": [
+            0.1584833794013461,
+            0.43992489997397105
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 154,
+          "positives": 43,
+          "negatives": 111,
+          "tp": 0,
+          "fp": 0,
+          "fn": 43,
+          "tn": 111,
+          "abstain": 0,
+          "unavailable": 7,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.045454545454545456,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.08200980322579117
+          ]
+        },
+        "eligible_only": {
+          "n": 147,
+          "positives": 36,
+          "negatives": 111,
+          "tp": 0,
+          "fp": 0,
+          "fn": 36,
+          "tn": 111,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.09641862859446367
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 154,
+          "positives": 43,
+          "negatives": 111,
+          "tp": 0,
+          "fp": 2,
+          "fn": 43,
+          "tn": 109,
+          "abstain": 0,
+          "unavailable": 7,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.045454545454545456,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.08200980322579117
+          ]
+        },
+        "eligible_only": {
+          "n": 147,
+          "positives": 36,
+          "negatives": 111,
+          "tp": 0,
+          "fp": 2,
+          "fn": 36,
+          "tn": 109,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.09641862859446367
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 154,
+          "positives": 43,
+          "negatives": 111,
+          "tp": 0,
+          "fp": 2,
+          "fn": 43,
+          "tn": 109,
+          "abstain": 0,
+          "unavailable": 7,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.045454545454545456,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.08200980322579117
+          ]
+        },
+        "eligible_only": {
+          "n": 147,
+          "positives": 36,
+          "negatives": 111,
+          "tp": 0,
+          "fp": 2,
+          "fn": 36,
+          "tn": 109,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0,
+            0.6576197724933469
+          ],
+          "recall_wilson95": [
+            0,
+            0.09641862859446367
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 154,
+          "positives": 43,
+          "negatives": 111,
+          "tp": 10,
+          "fp": 0,
+          "fn": 33,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 119,
+          "identity_proposals": 10,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.23255813953488372,
+          "abstention_rate": 0.7727272727272727,
+          "precision_wilson95": [
+            0.7224672001371107,
+            0.9999999999999999
+          ],
+          "recall_wilson95": [
+            0.1315367847938448,
+            0.37744520297809003
+          ]
+        },
+        "eligible_only": {
+          "n": 147,
+          "positives": 36,
+          "negatives": 111,
+          "tp": 10,
+          "fp": 0,
+          "fn": 26,
+          "tn": 25,
+          "abstain": 0,
+          "unavailable": 112,
+          "identity_proposals": 10,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2777777777777778,
+          "abstention_rate": 0.7619047619047619,
+          "precision_wilson95": [
+            0.7224672001371107,
+            0.9999999999999999
+          ],
+          "recall_wilson95": [
+            0.1584833794013461,
+            0.43992489997397105
+          ]
+        }
+      }
+    },
+    "semantic": {
+      "jev": {
+        "all_original": {
+          "n": 84,
+          "positives": 45,
+          "negatives": 39,
+          "tp": 1,
+          "fp": 1,
+          "fn": 44,
+          "tn": 34,
+          "abstain": 21,
+          "unavailable": 27,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.5,
+          "recall": 0.022222222222222223,
+          "abstention_rate": 0.5714285714285714,
+          "precision_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "recall_wilson95": [
+            0.003933598882833428,
+            0.1156668176841488
+          ]
+        },
+        "eligible_only": {
+          "n": 57,
+          "positives": 19,
+          "negatives": 38,
+          "tp": 1,
+          "fp": 1,
+          "fn": 18,
+          "tn": 34,
+          "abstain": 21,
+          "unavailable": 0,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 0.5,
+          "recall": 0.05263157894736842,
+          "abstention_rate": 0.3684210526315789,
+          "precision_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "recall_wilson95": [
+            0.009351994062300362,
+            0.24638731166898786
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 84,
+          "positives": 45,
+          "negatives": 39,
+          "tp": 3,
+          "fp": 0,
+          "fn": 42,
+          "tn": 38,
+          "abstain": 0,
+          "unavailable": 27,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.06666666666666667,
+          "abstention_rate": 0.32142857142857145,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.022932032599250987,
+            0.17856601963591895
+          ]
+        },
+        "eligible_only": {
+          "n": 57,
+          "positives": 19,
+          "negatives": 38,
+          "tp": 3,
+          "fp": 0,
+          "fn": 16,
+          "tn": 38,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.15789473684210525,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.05520471638534141,
+            0.37565475270329074
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 84,
+          "positives": 45,
+          "negatives": 39,
+          "tp": 0,
+          "fp": 0,
+          "fn": 45,
+          "tn": 38,
+          "abstain": 0,
+          "unavailable": 27,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.32142857142857145,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.07865159873288836
+          ]
+        },
+        "eligible_only": {
+          "n": 57,
+          "positives": 19,
+          "negatives": 38,
+          "tp": 0,
+          "fp": 0,
+          "fn": 19,
+          "tn": 38,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.16817922405261626
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 84,
+          "positives": 45,
+          "negatives": 39,
+          "tp": 3,
+          "fp": 0,
+          "fn": 42,
+          "tn": 38,
+          "abstain": 0,
+          "unavailable": 27,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.06666666666666667,
+          "abstention_rate": 0.32142857142857145,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.022932032599250987,
+            0.17856601963591895
+          ]
+        },
+        "eligible_only": {
+          "n": 57,
+          "positives": 19,
+          "negatives": 38,
+          "tp": 3,
+          "fp": 0,
+          "fn": 16,
+          "tn": 38,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.15789473684210525,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.05520471638534141,
+            0.37565475270329074
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 84,
+          "positives": 45,
+          "negatives": 39,
+          "tp": 0,
+          "fp": 0,
+          "fn": 45,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 84,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 1.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.07865159873288836
+          ]
+        },
+        "eligible_only": {
+          "n": 57,
+          "positives": 19,
+          "negatives": 38,
+          "tp": 0,
+          "fp": 0,
+          "fn": 19,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 57,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 1.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.16817922405261626
+          ]
+        }
+      }
+    }
+  },
+  "pilot": {
+    "all": {
+      "jev": {
+        "all_original": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 3,
+          "fp": 0,
+          "fn": 2,
+          "tn": 4,
+          "abstain": 1,
+          "unavailable": 2,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.6,
+          "abstention_rate": 0.3,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.2307242812760128,
+            0.882379225767352
+          ]
+        },
+        "eligible_only": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 3,
+          "fp": 0,
+          "fn": 2,
+          "tn": 4,
+          "abstain": 1,
+          "unavailable": 2,
+          "identity_proposals": 3,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.6,
+          "abstention_rate": 0.3,
+          "precision_wilson95": [
+            0.4385029682449546,
+            1
+          ],
+          "recall_wilson95": [
+            0.2307242812760128,
+            0.882379225767352
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 1,
+          "fp": 0,
+          "fn": 4,
+          "tn": 5,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.03622410863243014,
+            0.6244653702374747
+          ]
+        },
+        "eligible_only": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 1,
+          "fp": 0,
+          "fn": 4,
+          "tn": 5,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.03622410863243014,
+            0.6244653702374747
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5,
+          "tn": 5,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.43448246478317476
+          ]
+        },
+        "eligible_only": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5,
+          "tn": 5,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.43448246478317476
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 1,
+          "fp": 0,
+          "fn": 4,
+          "tn": 5,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.03622410863243014,
+            0.6244653702374747
+          ]
+        },
+        "eligible_only": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 1,
+          "fp": 0,
+          "fn": 4,
+          "tn": 5,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.03622410863243014,
+            0.6244653702374747
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 1,
+          "fp": 0,
+          "fn": 4,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 9,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2,
+          "abstention_rate": 0.9,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.03622410863243014,
+            0.6244653702374747
+          ]
+        },
+        "eligible_only": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "tp": 1,
+          "fp": 0,
+          "fn": 4,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 9,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.2,
+          "abstention_rate": 0.9,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.03622410863243014,
+            0.6244653702374747
+          ]
+        }
+      }
+    },
+    "id-form": {
+      "jev": {
+        "all_original": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 2,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 2,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "abstention_rate": 0.3333333333333333,
+          "precision_wilson95": [
+            0.34238022750665303,
+            1
+          ],
+          "recall_wilson95": [
+            0.2076596008020477,
+            0.9385080552796037
+          ]
+        },
+        "eligible_only": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 2,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 2,
+          "identity_proposals": 2,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "abstention_rate": 0.3333333333333333,
+          "precision_wilson95": [
+            0.34238022750665303,
+            1
+          ],
+          "recall_wilson95": [
+            0.2076596008020477,
+            0.9385080552796037
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "tn": 3,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        "eligible_only": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "tn": 3,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "tn": 3,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        "eligible_only": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "tn": 3,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "tn": 3,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        },
+        "eligible_only": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3,
+          "tn": 3,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            5.551115123125783e-17,
+            0.5614970317550454
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 1,
+          "fp": 0,
+          "fn": 2,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 5,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.3333333333333333,
+          "abstention_rate": 0.8333333333333334,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.06149194472039621,
+            0.7923403991979522
+          ]
+        },
+        "eligible_only": {
+          "n": 6,
+          "positives": 3,
+          "negatives": 3,
+          "tp": 1,
+          "fp": 0,
+          "fn": 2,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 5,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.3333333333333333,
+          "abstention_rate": 0.8333333333333334,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.06149194472039621,
+            0.7923403991979522
+          ]
+        }
+      }
+    },
+    "semantic": {
+      "jev": {
+        "all_original": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 1,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "abstention_rate": 0.25,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "eligible_only": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 1,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "abstention_rate": 0.25,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        }
+      },
+      "label": {
+        "all_original": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "eligible_only": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        }
+      },
+      "cosine": {
+        "all_original": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.6576197724933469
+          ]
+        },
+        "eligible_only": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 0.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.6576197724933469
+          ]
+        }
+      },
+      "union": {
+        "all_original": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "eligible_only": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 1,
+          "fp": 0,
+          "fn": 1,
+          "tn": 2,
+          "abstain": 0,
+          "unavailable": 0,
+          "identity_proposals": 1,
+          "actual_merges": 0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "abstention_rate": 0.0,
+          "precision_wilson95": [
+            0.20654931437723745,
+            1
+          ],
+          "recall_wilson95": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        }
+      },
+      "id-control": {
+        "all_original": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 4,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 1.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.6576197724933469
+          ]
+        },
+        "eligible_only": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2,
+          "tn": 0,
+          "abstain": 0,
+          "unavailable": 4,
+          "identity_proposals": 0,
+          "actual_merges": 0,
+          "precision": null,
+          "recall": 0.0,
+          "abstention_rate": 1.0,
+          "precision_wilson95": null,
+          "recall_wilson95": [
+            0,
+            0.6576197724933469
+          ]
+        }
+      }
+    }
+  }
+}
