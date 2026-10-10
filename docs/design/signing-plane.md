@@ -59,6 +59,27 @@ The common verifier in
 boundary. Share import reaches it through
 [`src/share_attestation.rs`](../../src/share_attestation.rs).
 
+`quipu-write-v2` (aegis-72cpbx) is v1 plus an **audience**: the receiving
+store's `store_id`, which `GET /stats` reports. A v1 message names no server,
+so a write one quipu accepted could be relayed to another quipu that trusts
+the same key, and it verified there because nonces are per store. Under v2 the
+server signs its OWN id into the message and compares the envelope's
+`audience` claim against it first. A relay is refused as `invalid` (audience
+mismatch). An envelope whose claim was rewritten to the relay target passes
+that comparison and fails the signature (`badsig`). A v1 envelope that carries
+an `audience` is `invalid`, because v1 never signs that field. The pinning
+regressions are in
+[`tests/signed_writes_server.rs`](../../tests/signed_writes_server.rs)
+(`a_v2_write_signed_for_one_store_is_refused_by_another_as_invalid`,
+`swapping_the_envelope_audience_to_the_relay_target_fails_the_signature`),
+and the published vector is `tests/vectors/write-attestation-v2.json`.
+v1 stays accepted, and its v1 relay is pinned by
+`baseline_a_v1_write_accepted_by_one_store_is_accepted_by_another`; the v1
+sunset is a separate decision. **Limit:** `store_id` is lineage, not identity.
+A file-level copy of a store (a backup restore or a fork) keeps the id, so v2
+does not separate a store from its own copy. Those two already trust the same
+bindings.
+
 Session bindings and spent nonces live in protected SQLite tables
 ([`src/store/attestation.rs`](../../src/store/attestation.rs)), separate from
 graph-writable `VerifierRegistration` facts. Nonce spending participates in

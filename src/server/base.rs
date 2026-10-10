@@ -240,11 +240,16 @@ pub(crate) async fn stats(
     State(store): State<SharedStore>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let value = {
+        let (store_id, value) = {
             let store = store.lock();
+            // Which store answered (aegis-72cpbx). It is the audience a
+            // quipu-write-v2 client signs for, and a caller that resolved a
+            // server by default port can tell its own store from a stranger.
+            // Lineage, not identity: a file-level copy of a store shares it.
+            let store_id = store.store_id()?;
             let generation = store.latest_tx_id()?;
             let mut cache = STATS_CACHE.lock().unwrap();
-            match cache.as_ref() {
+            let value = match cache.as_ref() {
                 Some(c) if c.generation == generation => c.value.clone(),
                 _ => {
                     let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
@@ -269,9 +274,12 @@ pub(crate) async fn stats(
                     });
                     fresh
                 }
-            }
+            };
+            (store_id, value)
         };
-        Ok(axum::Json((*value).clone()))
+        let mut value = (*value).clone();
+        value["store_id"] = json!(store_id);
+        Ok(axum::Json(value))
     })
     .await
 }

@@ -64,6 +64,7 @@ fn signed_envelope(
         issued_at_epoch: NOW,
         nonce: nonce.to_string(),
         signature: String::new(),
+        audience: None,
     };
     let message = canonical_message(&envelope, &share());
     envelope.signature = hex::encode(key.sign(&message).as_ref());
