@@ -1,4 +1,6 @@
 //! Receiver selection and review policy through the actual native CLI.
+#![cfg(feature = "shacl")]
+
 use quipu::{
     Store,
     share::{ShareDestination, ShareOptions},
