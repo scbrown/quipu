@@ -18,13 +18,24 @@ All notable changes to this project will be documented in this file.
 - *(sparql)* XSD casts, so xsd:integer(?x) and friends answer (#307)([f26f751](https://github.com/scbrown/quipu/commit/f26f751c2fe3d046bdf42c1a7b76d572cc7fa42c))
 - *(search)* Opt-in graph scope for semantic and keyword search (#452)([398b553](https://github.com/scbrown/quipu/commit/398b55305e464dd338379fbefb00521517da8058))
 - *(search)* Opt-in hybrid fusion with explain and snippets (#462)([3e7d6ec](https://github.com/scbrown/quipu/commit/3e7d6ec49de9442054a1d73a0cb75d8147ce63a6))
+- *(shapes)* Define the verdict transaction link contract (#310)([81b3608](https://github.com/scbrown/quipu/commit/81b3608a501f455a2c5077b9c8904e998fa12850))
+- *(governance)* Seal the whole decision with an RDFC-1.0 digest and a single-use nonce (#345)([3e2a6ae](https://github.com/scbrown/quipu/commit/3e2a6ae2c846cc53b929428b4aad157fa8ed232c))
+- *(share)* Commit the project graph under .quipu/graph; one-command load (#360)([7b8958b](https://github.com/scbrown/quipu/commit/7b8958b716f3ac5ec692c67ae7adb9ec4583964a))
+- *(attest)* Quipu-write-v2 binds the receiving store as audience (#388)([9a93c54](https://github.com/scbrown/quipu/commit/9a93c54d8d71d638f79eb63ed12a9fb55bc1482d))
 
+### CI/CD
 
+- Gate string-filter query performance on a 2.1M-triple fixture (#467)([fd3a029](https://github.com/scbrown/quipu/commit/fd3a029a69d7e569dab9fb07261ae2bb1a36d995))
 
 ### Documentation
 
 - Make share -> import -> promote the obvious bulk-load path (#436)([467ed2e](https://github.com/scbrown/quipu/commit/467ed2ebc03eba3803a0455ab4968c94d71312f5))
 - README conformance line matches the report; drop "zero dependencies" (#440)([161ce06](https://github.com/scbrown/quipu/commit/161ce061d40f4112ae689abdd96f734200567a9b))
+- *(auth)* Explain credential issuance and client token provisioning (#308)([e08e9b4](https://github.com/scbrown/quipu/commit/e08e9b4e5d987546dc8c77df1ed380c83998d8d9))
+- Disclose literal identity loss and preservation contract (#313)([bdda63b](https://github.com/scbrown/quipu/commit/bdda63b28bf8dc3c8c51cc620b1e6676f092d04f))
+- *(paper)* Report negative Jev alias-resolution findings (#327)([2344938](https://github.com/scbrown/quipu/commit/234493859007103e3ae3322798f0562f0933f9b3))
+- Describe current installs, native MCP and inference behavior (#439)([68199f1](https://github.com/scbrown/quipu/commit/68199f1ba82c405c6939d107701aa8d99896c89f))
+- *(conformance)* Name non-passing SPARQL 1.0 cases (#469)([7c10e26](https://github.com/scbrown/quipu/commit/7c10e26fc87ea5b4406d1d9767a9444b54d31970))
 
 ### Fixed
 
@@ -38,6 +49,14 @@ All notable changes to this project will be documented in this file.
 - *(metrics)* Attribute authentication refusals and clarify provisioning (#457)([4bfed20](https://github.com/scbrown/quipu/commit/4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4))
 - *(owl)* Derive scheduled closure outside the writer lock (#297)([d8b6757](https://github.com/scbrown/quipu/commit/d8b6757c379c31840aef1105bcd9cb0e2b8122a6))
 - *(observability)* Record request peers and provenance gaps (#484)([addcc33](https://github.com/scbrown/quipu/commit/addcc3376a90c9f5a10db0d5fe5dde4a88f96152))
+- *(governance)* Read a hardware verdict's signCount strictly before its own tx (#393)([e2c88b0](https://github.com/scbrown/quipu/commit/e2c88b020985197f8f779a25e6c443a5cb990d9c))
+- *(mcp)* Decided_by is required on accept/reject; the schema claimed a default (#442)([762ac78](https://github.com/scbrown/quipu/commit/762ac788c15841c2888498a161d47fbb9de939c1))
+- Stream exact count groups and narrow plain-property absence projection (#470)([5e11f03](https://github.com/scbrown/quipu/commit/5e11f03afa8c048c36af7807b5011018201171f0))
+- Test policy pending post-state and document SHACL validation scope (#472)([e35669d](https://github.com/scbrown/quipu/commit/e35669de77d8ccf1595542b3c8de91480f177a74))
+- *(pack)* Prepare compatibility for receiver import review state (#479)([ef5556f](https://github.com/scbrown/quipu/commit/ef5556f24b5aa361e71761014bbdd616fb115a43))
+- *(shacl)* Separate snapshot admission from strict validation (#481)([f03f7c1](https://github.com/scbrown/quipu/commit/f03f7c146281cd372eacff37a0600ba1b68313f8))
+- *(search)* Rank bounded SQLite scopes before top-k([731674c](https://github.com/scbrown/quipu/commit/731674c869a6cb1b0b08a6616deaea601b07e806))
+- *(search)* Preserve deadlines while resolving scoped terms([88bc4b5](https://github.com/scbrown/quipu/commit/88bc4b5204b08fb480b7ee29022161fb70c7f572))
 
 ### Miscellaneous
 
@@ -50,6 +69,10 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive ledgers at 4bfed20a (#466)([83cdb96](https://github.com/scbrown/quipu/commit/83cdb961a3dbb69549d21be855c3cd66f42f5631))
 - *(conformance)* Re-derive ledgers at d8b6757c (#486)([50ae3a7](https://github.com/scbrown/quipu/commit/50ae3a7c19389d1b472327005154791ad037be1f))
 - *(conformance)* Re-derive ledgers at 6023a920 (#487)([6ec26c8](https://github.com/scbrown/quipu/commit/6ec26c807cb080bf5fdef2bcca2fb9267b4dfa05))
+
+### Testing
+
+- *(sparql)* Preserve typed join order and grouped metadata counts (#478)([4a588eb](https://github.com/scbrown/quipu/commit/4a588eba576da0ed452ff21e3222f57aa1c344f8))
 
 ### Perf
 
