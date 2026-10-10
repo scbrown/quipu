@@ -221,7 +221,7 @@ fn carried_is_content_and_log_only() {
 #[test]
 fn every_table_created_anywhere_in_the_source_is_classified() {
     // Lives in the pack ARTIFACT, not in a store — `pack.rs` writes it into the
-    // .qpack.db file itself. A store round-trip must never carry it, so it is
+    // .pendant.db file itself. A store round-trip must never carry it, so it is
     // correctly absent from DECLARED rather than missing from it.
     const NOT_A_STORE_TABLE: &[&str] = &["pack_manifest"];
 

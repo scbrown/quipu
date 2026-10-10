@@ -333,7 +333,7 @@ restore (replacement) from unpack (merge). A SQLite main-file copy is not a
 valid live backup. External sort can preserve canonical byte/hash ordering
 without preserving today's whole-string implementation.
 
-A non-SQLite authority cannot call a RocksDB directory a compatible `.qpack`.
+A non-SQLite authority cannot call a RocksDB directory a compatible `.pendant`.
 Keep the existing SQLite interchange reader/writer or explicitly version a new
 format, with feature negotiation and old-format import. Preserve term-space
 identity, aliases, graph labels, valid/transaction times, vectors, stored shapes,
@@ -448,7 +448,7 @@ Stiwi's decisions for a later implementation proposal:
 
 - Is the initial target a 2 GiB four-reader service, a smaller embedded device,
   or a larger server? What latency and import throughput matter most?
-- Must native, browser/Wasm and offline `.qpack` interoperability remain equally
+- Must native, browser/Wasm and offline `.pendant` interoperability remain equally
   capable, or may a large-server backend have a narrower portability contract?
 - Can derived graph/search projections be explicitly stale, and for how long?
   The default recommendation is coherent reads or an explicit refusal.

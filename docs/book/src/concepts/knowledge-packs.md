@@ -16,8 +16,11 @@ and import. The artifact format *is* the database format — a pack is an
 ordinary Quipu SQLite store with a one-row `pack_manifest` table describing
 itself.
 
-For publication in a git repository, **qpack means the text share directory**.
-The binary `.qpack.db` is internal plumbing, not the published artifact. A share
+For publication in a git repository, **a pendant is the text share directory**
+(named for the khipu's pendant cords, each a self-contained record hanging from
+the primary cord; see [Pendants](../sharing/README.md#pendants-what-the-artifact-is-called)).
+The artifact was called a qpack before; `.qpack` names still load for one
+release. The binary `.pendant.db` is internal plumbing, not the published artifact. A share
 is the canonical, line-oriented interchange surface that makes review and
 three-way history meaningful:
 
@@ -103,12 +106,12 @@ interned term with the same IRI. Verification and Turtle export use the same sco
 Unpacking defaults to ROOT for these packs; `--into <iri>` selects a named graph.
 
 ```bash
-quipu pack --out root.qpack.db --with-vectors
+quipu pack --out root.pendant.db --with-vectors
 ```
 
 ```bash
-quipu pack urn:example:graph --out domain.qpack.db --name "domain" --version 1.0.0
-quipu pack urn:example:graph --out domain.qpack.db --shapes s --queries q --with-vectors
+quipu pack urn:example:graph --out domain.pendant.db --name "domain" --version 1.0.0
+quipu pack urn:example:graph --out domain.pendant.db --shapes s --queries q --with-vectors
 ```
 
 The output is a single clean file — the build goes through `VACUUM INTO`, so
@@ -117,13 +120,13 @@ no `-wal`/`-shm` siblings ride along beside the file you actually copy.
 `--format turtle` emits an **interop bundle** instead: a directory of
 `graph.ttl`, `shapes.ttl`, `queries.json`, and `manifest.json`, for consumers
 that are not Quipu. It is export-only — nothing unpacks it — but it carries
-the *same* content hash as the `.qpack.db` form, because the hash is computed
+the *same* content hash as the `.pendant.db` form, because the hash is computed
 from canonical content, not from the emitted bytes.
 
 ## Unpacking
 
 ```bash
-quipu unpack domain.qpack.db --into urn:local:domain --db my.db
+quipu unpack domain.pendant.db --into urn:local:domain --db my.db
 ```
 
 `unpack` materializes the pack's facts into a local graph (defaulting to the
@@ -134,7 +137,7 @@ already has. The report states what arrived: facts, shapes, queries.
 ## Verification
 
 ```bash
-quipu pack --verify domain.qpack.db
+quipu pack --verify domain.pendant.db
 ```
 
 Verification recomputes the pack's **content hash** and compares it to the
@@ -166,7 +169,7 @@ Built: `quipu pack`, `quipu unpack`, `quipu pack --verify`, the Turtle interop
 bundle, vector export on the SQLite backend, the stored-query registry, and
 `--space <term-space>` on export — the pack is built in space 0 and shipped
 through the same respace machinery as `quipu db respace`, so a consumer can
-attach it as-is without an id collision (`.qpack.db` packs only; a Turtle
+attach it as-is without an id collision (`.pendant.db` packs only; a Turtle
 bundle carries IRIs, not term ids, so `--space` does not apply there).
 Designed but not yet built: the retrieval-policy block (default-dataset and
 recommended-floor facts a consumer could SPARQL), and delta/diff packs —

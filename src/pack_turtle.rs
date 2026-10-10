@@ -19,7 +19,7 @@ use crate::store::Store;
 /// there is no unpack path from this form, because its purpose is to be read by
 /// something that is not Quipu.
 ///
-/// **The content hash is the SAME as the `.qpack.db` form's**, because both are
+/// **The content hash is the SAME as the `.pendant.db` form's**, because both are
 /// computed from [`canonical_content`] rather than from the emitted bytes. So a
 /// graph packs to one identity in either format, and a consumer can check a
 /// bundle against a hash it was given for a store file. Hashing the emitted

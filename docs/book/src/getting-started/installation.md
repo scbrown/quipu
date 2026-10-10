@@ -68,12 +68,12 @@ scripts/install-stack.sh --profile kg
 # Phase two: after reviewing caboodle-plan.toml, apply + verify,
 # then verify and load knowledge packs into the target store.
 scripts/install-stack.sh --profile kg --yes \
-  --qpack domain.qpack.db --db my.db
+  --pendant domain.pendant.db --db my.db
 ```
 
 The two-phase gate is deliberate and mirrors caboodle's own doctrine: nothing
 installs until the written plan has been reviewed (or `--yes` given
-explicitly). Every `--qpack` is checked with `quipu pack --verify` before
+explicitly). Every `--pendant` is checked with `quipu pack --verify` before
 `quipu unpack` — a content-hash mismatch refuses the pack rather than
 installing silently corrupted knowledge. `--dry-run` prints every command the
 script would run and executes nothing; `--profile` selects the caboodle

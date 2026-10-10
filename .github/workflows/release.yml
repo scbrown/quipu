@@ -343,7 +343,7 @@ jobs:
 
           This is the bundle behind "Explore this repository's graph" in the book
           (https://scbrown.github.io/quipu/explore/). It opens an in-memory quipu
-          store in a tab, imports a .qpack share through the same
+          store in a tab, imports a .pendant share through the same
           share_transport -> share_import -> promote path the `quipu import` CLI
           takes, and answers SPARQL through the same `tool_query` entry point the
           REST API and the MCP server use.
@@ -354,7 +354,8 @@ jobs:
             import init, { Explorer, explorerVersion }
               from "./quipu_wasm_explorer.js";
             await init();
-            const ex = Explorer.loadQpack(bytes, "source-label", timestampIso);
+            const ex = Explorer.loadPendant(bytes, "source-label", timestampIso);
+            // (loadQpack is a deprecated alias of loadPendant for one release)
             JSON.parse(ex.loadReport());   // manifest + import + promotion
             JSON.parse(ex.query(sparql));  // SELECT/ASK/CONSTRUCT/DESCRIBE
 
@@ -400,7 +401,8 @@ jobs:
           is no init() to await and no server to run:
 
             const { Explorer, explorerVersion } = require("./quipu_wasm_explorer.js");
-            const ex = Explorer.loadQpack(bytes, "source-label", timestampIso);
+            const ex = Explorer.loadPendant(bytes, "source-label", timestampIso);
+            // (loadQpack is a deprecated alias of loadPendant for one release)
             JSON.parse(ex.loadReport());   // manifest + import + promotion
             JSON.parse(ex.query(sparql));  // SELECT/ASK/CONSTRUCT/DESCRIBE
             JSON.parse(ex.delta());        // a share-delta/v1 proposal of your edits
@@ -716,7 +718,7 @@ jobs:
       - name: Record deferred repository share publication
         if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED != 'true'
         run: |
-          echo 'Repository qpack publication is disabled pending trusted producer activation. No new repository qpack was published by this job.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Repository pendant publication is disabled pending trusted producer activation. No new repository pendant was published by this job.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Require the trusted repository share
         if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED == 'true' && matrix.target == 'x86_64-unknown-linux-gnu'
@@ -728,7 +730,7 @@ jobs:
         run: |
           set -euo pipefail
           TMP="$(mktemp -d)"
-          PACK="quipu-${TAG}-repository.qpack.tar.gz"
+          PACK="quipu-${TAG}-repository.pendant.tar.gz"
           complete=false
           for attempt in $(seq 1 80); do
             if gh release download "$TAG" --repo scbrown/quipu --dir "$TMP" --clobber \

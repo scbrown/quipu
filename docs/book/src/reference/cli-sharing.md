@@ -574,8 +574,8 @@ quipu share diff <old> <new> --report [--format markdown|json]
 The report a reviewer reads when a pull request changes a pack. When `<old>`
 and `<new>` are pack directories, each side's `shapes.ttl` and the new side's
 `decisions.json` are picked up from the directory; the flags name them
-explicitly otherwise. The repository's `qpack review` workflow
-(`.github/workflows/qpack-review.yml`) runs it for every pack a pull request
+explicitly otherwise. The repository's `pendant review` workflow
+(`.github/workflows/pendant-review.yml`) runs it for every pack a pull request
 touches and publishes the result as the check's job summary.
 
 ### Reading the PR report
@@ -616,7 +616,7 @@ validation is claimed for a proven deletion. Blank-node labels are collapsed whe
 5. **Summary.** The report's last line, used as the check annotation title:
 
 ```text
-qpack review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates
+pendant review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates
 ```
 
 `--format json` carries the same structure (`diff`, `shacl`, `decisions`,

@@ -161,7 +161,7 @@ impl Store {
         // Build (space 0), respace into a free space, verify.
         let alias = self.free_freeze_alias(graph_iri)?;
         let final_path = Path::new(out_dir)
-            .join(format!("{alias}.qpack.db"))
+            .join(format!("{alias}.pendant.db"))
             .to_string_lossy()
             .to_string();
         let build_path = format!("{final_path}.building");

@@ -9,7 +9,7 @@
 // book page.
 //
 // So this drives the packaged directory exactly as the page does — ES module,
-// dedicated worker, a real .qpack produced by the native binary in the same run
+// dedicated worker, a real .pendant produced by the native binary in the same run
 // — and asserts on counts, not on the absence of an exception.
 //
 // usage: node scripts/smoke-wasm-explorer.mjs <packaged-bundle-dir> [--headed]
@@ -83,7 +83,7 @@ run(["knot", join(repo, "examples/sharing-demo/policy.ttl"), "--graph", "urn:smo
 const shareDir = join(work, "share");
 run(["share", "--output", shareDir, "--db", db]);
 
-const packName = "smoke.qpack.tar.gz";
+const packName = "smoke.pendant.tar.gz";
 execFileSync("tar", ["--sort=name", "--mtime=UTC 1970-01-01", "--owner=0", "--group=0",
   "--numeric-owner", "-C", shareDir, "-czf", join(work, packName), "."]);
 const producerManifest = JSON.parse(readFileSync(join(shareDir, "manifest.json"), "utf8"));
@@ -116,7 +116,7 @@ onmessage = async (e) => {
     let value = null;
     if (cmd === "version") value = JSON.parse(explorerVersion());
     else if (cmd === "load") {
-      ex = Explorer.loadQpack(new Uint8Array(bytes), "smoke", new Date().toISOString());
+      ex = Explorer.loadPendant(new Uint8Array(bytes), "smoke", new Date().toISOString());
       value = JSON.parse(ex.loadReport());
     } else if (cmd === "query") value = JSON.parse(ex.query(sparql));
     else if (cmd === "set") value = JSON.parse(ex.set(entity, predicate, v));
@@ -324,7 +324,7 @@ try {
   // Ship the bytes out and hand them to the NATIVE binary. This is the check
   // the whole edit surface exists to pass.
   const packBytes = await page.evaluate(() => window.ask({ cmd: "exportPack" }));
-  const edited = join(work, "edited.qpack.tar.gz");
+  const edited = join(work, "edited.pendant.tar.gz");
   writeFileSync(edited, Buffer.from(packBytes));
   check("the exported pack is a non-trivial archive", packBytes.length > 200,
     `${packBytes.length} bytes`);

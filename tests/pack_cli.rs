@@ -7,7 +7,7 @@ use std::process::Command;
 fn omitted_graph_packs_root_and_verifies() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("source.db");
-    let out = dir.path().join("root.qpack.db");
+    let out = dir.path().join("root.pendant.db");
     let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
     quipu::ingest_rdf(
         &mut store,
