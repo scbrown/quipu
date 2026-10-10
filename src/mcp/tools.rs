@@ -12,6 +12,7 @@ mod search_anchor;
 mod search_anchor_mix;
 mod search_fusion;
 mod search_ranking;
+mod search_scoped;
 mod shapes;
 mod structured_candidates;
 mod structured_rank;

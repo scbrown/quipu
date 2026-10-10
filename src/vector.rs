@@ -14,6 +14,8 @@ use rusqlite::{OptionalExtension, params};
 use crate::error::Result;
 use crate::store::Store;
 
+mod scoped;
+
 /// Schema for the vectors table, created alongside the fact log.
 pub(crate) const VECTORS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS vectors (
