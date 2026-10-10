@@ -396,6 +396,13 @@ jobs:
       - name: Prove the crates publish guard still refuses
         run: scripts/ci/crates-publish-guard.sh --selftest
 
+      # The agent-arm harness behind `just bench agents` (aegis-xfuch4.4): its
+      # scoring oracle (true / FALSE / evasion-caught / abstained) is what turns
+      # model runs into the paper's table, so it is pinned here. Pure Python,
+      # no model call and no build.
+      - name: Agent benchmark harness unit tests
+        run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
+
       # THE OTHER HALF OF THE SAME LANE, and it is here for the reason the last
       # one is: the publish job is SKIPPED on ordinary pushes, so its guard emits
       # nothing until a release. `git tag --points-at HEAD` was wrong for every

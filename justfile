@@ -116,13 +116,19 @@ paper-merge cmd="build":
     else echo "unknown paper-merge command '{{ cmd }}' (available: build, clean)"; exit 1; fi
 
 # Run a paper benchmark (see benchmark/<name>/README.md): just bench census [--arm control] [--seed N]
+# just bench agents [--models fake,claude:<m>,codex:<m>] [--tasks ...] [--trials N] [--seed S]
+#   The default model is the scripted `fake` writer: zero spend. A real model
+#   spends budget; see benchmark/census/agent/README.md before running one.
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \
         cargo run --quiet --release --example census -- {{ args }}; \
     elif [ "{{ name }}" = "merge" ]; then \
         cargo run --quiet --release --example mergebench --features shacl -- {{ args }}; \
+    elif [ "{{ name }}" = "agents" ]; then \
+        cargo build --quiet --release --example census && \
+        python3 benchmark/census/agent/run_agents.py {{ args }}; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census, merge)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge, agents)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.
