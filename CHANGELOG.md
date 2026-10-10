@@ -43,6 +43,7 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive ledgers at 1aa8de71 (#456)([c901b2b](https://github.com/scbrown/quipu/commit/c901b2b55f90e1fd392d3dc86c1a50c4fbd7abb6))
 - *(conformance)* Re-derive ledgers at 4bfed20a (#466)([83cdb96](https://github.com/scbrown/quipu/commit/83cdb961a3dbb69549d21be855c3cd66f42f5631))
 - *(conformance)* Re-derive ledgers at d8b6757c (#486)([50ae3a7](https://github.com/scbrown/quipu/commit/50ae3a7c19389d1b472327005154791ad037be1f))
+- *(conformance)* Derive ledgers from current source([f15eaab](https://github.com/scbrown/quipu/commit/f15eaabf83d000738821c10ed3612d8cd721bae1))
 
 ### Perf
 
