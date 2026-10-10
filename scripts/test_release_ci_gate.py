@@ -2,6 +2,7 @@
 """Static contract connecting CI correctness to Release."""
 
 from pathlib import Path
+import yaml
 
 
 ci = Path(".github/workflows/ci.yml").read_text()
@@ -23,10 +24,36 @@ for required in (
     "wasm",
     "source-size",
     "load-test",
-    "shapes",
     "lint-markdown",
 ):
     assert required in extended_header, f"extended surface {required} must remain covered"
+
+# Reject duplicate keys rather than letting a later value hide a safety gate.
+class UniqueSafeLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        self.flatten_mapping(node)
+        keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
+        assert len(keys) == len(set(keys)), "duplicate workflow mapping keys"
+        return super().construct_mapping(node, deep=deep)
+
+
+jobs = yaml.load(ci, Loader=UniqueSafeLoader)["jobs"]
+combined = jobs["source-size"]
+assert "if" not in combined, "combined invariants must not be conditional"
+assert combined.get("continue-on-error", False) is False, "combined failures must gate"
+aggregate = jobs["extended-correctness"]
+assert "source-size" in aggregate["needs"], "combined invariants must gate the aggregate"
+assert aggregate.get("continue-on-error", False) is False, "aggregate failures must gate"
+for name, command in (
+    ("Self-test the invariant checker", "python3 shapes/verify_shape_invariants.py --selftest"),
+    ("Verify shape invariants (static)", "python3 shapes/verify_shape_invariants.py"),
+):
+    matches = [step for step in combined["steps"] if step.get("name") == name]
+    assert len(matches) == 1, f"exactly one shape step required: {name}"
+    step = matches[0]
+    assert step.get("run", "").strip() == command, f"shape command missing: {name}"
+    assert "if" not in step, f"shape step must be unconditional: {name}"
+    assert step.get("continue-on-error", False) is False, f"shape failure must gate: {name}"
 
 assert "  ci-correctness:\n" in release
 assert "python3 scripts/test_wait_release_correctness.py" in release
