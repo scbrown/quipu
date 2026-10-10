@@ -1397,8 +1397,13 @@ trigger scans. WAL size still comes from a current filesystem metadata read.
 `quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
 including pending requests, cancelled requests and metrics scrapes. It has no
 labels and resets when the process restarts. Use it to measure arrival rate:
-`quipu_http_requests_total` and `quipu_http_client_requests_total` count completed
-responses, so low completion rates alone do not establish low traffic.
+`quipu_http_requests_total` and `quipu_http_client_requests_total` count terminal
+request observations, including dropped request futures with synthetic status
+499. Endpoint histograms and client-duration counters include elapsed time until
+that drop. `quipu_http_requests_cancelled_total{client,endpoint}` separately
+counts dropped futures; its client budget is 31 named callers plus `other`, and
+endpoint labels use route templates. Low terminal rates alone do not establish
+low traffic.
 
 `quipu_http_auth_refusals_total{client,endpoint,method,expected_probe}` counts
 completed HTTP 401 responses, including protected GET requests. Observed
@@ -1455,6 +1460,15 @@ adds `status`, `duration_ms`, and the actual `auth_outcome`; `/query` responses
 also add `query_shape` and `result_size`. Logs contain normalized attribution
 and bounded metadata, never the Authorization header or response body. Slow or
 failed query text retains its existing separate diagnostic line.
+
+Dropping a polled request future also emits one `request_complete` with
+`completion_outcome: "cancelled"`, synthetic `status: 499` and elapsed time.
+No HTTP 499 response is delivered. Authorization remains `pending` and result
+metadata is absent because no response established those values. Normal responses
+use `completion_outcome: "response"`. This records abandonment of the HTTP
+future, including cancellation during shutdown; it does not prove that a blocking
+worker stopped or that a write did not commit. Response-body streaming after the
+handler returns is outside this measurement.
 
 ### UI assets (not documented individually)
 
