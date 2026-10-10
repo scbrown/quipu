@@ -201,6 +201,15 @@ share graph hash mismatch: manifest=… actual=…
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
 result, then sends that result through the same verified in-memory import path.
 
+Loaded local shapes determine admission. Their explicit
+`quipu:onViolation "emit"` diagnostics are advisory; reject-policy Violations
+quarantine the share. Missing policies mean reject, and unknown or conflicting
+policy values refuse. Carried shapes cannot downgrade a local reject policy.
+The report keeps strict `conforms` separate from `blocking`, with complete
+diagnostics and `advisory_results`. An emit-only Violation can therefore produce
+`conforms: false` with `blocking: false`. Vocabulary, integrity, trust and explicit
+promotion requirements still apply.
+
 ## `quipu import promote` — admit a staged share into ROOT
 
 ```text

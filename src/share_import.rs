@@ -103,9 +103,10 @@ pub struct ImportResolution {
 pub struct ImportValidation {
     /// SHACL `sh:conforms`: false on a result of ANY severity, warnings included.
     pub conforms: bool,
-    /// True when a result has `sh:Violation` severity. THIS, not `conforms`,
+    /// True for a Violation under local reject policy. THIS, not `conforms`,
     /// is the `shacl_nonconforming` promotion blocker: warnings are reported in
-    /// `report` and do not quarantine a share (aegis-1mv0to).
+    /// `report` and do not quarantine a share (aegis-1mv0to). Explicit local
+    /// emit results remain in the strict report and are additionally advisory.
     #[serde(default)]
     pub blocking: bool,
     pub report: serde_json::Value,
@@ -363,12 +364,14 @@ fn validate_local(store: &Store, data: &str) -> Result<ImportValidation> {
     #[cfg(feature = "shacl")]
     let (conforms, blocking, report) = match store.get_combined_shapes()? {
         Some(shapes) => {
-            let feedback = crate::shacl_context::validate_with_store_context(store, &shapes, data)?;
+            let feedback =
+                crate::shacl_admission::validate(&shapes, data, true, |policy, data| {
+                    crate::shacl_context::validate_with_store_context(store, policy, data)
+                })?;
             (
-                feedback.conforms,
-                feedback.blocks(),
-                serde_json::to_value(feedback)
-                    .map_err(|e| Error::Serialization(format!("SHACL report: {e}")))?,
+                feedback.full.conforms,
+                feedback.blocking,
+                feedback.report()?,
             )
         }
         None => (
