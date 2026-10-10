@@ -14,19 +14,11 @@ use crate::types::Value;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    super::search_fusion::dispatch_search_fusion(store, input)
+}
+
+pub(super) fn semantic_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
-    match input.get("mode") {
-        None => {}
-        Some(JsonValue::String(mode)) if mode == "semantic" => {}
-        Some(JsonValue::String(mode)) if mode == "keyword" => {
-            return keyword_response(store, input);
-        }
-        Some(_) => {
-            return Err(Error::InvalidValue(
-                "mode must be 'semantic' or 'keyword'".into(),
-            ));
-        }
-    }
     let content_ranking = super::search_ranking::ranking_mode(input)?;
     let anchored = super::search_anchor::AnchorRequest::parse(input)?;
     if graph_scope.explicit && (content_ranking || anchored.is_some()) {
@@ -194,7 +186,7 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
-fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+pub(super) fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
     if !store.search_config().keyword {
         return Err(Error::InvalidValue(
@@ -266,6 +258,15 @@ fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "language": hit.language, "datatype":hit.datatype, "type_iri":hit.type_iri,
                 "plane": if hit.graph_id == 0 { "ROOT" } else { "named" }
             });
+            if input
+                .get("explain")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false)
+            {
+                result["matched_fields"] = serde_json::json!(hit.matched_fields);
+                result["snippet"] =
+                    serde_json::json!(super::search_fusion::lexical_snippet(&hit.snippet));
+            }
             if graph_scope.explicit {
                 result["graph"] = serde_json::json!(store.graph_display_name(hit.graph_id));
                 result["graphs"] =
