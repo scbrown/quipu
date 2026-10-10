@@ -298,6 +298,10 @@ fn routes_in_server_source() -> Vec<String> {
             include_str!("../server/graph_store_compact.rs"),
         ),
         (
+            "server/feed_stream.rs",
+            include_str!("../server/feed_stream.rs"),
+        ),
+        (
             "server/merge_decisions.rs",
             include_str!("../server/merge_decisions.rs"),
         ),
@@ -332,6 +336,8 @@ fn routes_in_server_source() -> Vec<String> {
         "server/base.rs",
         "server/entity.rs",
         "server/feed.rs",
+        "server/event_cursor.rs",
+        "server/feed_stream_tests.rs",
         "server/feed_read_pool_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",

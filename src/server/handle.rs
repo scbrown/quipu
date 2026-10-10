@@ -28,6 +28,8 @@ pub(crate) type SharedStore = Arc<StoreHandle>;
 /// `FairMutex` — so every existing call site is unchanged and writes are still
 /// serialised. `read()` is the new path.
 pub(crate) struct StoreHandle {
+    /// Coalesced hints only; durable rows remain in the existing SQLite logs.
+    pub(crate) commit_wake: tokio::sync::watch::Sender<()>,
     pub(crate) graph_metrics: super::graph_metrics::GraphMetrics,
     pub(crate) writer: FairMutex<quipu::Store>,
     pub(crate) readers: ReadPool,
@@ -106,6 +108,16 @@ impl ReadPool {
 }
 
 impl StoreHandle {
+    pub(crate) fn commit_wake_for(store: &quipu::Store) -> tokio::sync::watch::Sender<()> {
+        let (sender, _) = tokio::sync::watch::channel(());
+        let wake = sender.clone();
+        store
+            .set_commit_wake(move || {
+                wake.send_replace(());
+            })
+            .expect("installing the native feed commit hint hook");
+        sender
+    }
     /// The serving handle. Store-derived fields are read BEFORE the store moves
     /// into the writer mutex, so nothing a request needs later has to take the
     /// writer to get it (aegis-hzh9rz).
@@ -115,7 +127,9 @@ impl StoreHandle {
         db_path: &str,
         federation: quipu::config::FederationConfig,
     ) -> Self {
+        let commit_wake = Self::commit_wake_for(&store);
         Self {
+            commit_wake,
             graph_metrics: super::graph_metrics::GraphMetrics::new(db_path),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),
@@ -141,7 +155,9 @@ impl StoreHandle {
     /// its own empty database.
     #[cfg(test)]
     pub(crate) fn writer_only(store: quipu::Store) -> Self {
+        let commit_wake = Self::commit_wake_for(&store);
         Self {
+            commit_wake,
             graph_metrics: super::graph_metrics::GraphMetrics::new(":memory:"),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),

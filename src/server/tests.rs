@@ -1022,6 +1022,7 @@ pub(super) fn pooled_handle_with_provider(
         conns.push(parking_lot::FairMutex::new(r));
     }
     let handle = super::StoreHandle {
+        commit_wake: super::StoreHandle::commit_wake_for(&store),
         graph_metrics: super::graph_metrics::GraphMetrics::new(&path),
         embedding_provider: store.embedding_provider(),
         search_config: store.search_config().clone(),
