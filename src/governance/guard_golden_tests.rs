@@ -134,23 +134,16 @@ fn rule(store: &mut Store, policy: &str, target: &str, outcome: &str, by: &str) 
     let kp = keypair();
     let hash = evidence_hash(policy, target);
     let reg = format!("http://ex/reg_{by}");
-    let d = vec![
-        a(
-            store,
-            &reg,
-            RDF_TYPE,
-            iri(store, &ns("VerifierRegistration")),
-        ),
-        a(store, &reg, &ns("verifier"), lit(by)),
-        a(store, &reg, &ns("attests"), lit(policy)),
-        a(
-            store,
-            &reg,
-            &ns("publicKey"),
-            lit(&crate::signing::public_key_hex(&kp)),
-        ),
-    ];
-    store.transact(&d, TS, None, None).unwrap();
+    // Router decisions require enrolled human authority; an ordinary agent-tier
+    // registration correctly leaves the request pending.
+    crate::governance::trust_root::test_support::register_human(
+        store,
+        &reg,
+        by,
+        &[policy],
+        &crate::signing::public_key_hex(&kp),
+        TS,
+    );
     let sig = crate::signing::sign_hex(&kp, &decision_message(&hash, outcome, by));
     let dec = format!("http://ex/decision_{by}");
     let d = vec![
