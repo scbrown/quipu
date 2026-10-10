@@ -46,6 +46,7 @@ pub(super) fn is_cast(function: &str) -> bool {
 enum Source {
     /// A simple literal or `xsd:string`: cast from its lexical form.
     Text(String),
+    Integer(i64),
     /// A number or boolean, cast by value.
     Number(f64),
     Boolean(bool),
@@ -56,7 +57,7 @@ enum Source {
 fn source(store: &Store, value: Value) -> Option<Source> {
     Some(match value {
         Value::Str(s) => Source::Text(s),
-        Value::Int(n) => Source::Number(n as f64),
+        Value::Int(n) => Source::Integer(n),
         Value::Float(f) => Source::Number(f),
         Value::Bool(b) => Source::Boolean(b),
         Value::Ref(id) => Source::Iri(store.resolve(id).ok()?),
@@ -64,6 +65,9 @@ fn source(store: &Store, value: Value) -> Option<Source> {
             namespace::XSD_STRING => Source::Text(lexical),
             namespace::XSD_DATE_TIME => Source::DateTime(lexical),
             namespace::XSD_BOOLEAN => Source::Boolean(parse_boolean(&lexical)?),
+            other if namespace::is_integer_datatype(other) => {
+                Source::Integer(lexical.trim().parse().ok()?)
+            }
             other if namespace::is_numeric_datatype(other) => {
                 Source::Number(parse_floating(&lexical)?)
             }
@@ -114,22 +118,33 @@ pub(super) fn cast(
     match target {
         namespace::XSD_STRING => Some(Value::Str(match source {
             Source::Text(s) | Source::DateTime(s) | Source::Iri(s) => s,
+            Source::Integer(n) => n.to_string(),
             Source::Number(n) if n.fract() == 0.0 && n.is_finite() => format!("{}", n as i64),
             Source::Number(n) => n.to_string(),
             Source::Boolean(b) => b.to_string(),
         })),
         namespace::XSD_INTEGER => match source {
+            Source::Integer(n) => Some(Value::Int(n)),
             Source::Text(s) if INTEGER.is_match(s.trim()) => s
                 .trim()
                 .trim_start_matches('+')
                 .parse()
                 .ok()
                 .map(Value::Int),
-            Source::Number(n) if n.is_finite() => Some(Value::Int(n.trunc() as i64)),
+            Source::Number(n)
+                if n.is_finite()
+                    && n.trunc() >= i64::MIN as f64
+                    && n.trunc() < -(i64::MIN as f64) =>
+            {
+                Some(Value::Int(n.trunc() as i64))
+            }
             Source::Boolean(b) => Some(Value::Int(i64::from(b))),
             _ => None,
         },
         namespace::XSD_DECIMAL => {
+            if let Source::Integer(n) = source {
+                return Some(typed(n.to_string(), namespace::XSD_DECIMAL));
+            }
             let n = match source {
                 Source::Text(s) if DECIMAL.is_match(s.trim()) => s.trim().parse().ok()?,
                 Source::Number(n) if n.is_finite() => n,
@@ -141,6 +156,7 @@ pub(super) fn cast(
         namespace::XSD_FLOAT | namespace::XSD_DOUBLE => {
             let n = match source {
                 Source::Text(s) => parse_floating(&s)?,
+                Source::Integer(n) => n as f64,
                 Source::Number(n) => n,
                 Source::Boolean(b) => f64::from(u8::from(b)),
                 _ => return None,
@@ -155,6 +171,7 @@ pub(super) fn cast(
             }
         }
         namespace::XSD_BOOLEAN => match source {
+            Source::Integer(n) => Some(Value::Bool(n != 0)),
             Source::Text(s) => parse_boolean(&s).map(Value::Bool),
             Source::Number(n) => Some(Value::Bool(n != 0.0 && !n.is_nan())),
             Source::Boolean(b) => Some(Value::Bool(b)),

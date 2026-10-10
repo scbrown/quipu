@@ -4008,3 +4008,37 @@ fn order_by_a_cast_sorts_by_the_cast_value() {
         ]
     );
 }
+
+#[test]
+fn xsd_cast_integer_identity_is_exact_above_f64_precision() {
+    let store = Store::open_in_memory().unwrap();
+    let identity = 9_007_199_254_740_993_i64;
+    let cast = |target, value| {
+        super::casts::cast(&store, target, value, |n| n.to_string(), |n| n.to_string())
+    };
+    assert_eq!(
+        cast(crate::namespace::XSD_INTEGER, Value::Int(identity)),
+        Some(Value::Int(identity))
+    );
+    assert_eq!(
+        cast(crate::namespace::XSD_STRING, Value::Int(identity)),
+        Some(Value::Str(identity.to_string()))
+    );
+}
+
+#[test]
+fn xsd_cast_integer_out_of_range_does_not_saturate() {
+    let store = Store::open_in_memory().unwrap();
+    let cast = |value| {
+        super::casts::cast(
+            &store,
+            crate::namespace::XSD_INTEGER,
+            value,
+            |n| n.to_string(),
+            |n| n.to_string(),
+        )
+    };
+    assert_eq!(cast(Value::Float(1e20)), None);
+    assert_eq!(cast(Value::Float(-1e20)), None);
+    assert_eq!(cast(Value::Float(3.9)), Some(Value::Int(3)));
+}
