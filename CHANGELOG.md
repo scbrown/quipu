@@ -22,10 +22,22 @@ All notable changes to this project will be documented in this file.
 - *(governance)* Seal the whole decision with an RDFC-1.0 digest and a single-use nonce (#345)([3e2a6ae](https://github.com/scbrown/quipu/commit/3e2a6ae2c846cc53b929428b4aad157fa8ed232c))
 - *(share)* Commit the project graph under .quipu/graph; one-command load (#360)([7b8958b](https://github.com/scbrown/quipu/commit/7b8958b716f3ac5ec692c67ae7adb9ec4583964a))
 - *(attest)* Quipu-write-v2 binds the receiving store as audience (#388)([9a93c54](https://github.com/scbrown/quipu/commit/9a93c54d8d71d638f79eb63ed12a9fb55bc1482d))
+- *(search)* Compose anchored semantic keyword and hybrid ranking (#468)([91555e8](https://github.com/scbrown/quipu/commit/91555e8c09b7bd1a6567af4f87b7dda159f67c89))
+- *(query)* Traverse from bounded fused search seeds (#482)([1d32c0d](https://github.com/scbrown/quipu/commit/1d32c0df13fba9c9a3ee3c35675d32d437c88587))
+- *(governance)* Denial quarantine — refusals re-derive as of their transaction (GS6) (#312)([6a0e83c](https://github.com/scbrown/quipu/commit/6a0e83c97be486cb8efd6a3fac565cd2908e71a2))
+- *(governance)* Human trust root; registry amendments need an enrolled human key (S3) (#350)([39cb4e3](https://github.com/scbrown/quipu/commit/39cb4e3416246928200c419a59ef77a98374a751))
+- *(audit)* Replay committed policies without duplicate merge findings (#399)([d4f0ce6](https://github.com/scbrown/quipu/commit/d4f0ce67041d32a3c01236942081617e4f85a98a))
+- *(metrics)* Expose bounded caller latency histograms and finer buckets (#401)([47a6ea3](https://github.com/scbrown/quipu/commit/47a6ea3540aa6e965082507ffd629286530db140))
+- *(server)* Trace phases and thread IO for slow searches (#458)([808f228](https://github.com/scbrown/quipu/commit/808f22836790a8831324d0e045e3a1a967bf90ec))
+- *(search)* Add explicit structured query and JSON filters (#473)([f0de59f](https://github.com/scbrown/quipu/commit/f0de59f3ec9da7becb2853214a5da8cbc8580f58))
 
 ### CI/CD
 
 - Gate string-filter query performance on a 2.1M-triple fixture (#467)([fd3a029](https://github.com/scbrown/quipu/commit/fd3a029a69d7e569dab9fb07261ae2bb1a36d995))
+
+### Changed
+
+- *(cli)* Split archive commands to restore the size ratchet([1f42262](https://github.com/scbrown/quipu/commit/1f422626a0f9b449b16e3bccfe89d71fe3659fb5))
 
 ### Documentation
 
@@ -38,8 +50,6 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Name non-passing SPARQL 1.0 cases (#469)([7c10e26](https://github.com/scbrown/quipu/commit/7c10e26fc87ea5b4406d1d9767a9444b54d31970))
 
 ### Fixed
-
-- Distinguish writes rejected before execution from query timeouts: HTTP 503 with `write_not_started` and `Retry-After`, while read timeouts retain HTTP 408.
 
 - *(export)* Refuse unrecognised fields instead of exporting ROOT (#334)([8571911](https://github.com/scbrown/quipu/commit/8571911b33e078af107491d7d994951ec3a42f6d))
 - *(server)* Use jemalloc as quipu-server's allocator (#446)([214680a](https://github.com/scbrown/quipu/commit/214680aff54c0ad30f7d146229e76e51e3e53312))
@@ -55,6 +65,12 @@ All notable changes to this project will be documented in this file.
 - Test policy pending post-state and document SHACL validation scope (#472)([e35669d](https://github.com/scbrown/quipu/commit/e35669de77d8ccf1595542b3c8de91480f177a74))
 - *(pack)* Prepare compatibility for receiver import review state (#479)([ef5556f](https://github.com/scbrown/quipu/commit/ef5556f24b5aa361e71761014bbdd616fb115a43))
 - *(shacl)* Separate snapshot admission from strict validation (#481)([f03f7c1](https://github.com/scbrown/quipu/commit/f03f7c146281cd372eacff37a0600ba1b68313f8))
+- *(server)* Distinguish unrun queued writes from query timeouts (#474)([e843a75](https://github.com/scbrown/quipu/commit/e843a75ed9441c705d604f40f6ff56c95b87815f))
+- *(server)* Account for abandoned HTTP request futures (#477)([3772179](https://github.com/scbrown/quipu/commit/37721793fad383fdb9cd35fb57aa7c424173810c))
+- *(rdf)* Preserve literal lexical identity across legacy encodings (#320)([91233c4](https://github.com/scbrown/quipu/commit/91233c4bd893721f24cf245b4cd587510f437e4f))
+- *(search)* Rank scoped SQLite candidates before top-K (#488)([575d035](https://github.com/scbrown/quipu/commit/575d035ddfe0c9b4ceb61c3d7cd72059eb13c294))
+- *(sparql)* CONSTRUCT template blank nodes are fresh per solution (#309)([e8a82b2](https://github.com/scbrown/quipu/commit/e8a82b2980d1bed5049fede3dd8011873da2ab8c))
+- *(provenance)* Govern episode references to existing work items (#329)([a404b89](https://github.com/scbrown/quipu/commit/a404b89698dbf5e0273ff5d3ca80932519364126))
 
 ### Miscellaneous
 
@@ -71,6 +87,7 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - *(sparql)* Preserve typed join order and grouped metadata counts (#478)([4a588eb](https://github.com/scbrown/quipu/commit/4a588eba576da0ed452ff21e3222f57aa1c344f8))
+- *(governance)* Enroll human authority in approval fixtures([89a239d](https://github.com/scbrown/quipu/commit/89a239d1b9a1ac8ed49ab1cbecbbaf27bf1a9f76))
 
 ### Perf
 
