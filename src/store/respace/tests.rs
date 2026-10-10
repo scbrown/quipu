@@ -825,7 +825,20 @@ fn a_respaced_store_can_be_respaced_again() {
 #[test]
 fn future_import_review_columns_are_text_and_unknown_columns_still_refuse() {
     let store = Store::open_in_memory().unwrap();
-    store.conn.execute_batch("CREATE TABLE IF NOT EXISTS import_reviews (share_id TEXT PRIMARY KEY,state TEXT NOT NULL,first_seen TEXT NOT NULL,updated_at TEXT NOT NULL,notice_policy TEXT,payload TEXT NOT NULL)").unwrap();
+    assert!(crate::share_completeness::disposition("facts").is_some());
+    let present: bool = store
+        .conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='import_reviews')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(!present, "compatibility must not activate review state");
+    store
+        .conn
+        .execute_batch(crate::share_completeness::IMPORT_REVIEW_SCHEMA_SQL)
+        .unwrap();
     assert!(crate::store::respace::classify_live_schema(&store.conn).is_ok());
     assert_eq!(
         crate::share_completeness::disposition("import_reviews"),
