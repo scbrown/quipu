@@ -47,6 +47,9 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
+    # Preserve receiver-diagnostics commits without rewriting published history.
+    { pattern = '(?m)^Log observed transport peer and request provenance gaps$', replace = "fix(server): log observed transport peer and request provenance gaps" },
+    { pattern = '(?m)^Bind conformance ledgers to receiver diagnostics source$', replace = "docs(conformance): bind conformance ledgers to receiver diagnostics source" },
     # Preserve the FILTER integration evidence entry without rewriting history.
     { pattern = '(?m)^Refresh conformance evidence for FILTER error integration$', replace = "docs(conformance): refresh conformance evidence for FILTER error integration" },
     # Repair the merged #282 subject without rewriting history. Keep this exact
