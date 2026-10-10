@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 
 - *(share)* Use pendant names and retain legacy pack reads (#503)([1ffd453](https://github.com/scbrown/quipu/commit/1ffd453b57e2657b83e9d88572063fa76e1243a7))
 
+
+
 ### Miscellaneous
 
 - *(conformance)* Re-derive ledgers at dfc5da2b (#497)([f670536](https://github.com/scbrown/quipu/commit/f6705365e3b17f1d913c39adc556127b8c91d116))
