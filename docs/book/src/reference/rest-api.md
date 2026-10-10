@@ -1469,6 +1469,26 @@ use `completion_outcome: "response"`. This records abandonment of the HTTP
 future, including cancellation during shutdown; it does not prove that a blocking
 worker stopped or that a write did not commit. Response-body streaming after the
 handler returns is outside this measurement.
+Completed `/search`, `/hybrid-search`, and `/search-query` pipelines exceeding 500 ms also emit
+`search_phase_slow`. This anonymous record reports `pipeline_ms`, combined
+`admission_dispatch_ms`, and `phase_ms` for embedding, reader acquisition,
+tool execution, SQLite scan/decode/scoring, sorting, and survivor metadata.
+Tool time contains the SQLite phases; these overlapping values must not be
+summed. Admission includes the asynchronous permit wait and blocking-pool
+dispatch, which this record cannot separate. The pipeline excludes HTTP body
+parsing and response serialization and therefore differs from request duration.
+Missing phases are `null`, including embedding for supplied-vector requests.
+
+On Linux, `thread_logical_read_bytes` and `thread_physical_read_bytes` are
+counter deltas from the same blocking thread, including embedding and retrieval.
+They are `null` with `thread_io_known=false` if unavailable or inconsistent;
+physical reads of zero can mean cached reads. They are not process totals and
+do not count work performed on other threads. Records contain no query text,
+entity names, caller labels, embeddings, or headers. Errors retain the phases
+that ran and set `ok=false`. Cancellation before blocking work starts emits
+no phase record; panics are not completion records. Library and CLI vector
+calls outside these HTTP handlers do not emit records. This is diagnostic
+evidence for individual slow requests, not proof of a historical cause.
 
 ### UI assets (not documented individually)
 
