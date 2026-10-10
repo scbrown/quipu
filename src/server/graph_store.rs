@@ -26,6 +26,7 @@ pub(crate) fn routes() -> axum::Router<SharedStore> {
 pub(crate) struct GraphSelector {
     graph: Option<String>,
     default: Option<String>,
+    transport: Option<String>,
 }
 
 impl GraphSelector {
@@ -93,6 +94,19 @@ pub(crate) async fn graph_store_get(
         Ok(v) => v.map(str::to_owned),
         Err(r) => return r,
     };
+    if let Some(transport) = selector.transport.as_deref() {
+        if transport != "compact-v1" {
+            return (StatusCode::BAD_REQUEST, "unknown RDF transport").into_response();
+        }
+        let Some(graph) = graph else {
+            return (
+                StatusCode::BAD_REQUEST,
+                "compact transport requires a named graph",
+            )
+                .into_response();
+        };
+        return super::graph_store_compact::get(store, graph).await;
+    }
     let (format, content_type) = match response_format(&headers) {
         Ok(v) => v,
         Err(r) => return r,
@@ -273,6 +287,7 @@ mod tests {
         GraphSelector {
             graph: Some("http://example.org/graphs/interop".into()),
             default: None,
+            transport: None,
         }
     }
 
@@ -337,6 +352,7 @@ mod tests {
 
         let default = GraphSelector {
             graph: None,
+            transport: None,
             default: Some(String::new()),
         };
         let root = graph_store_put(
@@ -356,5 +372,72 @@ mod tests {
             "/rdf-graph-store",
             "HEAD"
         ));
+    }
+    #[tokio::test]
+    async fn compact_transport_is_explicit_named_complete_and_bound() {
+        use sha2::{Digest, Sha256};
+        let shared: SharedStore = Arc::new(StoreHandle::writer_only(
+            quipu::Store::open_in_memory().unwrap(),
+        ));
+        let source = b"<http://example.org/a> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/Action> .\n<http://example.org/a> <https://schema.org/version> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .";
+        let put = graph_store_put(
+            State(shared.clone()),
+            Query(named()),
+            content_type("application/n-triples"),
+            None,
+            Bytes::from_static(source),
+        )
+        .await;
+        assert_eq!(put.status(), StatusCode::CREATED);
+        let mut selector = named();
+        selector.transport = Some("compact-v1".into());
+        let response =
+            graph_store_get(State(shared.clone()), Query(selector), HeaderMap::new()).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["x-quipu-rdf-transport"], "compact-v1");
+        assert_eq!(response.headers()["x-quipu-triples"], "2");
+        assert_eq!(response.headers()["x-quipu-actions"], "1");
+        let expected_graph = format!("{:x}", Sha256::digest(b"http://example.org/graphs/interop"));
+        assert_eq!(response.headers()["x-quipu-graph-sha256"], expected_graph);
+        let hash = response.headers()["x-quipu-body-sha256"]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let bytes = axum::body::to_bytes(response.into_body(), quipu::COMPACT_RDF_LIMIT)
+            .await
+            .unwrap();
+        assert_eq!(hash, format!("{:x}", Sha256::digest(&bytes)));
+        let parsed: Vec<_> = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle)
+            .for_reader(bytes.as_ref())
+            .collect();
+        assert_eq!(parsed.len(), 2);
+        assert!(parsed[0].is_ok());
+        println!(
+            "COMPACT_FIXTURE {}",
+            serde_json::json!({
+                "graph": "http://example.org/graphs/interop",
+                "body": String::from_utf8(bytes.to_vec()).unwrap(),
+                "sha256": hash, "triples": 2, "actions": 1
+            })
+        );
+        let root = GraphSelector {
+            graph: None,
+            default: Some(String::new()),
+            transport: Some("compact-v1".into()),
+        };
+        assert_eq!(
+            graph_store_get(State(shared.clone()), Query(root), HeaderMap::new())
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        let mut wrong = named();
+        wrong.transport = Some("unknown".into());
+        assert_eq!(
+            graph_store_get(State(shared), Query(wrong), HeaderMap::new())
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
     }
 }
