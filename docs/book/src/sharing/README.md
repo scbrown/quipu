@@ -135,6 +135,8 @@ check remains mandatory and is not replaced by this public catalogue.
 
 Before emitting a release pack, the builder imports it into a fresh receiver
 and proves outward sharing and re-import without injecting policy afterward.
+Acceptance pins all four public rule IRIs and their exact labels, regexes and
+block tiers; missing one rule or changing any of those values fails the check.
 Missing receiver policy and a planted forbidden value must still refuse without
 output, and native SHACL must refuse an incomplete policy rule. Carrying shapes
 does not establish that a particular browser binary has compiled SHACL; the
