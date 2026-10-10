@@ -247,6 +247,7 @@ impl Store {
         Self::migrate_datasets(&conn)?;
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
+        Self::migrate_decision_nonces(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
         Self::migrate_pending_share_queries(&conn)?;

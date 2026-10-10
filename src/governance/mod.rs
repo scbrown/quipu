@@ -13,6 +13,7 @@ pub mod audit;
 pub mod audit_spec;
 pub mod authority;
 pub mod backtest;
+pub mod decision_seal;
 pub mod draft;
 pub mod git_audit;
 pub mod guard;

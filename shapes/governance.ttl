@@ -751,6 +751,28 @@ aegis:DecisionShape a sh:NodeShape ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════
+# Sealed decisions (aegis-kzt0ql.9.3). A presentation freezes a decision's
+# content (an RDFC-1.0 digest) with a single-use nonce; a verdict answers it
+# with a signature over the whole decision. Neither class is a Verdict or a
+# DecisionRequest, and neither shares a domain-bearing predicate with them.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:DecisionPresentationShape a sh:NodeShape ;
+    sh:targetClass aegis:DecisionPresentation ;
+    sh:property [ sh:path aegis:forDecision ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:sealedDigest ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^sha256:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path aegis:nonce ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:purpose ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "quipu-verdict" ) ] ;
+    sh:property [ sh:path aegis:presentationExpiresAt ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+aegis:DecisionVerdictShape a sh:NodeShape ;
+    sh:targetClass aegis:DecisionVerdict ;
+    sh:property [ sh:path aegis:forPresentation ; sh:class aegis:DecisionPresentation ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:outcome ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:verifier ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:sealSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# ═══════════════════════════════════════════════════════════════════
 # Escalation Router (Q-SARC-ER) — bounded human oversight.
 #
 # SARC I4: "escalation without a bound is not human oversight; it is deferred

@@ -9,6 +9,8 @@ pub mod attestation;
 mod batches;
 pub mod changes;
 pub mod datasets;
+mod decision_nonces;
+pub use decision_nonces::DecisionNonceSpend;
 pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
