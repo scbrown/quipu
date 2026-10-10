@@ -237,8 +237,8 @@ fn seeded_bgp_stays_within_join_budget_that_unbound_scan_exceeds() {
         None,
     )
     .unwrap();
-    s.search_config_mut().max_join_rows = 2;
-    let sparql = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
+    s.search_config_mut().max_join_rows = 4;
+    let sparql = "SELECT ?s ?p ?o ?p2 ?o2 WHERE {?s ?p ?o . ?s ?p2 ?o2}";
     assert!(
         crate::tool_query(&s, &json!({"query":sparql})).is_err(),
         "unbound positive control must exceed budget"
@@ -247,7 +247,7 @@ fn seeded_bgp_stays_within_join_budget_that_unbound_scan_exceeds() {
     q["sparql"] = sparql.into();
     let r = tool_search_query(&s, &q).unwrap();
     assert_eq!(r["seed_count"], 1);
-    assert_eq!(r["result"]["count"], 2);
+    assert_eq!(r["result"]["count"], 4);
 }
 #[test]
 fn configured_label_floor_is_not_bypassed() {
