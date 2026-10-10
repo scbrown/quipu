@@ -414,6 +414,7 @@ COMMANDS:
     quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
     quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
     quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
+    quipu share diff <old> <new> --report [--format markdown|json] [--old-shapes <ttl>] [--new-shapes <ttl>] [--decisions <json>] [--fail-on-introduced]   PR-review report
     quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--yupana <exe>] [--json] [--db <path>]

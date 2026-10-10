@@ -1,0 +1,7 @@
+<http://example.org/people/alice> <http://example.org/vocab#age> "31"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/people/alice> <http://example.org/vocab#email> "alice@example.org" .
+<http://example.org/people/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/vocab#Person> .
+<http://example.org/people/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice Smith" .
+<http://example.org/people/bob> <http://example.org/vocab#age> "40"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/people/bob> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/vocab#Person> .
+<http://example.org/people/bob> <http://www.w3.org/2000/01/rdf-schema#label> "Bob Jones" .
