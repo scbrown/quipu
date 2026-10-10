@@ -182,7 +182,16 @@ fn candidate_before_top_k_finds_low_score() {
 #[test]
 fn scope_and_non_sqlite_refuse_without_fallback() {
     let mut store = fixture();
-    for key in ["graph", "graphs", "anchor", "group_ids", "entity_type"] {
+    for key in [
+        "graph",
+        "graphs",
+        "anchor",
+        "group_ids",
+        "entity_type",
+        "alpha",
+        "fusion",
+        "rrf_k",
+    ] {
         let mut input = request("type:Service");
         input[key] = json!("unknown");
         assert!(search(&store, &input).is_err(), "{key}");
