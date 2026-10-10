@@ -58,6 +58,10 @@ pub struct TraceRecord {
     /// ask whether a refusal was ever escaped.
     #[serde(default)]
     pub path: Option<String>,
+    /// Full immutable Git commit id associated with this evaluation by its
+    /// producer. Absent in legacy pre-edit spools; never inferred from time.
+    #[serde(default)]
+    pub git_commit: Option<String>,
     /// The constraints evaluated, with their outcomes and responses.
     #[serde(default)]
     pub constraints: Vec<Evaluation>,
