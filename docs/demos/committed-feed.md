@@ -12,6 +12,6 @@ scope; it does not measure production latency, RAM, or activation.
 
 Repeat with `cargo test --bin quipu-server --no-default-features --features server,shacl,onnx named_graph_changes_replay_without_event_offset_ack -- --nocapture`.
 
-Download [output](committed-feed.txt) and [timing](committed-feed.time), then run
+Download [compressed output](committed-feed.txt.gz) and [timing](committed-feed.time), decompress with `gzip -dk committed-feed.txt.gz`, then run
 `scriptreplay --log-timing committed-feed.time --log-out committed-feed.txt`.
 Playback was verified locally. These small sanitized artifacts are retained in Git.
