@@ -21,12 +21,10 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# `default-features = false` drops shacl: rudof/shacl_engine are not part of
-# the wasm32 gate CI runs, and the import path already degrades honestly
-# without them (`validate_local` reports "SHACL feature not compiled" rather
-# than claiming conformance it did not check). The page says so on screen.
+# Browser features are explicit: native networking and ONNX remain separate.
 quipu = { package = "quipu-ai", path = "../..", default-features = false }
 wasm-bindgen = "0.2"
+js-sys = "0.3"
 serde_json = "1"
 # Writing the export archive in the tab, with the same crates the reader uses,
 # so what comes out is the same .qpack.tar.gz shape that goes in.
@@ -34,10 +32,11 @@ tar = "0.4"
 flate2 = "1"
 
 [features]
-# A passthrough, not a copy: it forwards to quipu's own `shacl` so the
-# `cfg!(feature = "shacl")` the page reports cannot drift from what was
-# actually linked. Off by default — see the dependency note above.
+default = ["shacl", "owl", "reactive-reasoner"]
+# Passthroughs keep reported capabilities aligned with the linked engine.
 shacl = ["quipu/shacl"]
+owl = ["quipu/owl"]
+reactive-reasoner = ["quipu/reactive-reasoner"]
 
 [profile.release]
 # Size, not speed: every byte here is a byte the book page downloads before it

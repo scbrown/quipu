@@ -33,6 +33,10 @@ inputs:
       failure shape this action exists to prevent.
     required: true
 
+  runtime-dir:
+    description: Packaged self-hosted browser runtime and model assets.
+    default: wasm/explorer/runtime/dist
+
 runs:
   using: composite
   steps:
@@ -64,3 +68,26 @@ runs:
       env:
         NODE_BUNDLE_DIR: ${{ inputs.node-bundle-dir }}
       run: node scripts/smoke-wasm-node.mjs "$NODE_BUNDLE_DIR"
+
+    - name: Full browser engine acceptance
+      shell: bash
+      env:
+        BUNDLE_DIR: ${{ inputs.bundle-dir }}
+        RUNTIME_DIR: ${{ inputs.runtime-dir }}
+      run: |
+        wasm/explorer/runtime/node_modules/.bin/playwright install --with-deps chromium
+        node scripts/smoke-wasm-features.mjs "$BUNDLE_DIR" "$RUNTIME_DIR"
+
+    - name: Pinned W3C SHACL Core against the compiled wasm validator
+      shell: bash
+      env:
+        QUIPU_WASM_BUNDLE: ${{ github.workspace }}/${{ inputs.node-bundle-dir }}/quipu_wasm_explorer.js
+      run: |
+        set -euo pipefail
+        SUITE=$(mktemp -d)
+        trap 'rm -rf "$SUITE"' EXIT
+        git -C "$SUITE" init -q
+        git -C "$SUITE" fetch --depth=1 https://github.com/w3c/data-shapes.git 9c863967bceaef1a87c24e4dd761eda763823120
+        git -C "$SUITE" checkout -q FETCH_HEAD
+        python3 benchmark/public/shacl_core.py --suite "$SUITE/data-shapes-test-suite/tests" \
+          --quipu scripts/wasm-shacl-conformance.cjs --output /tmp/wasm-shacl-core.json

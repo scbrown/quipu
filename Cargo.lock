@@ -108,12 +108,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arraydeque"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1903,6 +1897,9 @@ name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "encode_unicode"
@@ -2339,15 +2336,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "foldhash 0.2.0",
-]
-
-[[package]]
-name = "hashlink"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
-dependencies = [
- "hashbrown 0.15.5",
 ]
 
 [[package]]
@@ -3727,21 +3715,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mie"
-version = "0.3.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc6283a352a10f2fc82fa4fb9dd1fc289c0e514424d92360d5c2f287f3da8151"
-dependencies = [
- "hashlink 0.10.0",
- "rudof_iri",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tracing",
- "yaml-rust2",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4436,9 +4409,9 @@ dependencies = [
 
 [[package]]
 name = "prefixmap"
-version = "0.3.16"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3b5d65d90d6db7b7f6f69b58719d4f4a5d9954f1be199953341e76891520157"
+checksum = "6da048db841ac92680671198e3e32b1a858393f00239708a3d74125025904ead"
 dependencies = [
  "colored",
  "indexmap 2.13.1",
@@ -5126,9 +5099,9 @@ dependencies = [
 
 [[package]]
 name = "rudof_config"
-version = "0.3.16"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06182074ece9a28169eca164273d26df6fea8a760d4b82a017738cf6dc309549"
+checksum = "dfc9cfab2e6c1078588d1934fdbe34b5a47dc9a194096a667814198f8006b4a2"
 dependencies = [
  "dirs",
  "serde",
@@ -5138,9 +5111,9 @@ dependencies = [
 
 [[package]]
 name = "rudof_iri"
-version = "0.3.16"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2141dfb6de03cf3e88b7a8a82940ca23c7d15163bb036aecaee5379613d3353f"
+checksum = "930abd3dcd341e45fbd39b3ab147ed6e3172a1334a4871df37ea4bd6a7974603"
 dependencies = [
  "getrandom 0.3.4",
  "getrandom 0.4.3",
@@ -5156,9 +5129,9 @@ dependencies = [
 
 [[package]]
 name = "rudof_rdf"
-version = "0.3.16"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7eb6501ecbca462ce3a0689c96ff5c71e0532cd04f2e42cee7a4ae949bacced"
+checksum = "bd163af2e0c8101014962b16d7e8010aa1fac7c5e2c09c48c8cc8a99ed52e76a"
 dependencies = [
  "colored",
  "const_format",
@@ -5178,14 +5151,12 @@ dependencies = [
  "paste",
  "prefixmap",
  "regex",
- "reqwest",
  "rudof_config",
  "rudof_iri",
+ "rudof_viz",
  "rust_decimal",
  "serde",
  "serde_json",
- "sparesults",
- "spargebra",
  "tabled",
  "tempfile",
  "thiserror 2.0.18",
@@ -5193,6 +5164,26 @@ dependencies = [
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "rudof_typing"
+version = "0.3.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6511160308002a9234facf1964e53bcbc455463f023a4f39da07a09be8e7fe39"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "rudof_viz"
+version = "0.3.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25f64d0eb07668daddbf6c58ba89be33a4010eff0d6866c38e6797194f3cc578"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -5204,7 +5195,7 @@ dependencies = [
  "bitflags",
  "fallible-iterator",
  "fallible-streaming-iterator",
- "hashlink 0.12.1",
+ "hashlink",
  "libsqlite3-sys",
  "smallvec",
  "sqlite-wasm-rs",
@@ -5653,12 +5644,13 @@ dependencies = [
 
 [[package]]
 name = "shacl"
-version = "0.3.16"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0d68cef762124c42e1df1416a7665cff142dcc78b72628bbf5b8dfd55339c28"
+checksum = "4c3d20a121e691188b4da6ed8df0bb9b04056db494d8073f17e9b374b4959621"
 dependencies = [
  "anyhow",
  "dashmap",
+ "either",
  "indoc",
  "itertools 0.14.0",
  "petgraph 0.8.3",
@@ -5667,9 +5659,9 @@ dependencies = [
  "rudof_config",
  "rudof_iri",
  "rudof_rdf",
+ "rudof_typing",
  "rust_decimal",
  "serde",
- "sparql_service",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
@@ -5850,33 +5842,6 @@ dependencies = [
  "oxrdf",
  "rand 0.9.2",
  "spargebra",
-]
-
-[[package]]
-name = "sparql_service"
-version = "0.3.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e32fc7dfa97f0c1f06bacb55c8f94ebe5eb02d4c68d42181ef53fce1534d6ec4"
-dependencies = [
- "colored",
- "const_format",
- "itertools 0.14.0",
- "mie",
- "oxigraph",
- "oxrdf",
- "oxrdfio",
- "oxsdatatypes",
- "prefixmap",
- "rudof_config",
- "rudof_iri",
- "rudof_rdf",
- "rust_decimal",
- "serde",
- "serde_json",
- "sparesults",
- "thiserror 2.0.18",
- "toml 0.9.12+spec-1.1.0",
- "tracing",
 ]
 
 [[package]]
@@ -7400,17 +7365,6 @@ name = "xxhash-rust"
 version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
-
-[[package]]
-name = "yaml-rust2"
-version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2462ea039c445496d8793d052e13787f2b90e750b833afee748e601c17621ed9"
-dependencies = [
- "arraydeque",
- "encoding_rs",
- "hashlink 0.10.0",
-]
 
 [[package]]
 name = "yoke"

@@ -43,12 +43,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "arraydeque"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
-
-[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -423,15 +417,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "encoding_rs"
-version = "0.8.35"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75030f3c4f45dafd7586dd6780965a8c7e8e285a5ecb86713e63a79c5b2766f3"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -656,15 +641,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "foldhash 0.2.0",
-]
-
-[[package]]
-name = "hashlink"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
-dependencies = [
- "hashbrown 0.15.5",
 ]
 
 [[package]]
@@ -1128,21 +1104,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "mie"
-version = "0.3.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c58b4afadba12ad60a80c2872f4c168810d9e9f6f5e186d6624a80332a5ca8"
-dependencies = [
- "hashlink 0.10.0",
- "rudof_iri",
- "serde",
- "serde_json",
- "thiserror",
- "tracing",
- "yaml-rust2",
-]
-
-[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1473,9 +1434,9 @@ dependencies = [
 
 [[package]]
 name = "prefixmap"
-version = "0.3.18"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c44938e44da7304437e868fe29846ca06cb75594c3ef765078e5b10d6cdc2cff"
+checksum = "6da048db841ac92680671198e3e32b1a858393f00239708a3d74125025904ead"
 dependencies = [
  "colored",
  "indexmap",
@@ -1609,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.9.1"
+version = "0.11.1"
 dependencies = [
  "base64",
  "datafrog",
@@ -1646,6 +1607,7 @@ name = "quipu-wasm-explorer"
 version = "0.0.0"
 dependencies = [
  "flate2",
+ "js-sys",
  "quipu-ai",
  "serde_json",
  "tar",
@@ -1903,9 +1865,9 @@ dependencies = [
 
 [[package]]
 name = "rudof_config"
-version = "0.3.18"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "320e2cae93e36d8b7e4648205628e96227285cab8ee4d0f8e2c5f5df51bf0f84"
+checksum = "dfc9cfab2e6c1078588d1934fdbe34b5a47dc9a194096a667814198f8006b4a2"
 dependencies = [
  "dirs",
  "serde",
@@ -1915,9 +1877,9 @@ dependencies = [
 
 [[package]]
 name = "rudof_iri"
-version = "0.3.18"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eca16481778c659fbd8811f50db9b2f239ed34e78aa21902d0f9c2ba14ba0478"
+checksum = "930abd3dcd341e45fbd39b3ab147ed6e3172a1334a4871df37ea4bd6a7974603"
 dependencies = [
  "getrandom 0.3.4",
  "getrandom 0.4.3",
@@ -1933,9 +1895,9 @@ dependencies = [
 
 [[package]]
 name = "rudof_rdf"
-version = "0.3.18"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09953eaff267a862d9074cb0f8de61bf01c434144904fd4eb2e8441ab496993f"
+checksum = "bd163af2e0c8101014962b16d7e8010aa1fac7c5e2c09c48c8cc8a99ed52e76a"
 dependencies = [
  "colored",
  "const_format",
@@ -1955,15 +1917,12 @@ dependencies = [
  "paste",
  "prefixmap",
  "regex",
- "reqwest",
  "rudof_config",
  "rudof_iri",
  "rudof_viz",
  "rust_decimal",
  "serde",
  "serde_json",
- "sparesults",
- "spargebra",
  "tabled",
  "tempfile",
  "thiserror",
@@ -1975,18 +1934,18 @@ dependencies = [
 
 [[package]]
 name = "rudof_typing"
-version = "0.3.18"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01ac75e4aee88a08e53800ba261d354f71d89d46461d2e72fcceed36f3cbb26b"
+checksum = "6511160308002a9234facf1964e53bcbc455463f023a4f39da07a09be8e7fe39"
 dependencies = [
  "either",
 ]
 
 [[package]]
 name = "rudof_viz"
-version = "0.3.18"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4226eff04d727aca105a91da58e3dbd2590801f2811f67b77193a8392c2bc044"
+checksum = "25f64d0eb07668daddbf6c58ba89be33a4010eff0d6866c38e6797194f3cc578"
 dependencies = [
  "serde",
  "tempfile",
@@ -2002,7 +1961,7 @@ dependencies = [
  "bitflags",
  "fallible-iterator",
  "fallible-streaming-iterator",
- "hashlink 0.12.1",
+ "hashlink",
  "libsqlite3-sys",
  "smallvec",
  "sqlite-wasm-rs",
@@ -2317,9 +2276,9 @@ dependencies = [
 
 [[package]]
 name = "shacl"
-version = "0.3.18"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c880e38485944ba156b6044a6a389337467d6754c04a5f234afe82d79f68b3d"
+checksum = "4c3d20a121e691188b4da6ed8df0bb9b04056db494d8073f17e9b374b4959621"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2335,7 +2294,6 @@ dependencies = [
  "rudof_typing",
  "rust_decimal",
  "serde",
- "sparql_service",
  "thiserror",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
@@ -2466,33 +2424,6 @@ dependencies = [
  "oxrdf",
  "rand 0.9.5",
  "spargebra",
-]
-
-[[package]]
-name = "sparql_service"
-version = "0.3.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "528d905a9a57bfdbc5385cb502376cf1a957aacdfb2b69171fbb133c9811146f"
-dependencies = [
- "colored",
- "const_format",
- "itertools",
- "mie",
- "oxigraph",
- "oxrdf",
- "oxrdfio",
- "oxsdatatypes",
- "prefixmap",
- "rudof_config",
- "rudof_iri",
- "rudof_rdf",
- "rust_decimal",
- "serde",
- "serde_json",
- "sparesults",
- "thiserror",
- "toml 0.9.12+spec-1.1.0",
- "tracing",
 ]
 
 [[package]]
@@ -3232,17 +3163,6 @@ checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
  "rustix",
-]
-
-[[package]]
-name = "yaml-rust2"
-version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2462ea039c445496d8793d052e13787f2b90e750b833afee748e601c17621ed9"
-dependencies = [
- "arraydeque",
- "encoding_rs",
- "hashlink 0.10.0",
 ]
 
 [[package]]

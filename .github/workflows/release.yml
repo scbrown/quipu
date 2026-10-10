@@ -336,6 +336,7 @@ jobs:
              wasm/explorer/pkg/quipu_wasm_explorer_bg.wasm.d.ts \
              "dist/${NAME}/"
           cp LICENSE "dist/${NAME}/"
+          cp -R wasm/explorer/runtime/dist "dist/${NAME}/runtime"
           cat > "dist/${NAME}/README.txt" <<'EOF'
           quipu, compiled to wasm32-unknown-unknown for the browser.
 
@@ -356,10 +357,12 @@ jobs:
             JSON.parse(ex.loadReport());   // manifest + import + promotion
             JSON.parse(ex.query(sparql));  // SELECT/ASK/CONSTRUCT/DESCRIBE
 
-          Built WITHOUT the `shacl` feature. `import.validation.conforms` is
-          therefore a default and not a validation result -- the off-vocabulary
-          check does run, since it does not need the SHACL engine. Use the native
-          `quipu import` for full validation.
+          Built with SHACL, OWL and reactive Datalog. Import and write validation
+          use the native validator; validateShapes(shapesTurtle, dataTurtle)
+          returns the real validation report. explorerVersion() reports compiled
+          features. Semantic search uses runtime/browser-runtime.mjs and loads
+          the self-hosted ONNX runtime and pinned model on the first search.
+          BrowserRemoteProvider uses fetch and explicitly declared peer labels.
 
           Reference page source: docs/book/src/explore/ in the quipu repository.
           EOF
@@ -408,10 +411,10 @@ jobs:
             import { createRequire } from "node:module";
             const require = createRequire(import.meta.url);
 
-          Built WITHOUT the `shacl` feature, exactly as the browser asset is, so
-          `import.validation.conforms` is a default and not a validation result.
-          The off-vocabulary check does run. Use the native `quipu import` for
-          full validation.
+          Built with SHACL, OWL and reactive Datalog, using the same engine as
+          the browser asset. Import and write validation use the native
+          validator. The browser's optional JavaScript ONNX/fetch runtime is
+          packaged in the browser asset rather than this CommonJS asset.
 
           Worked example, including minting a pack and handing the resulting
           delta back to the native CLI: scripts/smoke-wasm-node.mjs in the quipu
@@ -433,6 +436,7 @@ jobs:
         with:
           bundle-dir: dist/${{ steps.package.outputs.name }}
           node-bundle-dir: dist/${{ steps.package.outputs.node_name }}
+          runtime-dir: dist/${{ steps.package.outputs.name }}/runtime
 
       - name: Upload to the GitHub release
         env:

@@ -162,3 +162,11 @@ runs:
           exit 1
         fi
         echo "browser and nodejs bundles carry byte-identical wasm"
+
+    - name: Build the lazy browser runtime and pinned model assets
+      shell: bash
+      working-directory: wasm/explorer/runtime
+      run: |
+        npm ci --ignore-scripts
+        node build.mjs
+        node fetch-model.mjs

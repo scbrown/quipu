@@ -195,6 +195,9 @@ explorer mode="release":
         wasm-bindgen --target web --out-dir "$REPO/$DEST/pkg" \
             "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
         cd "$REPO"
+        (cd wasm/explorer/runtime && npm ci --ignore-scripts && node build.mjs && node fetch-model.mjs)
+        mkdir -p "$DEST/pkg/runtime"
+        cp -R wasm/explorer/runtime/dist/. "$DEST/pkg/runtime/"
         echo "Built the bundle from this tree. Provide a pack yourself, or run"
         echo "  just explorer release   # to fetch the released one"
     else
@@ -205,6 +208,9 @@ explorer mode="release":
             && tar -C "$TMP" -xzf "$TMP"/*-wasm.tar.gz \
             && find "$TMP" -name 'quipu_wasm_explorer*' -exec cp {} "$DEST/pkg/" \; \
             || echo "warning: $TAG has no wasm bundle yet"
+        for RUNTIME in "$TMP"/*-wasm/runtime; do
+            if [ -d "$RUNTIME" ]; then cp -R "$RUNTIME" "$DEST/pkg/"; fi
+        done
         gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
             && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.qpack.tar.gz" \
             || echo "warning: $TAG has no repository qpack"

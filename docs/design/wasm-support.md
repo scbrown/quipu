@@ -1,5 +1,12 @@
 # Design: WebAssembly Support — running Quipu without a server
 
+> **Browser engine update:** The explorer now compiles SHACL, OWL and reactive
+> Datalog by default. It validates imports and local writes and exposes real
+> validation reports. Semantic search uses a lazy, self-hosted JavaScript ONNX
+> backend; browser federation uses fetch. Section 7 describes this implementation.
+> The earlier measurements and read-only distribution proposal below remain
+> historical design context rather than the explorer's current feature contract.
+>
 > **Implementation status (2026-08-13):** ✅ **All phases (0–5) landed.** The
 > VFS (quipu-qd2, via the rusqlite 0.40 route, §4.2), the wasm-vs-native
 > measurement (quipu-ajz, §5.5), export/import and the pack round-trip
@@ -460,30 +467,45 @@ Round trip: browser → OPFS → serialize → download → `quipu attach` — a
 reverse, a native `.db`'s bytes opening in a tab. No exporter to write, no
 format divergence.
 
-## 7. SHACL — resolved by the distillation split
+## 7. Browser engine features
 
-`rudof_lib` pulls `clap`, `crossterm` and `reqwest`, and `shacl` is a **default**
-feature (`Cargo.toml:93`) and `required-features` on both binaries. A wasm build
-is therefore `--no-default-features` — **no SHACL**.
+The explorer's default features enable SHACL, OWL and reactive Datalog.
+`rudof_rdf` and `shacl` are pinned to 0.3.25 with their default networking
+features disabled. The browser uses the native SHACL validator on import and
+enables validation on writes after adopting the pack's shapes.
+`loadReport().shacl_compiled` retains its existing meaning;
+`explorerVersion().compiled_features` reports each compiled engine feature.
+`validateShapes(shapesTurtle, dataTurtle)` returns native validation feedback,
+including individual results. Rejected writes preserve Error.message and add
+`error.validation` with violation counts and messages. Vocabulary admission
+refusal is a separate gate and does not prove SHACL validation. Episode node
+types currently accept short governed names or `quechua:` names, not full IRIs.
 
-Framed as "a Quipu that accepts unvalidated writes," that was a contradiction of
-the project's stated pitch. Framed as §3, it is not a problem at all: **the
-browser serves a pack that was validated on the server that produced it.** A
-read-only consumer of an already-validated artifact has nothing to validate.
+Adopted Datalog rules react to writes. Derived facts remain in ROOT's companion
+inferred graph, so queries that need both planes must select both explicitly.
+OWL ontologies are explicitly adopted through `Explorer.ontology()` using the
+native load/list/remove/materialize JSON contract; loading a pack does not grant
+additional ontology authority.
 
-That makes **query-only the design rather than a compromise**, and it is the
-recommendation. The other options stay on the table only if a browser write path
-is ever wanted:
+`wasm/explorer/runtime/browser-runtime.mjs` supplies `BrowserSemanticSearch`,
+`BrowserRemoteProvider` and `BrowserFederatedProvider`. Semantic search indexes
+ROOT labels/comments and loads the packaged ONNX runtime and pinned quantized
+MiniLM model on the first search. Its capability state distinguishes not loaded,
+loading, ready and failed. Model files are self-hosted, hash-verified during
+packaging, and never fetched from a model hub by the browser. The native Rust
+ONNX feature is not compiled for wasm.
 
-| Option | Consequence |
-|---|---|
-| **Query-only wasm** | ✅ Recommended. No write path, so no validation gap. Matches §3 exactly. |
-| **Validate on import** | Browser writes are provisional until a server accepts them. Needs a provisional/validated distinction on the wire. |
-| **Wasm-capable SHACL** | Largest scope; needs a `rudof` that builds for wasm, or an in-tree validator. |
+Remote queries use fetch with an optional explicit graph. Peer labels are
+locally declared and parsed by the native label implementation. Federation
+checks the native label floor before network access, preserves provider stamps,
+and reports partial failures with `complete: false`. Tokens are supplied by the
+caller and excluded from provider metadata; ordinary browser CORS rules apply.
 
-One invariant survives regardless: a fact that never passed shapes must never be
-presented as one that did. If a write path is added later, that distinction has
-to be explicit in the response, not inferred.
+The shared CI/release actions build these assets and exercise actual browser
+worker controls for validation, inference, semantic ranking and federation.
+The Node adapter `scripts/wasm-shacl-conformance.cjs` also lets the pinned W3C
+SHACL Core runner exercise the compiled wasm validator directly. SHACL-SPARQL
+tests remain unsupported and are reported separately.
 
 ## 8. Plan
 

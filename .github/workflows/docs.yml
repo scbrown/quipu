@@ -86,6 +86,9 @@ jobs:
             mkdir -p "${DEST}/pkg"
             tar -C "${TMP}" -xzf "${TMP}"/*-wasm.tar.gz
             find "${TMP}" -name 'quipu_wasm_explorer*' -exec cp {} "${DEST}/pkg/" \;
+            for RUNTIME in "${TMP}"/*-wasm/runtime; do
+              if [ -d "$RUNTIME" ]; then cp -R "$RUNTIME" "${DEST}/pkg/"; fi
+            done
           else
             echo "::warning::release ${TAG} has no wasm bundle yet (first one lands with the next release)"
           fi

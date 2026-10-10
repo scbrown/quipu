@@ -165,12 +165,15 @@ impl Validator {
         )
         .map_err(|e| Error::InvalidValue(format!("data load error: {e}")))?;
 
-        let graph = Graph::try_from(data)
-            .map_err(|e| Error::InvalidValue(format!("data graph error: {e}")))?;
+        let graph = Graph::from(data);
         let mut validator = GraphValidation::new(graph);
-        let report =
-            ShaclProcessor::validate(&mut validator, &schema, &ShaclValidationMode::Native)
-                .map_err(|e| Error::InvalidValue(format!("SHACL validation error: {e}")))?;
+        let report = ShaclProcessor::validate(
+            &mut validator,
+            &schema,
+            &ShaclValidationMode::Native,
+            &shacl_engine::validator::ShaclConfig::default(),
+        )
+        .map_err(|e| Error::InvalidValue(format!("SHACL validation error: {e}")))?;
 
         let mut issues = Vec::new();
         let shape_message = single_shape_message(&self.shapes_turtle);
