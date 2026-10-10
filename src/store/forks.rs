@@ -278,7 +278,7 @@ impl Store {
         let gb = self.resolve_diff_side(b)?;
         let fa = self.current_facts_in_graph(ga)?;
         let fb = self.current_facts_in_graph(gb)?;
-        let key = |f: &Fact| (f.entity, f.attribute, f.value.to_bytes());
+        let key = |f: &Fact| (f.entity, f.attribute, f.value.term_key());
         let set_a: std::collections::BTreeSet<_> = fa.iter().map(&key).collect();
         let set_b: std::collections::BTreeSet<_> = fb.iter().map(&key).collect();
         let mut seen = std::collections::BTreeSet::new();
