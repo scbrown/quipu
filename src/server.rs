@@ -81,6 +81,10 @@ use entity::{
     entity_turtle_suffix, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
 };
 use feed::{changes_get, events_commit, events_get, transactions};
+#[path = "server/event_cursor.rs"]
+mod event_cursor;
+#[path = "server/feed_stream.rs"]
+mod feed_stream;
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use publication::{export, share_payload};
 #[cfg(test)]
@@ -463,6 +467,8 @@ async fn main() {
         // Event log pull API (event-log P1)
         .route("/changes", get(changes_get))
         .route("/events", get(events_get))
+        .route("/events/stream", get(feed_stream::events_stream))
+        .route("/changes/stream", get(feed_stream::changes_stream))
         .route("/events/commit", post(events_commit))
         // Semantic web APIs (Phase 4)
         .route("/spotlight", post(spotlight_handler))

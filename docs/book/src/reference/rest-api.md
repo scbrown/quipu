@@ -1805,6 +1805,31 @@ Returns `{events, next_offset, lag, committed_offset?}`; pass `next_offset`
 back as `since` (or commit it) to page forward — polling is a fixpoint, not a
 rewind.
 
+### `GET /events/stream` and `GET /changes/stream`
+
+Read-only Server-Sent Events replay of the corresponding durable feed. Supply a
+nonnegative `since` or `Last-Event-ID`; if both appear they must agree. Event
+frames have event type `quipu.events`, a delivered event-offset ID, and the
+ordinary `/events` page as JSON data. Change frames use `quipu.changes`, a
+transaction-ID cursor and the ordinary `/changes` page as JSON data.
+
+Event streams accept `types` and `group`; change streams accept `graph`,
+including a registered named graph. Unrelated filter kinds and invalid resume
+cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
+
+Delivery does not acknowledge a consumer. Commit applied data and its cursor
+atomically, then reconnect from that cursor after a disconnect. A transaction
+ID is not an event offset and must never be sent to `/events/commit`.
+Fifteen-second heartbeat comments do not read the store; commit hints are
+checked against the durable feed after crossing the writer barrier. An hourly
+backstop covers writes from other connections. A `quipu.error` event has no ID
+and terminates a failed or oversized page; keep the prior applied cursor.
+
+The process admits up to 64 streams, reads one transaction/event per page and
+limits output frames to 1 MiB. One large transaction may require more memory
+before the output check; this is not a total heap bound. See the
+[committed-feed protocol](../architecture/event-stream.md).
+
 ### `POST /events/commit`
 
 `{"consumer_id", "offset"}` — durably record a consumer's cursor. Any offset
