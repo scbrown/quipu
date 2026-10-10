@@ -918,7 +918,7 @@ Accept a pending schema proposal. Shape proposals are validated before writing.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to accept |
-| `decided_by` | No | Identity of the approver |
+| `decided_by` | Yes | Identity of the approver |
 | `note` | No | Optional acceptance note |
 | `timestamp` | No | ISO-8601 timestamp |
 
@@ -930,7 +930,7 @@ Reject a pending schema proposal with a reason.
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to reject |
 | `note` | Yes | Reason for rejection |
-| `decided_by` | No | Identity of the rejector |
+| `decided_by` | Yes | Identity of the rejector |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_resolve_entity`
