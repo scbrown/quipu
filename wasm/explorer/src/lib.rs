@@ -18,6 +18,13 @@ use quipu::share_import::{PromoteImportRequest, promote_import};
 use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
 
+#[wasm_bindgen]
+extern "C" {
+    /// `console.warn`, present in both the browser and node glue.
+    #[wasm_bindgen(js_namespace = console, js_name = warn)]
+    fn console_warn(message: &str);
+}
+
 fn err_js(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
@@ -51,7 +58,7 @@ pub struct Explorer {
 
 #[wasm_bindgen]
 impl Explorer {
-    /// Load a `.qpack.tar.gz` into a fresh in-memory store.
+    /// Load a pendant (`.pendant.tar.gz`) into a fresh in-memory store.
     ///
     /// Runs the full receiving ceremony rather than shortcutting to an RDF
     /// parse, because the ceremony is the thing worth showing:
@@ -71,8 +78,8 @@ impl Explorer {
     /// # Errors
     /// The archive is malformed or oversized, the manifest does not match its
     /// payload, or the import is refused.
-    #[wasm_bindgen(js_name = loadQpack)]
-    pub fn load_qpack(bytes: &[u8], source: &str, timestamp: &str) -> Result<Explorer, JsValue> {
+    #[wasm_bindgen(js_name = loadPendant)]
+    pub fn load_pendant(bytes: &[u8], source: &str, timestamp: &str) -> Result<Explorer, JsValue> {
         let mut request = read_archive_bytes(bytes, source, true).map_err(err_js)?;
         request.actor = None;
         let mut store = quipu::Store::open_in_memory().map_err(err_js)?;
@@ -125,6 +132,19 @@ impl Explorer {
             parent_export_ntriples: request.export_ntriples.clone(),
             edits: Vec::new(),
         })
+    }
+
+    /// Deprecated alias for [`Explorer::load_pendant`], kept for one release
+    /// after the qpack -> pendant rename (aegis-fxpbys.3). Pages built against
+    /// an older bundle call `loadQpack`; they keep working, and the browser
+    /// console says what to call instead. Remove in the release after next.
+    ///
+    /// # Errors
+    /// Exactly those of [`Explorer::load_pendant`].
+    #[wasm_bindgen(js_name = loadQpack)]
+    pub fn load_qpack(bytes: &[u8], source: &str, timestamp: &str) -> Result<Explorer, JsValue> {
+        console_warn("Explorer.loadQpack is deprecated; call Explorer.loadPendant");
+        Self::load_pendant(bytes, source, timestamp)
     }
 
     /// Manifest, import decision and promotion for the loaded pack, as JSON.
@@ -249,7 +269,7 @@ impl Explorer {
             .ok_or_else(|| JsValue::from_str("share payload has no export.nt"))
     }
 
-    /// The edited store as `.qpack.tar.gz` bytes — a real, importable share.
+    /// The edited store as `.pendant.tar.gz` bytes — a real, importable share.
     ///
     /// Built with the same `share_payload` the CLI and the REST endpoint use,
     /// then tarred and gzipped exactly as the release artifact is, so what

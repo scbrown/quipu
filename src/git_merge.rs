@@ -1,4 +1,4 @@
-//! Store-free qpack merging. Git supplies the base; the store merge supplies the operator.
+//! Store-free pendant merging. Git supplies the base; the store merge supplies the operator.
 use crate::error::{Error, Result};
 use crate::git_merge_alias::{AliasProposal, propose};
 pub use crate::git_merge_repo::{check, driver, merge, resolve};
@@ -35,11 +35,11 @@ pub(crate) fn invalid(msg: impl Into<String>) -> Error {
 pub(crate) fn io(e: impl std::fmt::Display) -> Error {
     Error::Store(e.to_string())
 }
-/// Map a failure to start `git` into an actionable error: every qpack Git
+/// Map a failure to start `git` into an actionable error: every pendant Git
 /// command shells out to the `git` executable found on PATH.
 pub(crate) fn spawn_git(e: &std::io::Error) -> Error {
     if e.kind() == std::io::ErrorKind::NotFound {
-        invalid("`git` executable not found on PATH; qpack Git commands require git")
+        invalid("`git` executable not found on PATH; pendant Git commands require git")
     } else {
         io(format!("failed to run git: {e}"))
     }
@@ -55,11 +55,11 @@ impl Pack {
             || m.graph_hash != sha256(self.graph.as_bytes())
             || m.shapes_hash != sha256(self.shapes.as_bytes())
         {
-            return Err(invalid("qpack envelope/hash mismatch"));
+            return Err(invalid("pendant envelope/hash mismatch"));
         }
-        parse_graph(&self.graph, "qpack")?;
+        parse_graph(&self.graph, "pendant")?;
         if self.shapes.trim().is_empty() {
-            return Err(invalid("qpack merge requires non-empty shapes"));
+            return Err(invalid("pendant merge requires non-empty shapes"));
         }
         Ok(())
     }
@@ -117,7 +117,7 @@ pub(crate) fn validate(pack: &Pack) -> Result<()> {
             crate::shacl::Validator::from_turtle(&pack.shapes)?.validate(pack.graph.as_bytes())?;
         if !result.conforms {
             return Err(invalid(format!(
-                "merged qpack fails SHACL: {} violations",
+                "merged pendant fails SHACL: {} violations",
                 result.violations
             )));
         }
@@ -125,7 +125,7 @@ pub(crate) fn validate(pack: &Pack) -> Result<()> {
     }
     #[cfg(not(feature = "shacl"))]
     Err(invalid(
-        "qpack merge/check requires a build with the shacl feature",
+        "pendant merge/check requires a build with the shacl feature",
     ))
 }
 
@@ -139,7 +139,9 @@ pub(crate) fn plan(base: &Pack, ours: &Pack, theirs: &Pack) -> Result<Merged> {
         || ours.manifest.destination != theirs.manifest.destination
         || ours.manifest.pack_dir != theirs.manifest.pack_dir
     {
-        return Err(invalid("incompatible qpack store/scope/destination/layout"));
+        return Err(invalid(
+            "incompatible pendant store/scope/destination/layout",
+        ));
     }
     let shapes = shapes(&base.shapes, &ours.shapes, &theirs.shapes)?;
     let (b, o, t) = (
@@ -154,7 +156,7 @@ pub(crate) fn plan(base: &Pack, ours: &Pack, theirs: &Pack) -> Result<Merged> {
             || matches!(t.object, oxrdf::Term::BlankNode(_))
     }) {
         return Err(invalid(
-            "Git qpack merge requires IRI subjects/objects; skolemize blank nodes first",
+            "Git pendant merge requires IRI subjects/objects; skolemize blank nodes first",
         ));
     }
     let (graph, conflicts) = merge_graphs(&b, &o, &t, &shapes)?;

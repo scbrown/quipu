@@ -74,7 +74,7 @@ impl Fixture {
         g(p, &["config", "user.email", "test@example.org"]);
         std::fs::create_dir(p.join("qpack")).unwrap();
         let source =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/book/src/datalinks/qpack");
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/book/src/datalinks/pendant");
         for f in ["manifest.json", "shapes.ttl", "export.nt"] {
             std::fs::copy(source.join(f), p.join("qpack").join(f)).unwrap();
         }

@@ -18,6 +18,42 @@ pub const MAX_SHARE_EXPANDED_BYTES: usize = 64 * 1024 * 1024;
 const REQUIRED: [&str; 3] = ["manifest.json", "export.nt", "shapes.ttl"];
 const QUERIES: &str = crate::share_queries::QUERIES_FILE;
 
+/// The file-name marker a pendant carries: `x.pendant`, `x.pendant.tar.gz`,
+/// or `x.pendant.db` for the internal SQLite pack.
+pub const PENDANT_EXTENSION: &str = ".pendant";
+
+/// The pre-rename marker, still READ for one release (aegis-fxpbys.3).
+pub const DEPRECATED_EXTENSION: &str = ".qpack";
+
+/// A deprecation notice when `reference` names its artifact with the old
+/// `.qpack` marker (`.qpack`, `.qpack.tar`, `.qpack.tar.gz`, `.qpack.db`).
+///
+/// Readers never dispatch on the extension, so an old file keeps importing
+/// exactly as before; this only tells the operator what to rename it to. Only
+/// the final path component is inspected, so a directory that happens to be
+/// called `qpack/` is not flagged.
+#[must_use]
+pub fn deprecated_extension_notice(reference: &str) -> Option<String> {
+    let name = reference
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(reference)
+        .rsplit('/')
+        .next()
+        .unwrap_or(reference);
+    let stem_end = name.find(DEPRECATED_EXTENSION)?;
+    let rest = &name[stem_end + DEPRECATED_EXTENSION.len()..];
+    if !matches!(rest, "" | ".tar" | ".tar.gz" | ".db") {
+        return None;
+    }
+    let renamed = format!("{}{PENDANT_EXTENSION}{rest}", &name[..stem_end]);
+    Some(format!(
+        "warning: the .qpack extension is deprecated and is read for one more \
+         release only; `{name}` still loads, but rename it to `{renamed}` \
+         (a qpack is now called a pendant)"
+    ))
+}
+
 fn request_from_files(
     files: &BTreeMap<String, String>,
     source: &str,
@@ -126,7 +162,7 @@ fn archive_files<R: Read>(reader: R, source: &str) -> Result<BTreeMap<String, St
     Ok(files)
 }
 
-/// Reads a `.qpack` archive already held in memory.
+/// Reads a `.pendant` archive already held in memory.
 ///
 /// The same bounded expansion and undeclared-path rejection [`read_local`]
 /// applies, on bytes the caller obtained however it liked — a browser `fetch`,
@@ -150,7 +186,7 @@ pub fn read_archive_bytes(bytes: &[u8], source: &str, gzip: bool) -> Result<Shar
     request_from_files(&files, source)
 }
 
-/// Reads a portable share directory or `.qpack[.tar.gz]` without opening a store.
+/// Reads a portable share directory or `.pendant[.tar.gz]` without opening a store.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_local(reference: &str) -> Result<ShareImportRequest> {
     let path = Path::new(reference);
@@ -313,7 +349,7 @@ mod tests {
             },
         )
         .unwrap();
-        let archive_path = temp.path().join("repository.qpack.tar.gz");
+        let archive_path = temp.path().join("repository.pendant.tar.gz");
         let archive_file = std::fs::File::create(&archive_path).unwrap();
         let encoder = flate2::write::GzEncoder::new(archive_file, flate2::Compression::default());
         let mut archive = tar::Builder::new(encoder);
@@ -336,6 +372,65 @@ mod tests {
             from_bytes.export_ntriples,
             std::fs::read_to_string(out.join("export.nt")).unwrap()
         );
+    }
+
+    // THE RENAME ALIAS (aegis-fxpbys.3): a `.qpack` still loads, and says so.
+    #[test]
+    fn deprecated_extension_notice_flags_only_the_old_artifact_names() {
+        for (old, new) in [
+            ("share.qpack", "share.pendant"),
+            ("dir/share.qpack.tar.gz", "share.pendant.tar.gz"),
+            ("https://example.org/r/x.qpack.tar?dl=1", "x.pendant.tar"),
+            ("root.qpack.db", "root.pendant.db"),
+        ] {
+            let notice =
+                deprecated_extension_notice(old).unwrap_or_else(|| panic!("{old} must be flagged"));
+            assert!(notice.contains(new), "{old}: {notice}");
+            assert!(notice.contains("deprecated"), "{old}: {notice}");
+        }
+        for fine in [
+            "share.pendant",
+            "share.pendant.tar.gz",
+            "qpack/homelab",
+            "qpack/",
+            "notes.qpackage",
+            "share-dir",
+        ] {
+            assert_eq!(deprecated_extension_notice(fine), None, "{fine}");
+        }
+    }
+
+    #[test]
+    fn a_legacy_qpack_archive_and_a_pendant_archive_import_identically() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut source = crate::Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
+        let out = temp.path().join("share");
+        let manifest = share(
+            &source,
+            out.to_str().unwrap(),
+            &ShareOptions {
+                no_shapes: true,
+                ..ShareOptions::default()
+            },
+        )
+        .unwrap();
+        let mut ids = Vec::new();
+        for name in ["old.qpack.tar.gz", "new.pendant.tar.gz"] {
+            let path = temp.path().join(name);
+            let file = std::fs::File::create(&path).unwrap();
+            let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+            let mut archive = tar::Builder::new(encoder);
+            for member in REQUIRED {
+                archive
+                    .append_path_with_name(out.join(member), member)
+                    .unwrap();
+            }
+            archive.into_inner().unwrap().finish().unwrap();
+            let request = read_local(path.to_str().unwrap()).unwrap();
+            ids.push(request.manifest.share_id);
+        }
+        assert_eq!(ids, vec![manifest.share_id.clone(), manifest.share_id]);
     }
 
     // The bounds are what make it safe to hand this a network download, so they

@@ -22,7 +22,7 @@ out with no explicit `ref`, so they build whatever ref the workflow was dispatch
 obvious command builds `main` and merely *labels* the output with your tag.
 
 That is not a cosmetic error. Every asset upload passes `--clobber`, both asset jobs run on
-a dispatch (the binary tarball, its `.sha256`, and the repository qpack), and the checksum
+a dispatch (the binary tarball, its `.sha256`, and the repository pendant), and the checksum
 files are regenerated in the same run — so they agree with the wrong build and a downloader
 verifying the release **passes**. The substitution is self-consistent and undetectable, and
 a release page is not revertible.

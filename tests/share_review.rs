@@ -250,7 +250,12 @@ fn cli_report_json_carries_the_summary_and_counts() {
     let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
     assert_eq!(v["shacl"]["status"], "checked");
     assert_eq!(v["shacl"]["introduced_count"], 1);
-    assert!(v["summary"].as_str().unwrap().starts_with("qpack review:"));
+    assert!(
+        v["summary"]
+            .as_str()
+            .unwrap()
+            .starts_with("pendant review:")
+    );
 }
 
 #[test]
@@ -305,7 +310,7 @@ fn ci_script_is_red_only_for_an_introduced_violation() {
     git(repo, &["add", "."]);
     git(repo, &["commit", "-q", "-m", "base"]);
     let base = git(repo, &["rev-parse", "HEAD"]);
-    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/qpack-review.py");
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/pendant-review.py");
     let head = |branch: &str, change: &dyn Fn()| {
         git(repo, &["checkout", "-q", "-b", branch, &base]);
         change();
@@ -381,7 +386,7 @@ fn ci_script_is_red_only_for_an_introduced_violation() {
         std::fs::write(d.join("export.nt"), read("introduced", "payload.nq")).unwrap();
     });
     assert_eq!(code, 0, "{md}");
-    assert!(md.contains("No qpack changed"), "{md}");
+    assert!(md.contains("No pendant changed"), "{md}");
 }
 
 #[test]

@@ -95,10 +95,15 @@ jobs:
             echo "::warning::release ${TAG} has no wasm bundle yet (first one lands with the next release)"
           fi
 
-          if gh release download "${TAG}" --pattern '*-repository.qpack.tar.gz' --dir "${TMP}"; then
-            cp "${TMP}"/*-repository.qpack.tar.gz "${DEST}/repository.qpack.tar.gz"
+          # Releases cut before the pendant rename named this asset *-repository.qpack.tar.gz
+          # (aegis-fxpbys.3); fall back to that name so the page still stages
+          # from a release cut before the rename. Same bytes, older name.
+          if gh release download "${TAG}" --pattern '*-repository.pendant.tar.gz' --dir "${TMP}"; then
+            cp "${TMP}"/*-repository.pendant.tar.gz "${DEST}/repository.pendant.tar.gz"
+          elif gh release download "${TAG}" --pattern '*-repository.qpack.tar.gz' --dir "${TMP}"; then
+            cp "${TMP}"/*-repository.qpack.tar.gz "${DEST}/repository.pendant.tar.gz"
           else
-            echo "::warning::release ${TAG} has no repository qpack"
+            echo "::warning::release ${TAG} has no repository pendant"
           fi
           ls -la "${DEST}" "${DEST}/pkg" 2>/dev/null || true
 
@@ -107,8 +112,8 @@ jobs:
 
       - name: Verify the demo was published
         run: |
-          for f in index.html load-demo.js demo.qpack.tar.gz qpack/manifest.json \
-                   qpack/export.nt qpack/shapes.ttl datalinks.js graph-canvas.js \
+          for f in index.html load-demo.js demo.pendant.tar.gz pendant/manifest.json \
+                   pendant/export.nt pendant/shapes.ttl datalinks.js graph-canvas.js \
                    vendor/three.module.min.js; do
             test -s "docs/book/book/datalinks/$f" \
               || { echo "missing from book output: datalinks/$f"; exit 1; }

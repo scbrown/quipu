@@ -271,6 +271,8 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             eprintln!("usage: quipu import delta <parent-share> <delta-share>");
             std::process::exit(1);
         });
+        warn_deprecated_extension(parent);
+        warn_deprecated_extension(delta);
         let actor = flag_value(args, "--actor");
         let imported = quipu::share_delta::materialize(parent, delta).and_then(|mut request| {
             request.actor = actor.map(String::from);
@@ -322,6 +324,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             );
             std::process::exit(1);
         });
+    warn_deprecated_extension(reference);
     let actor = flag_value(args, "--actor");
     // Keep no-file archive/URL verification as the default, but an explicit
     // database selects the same local shapes, bindings and staging as a directory.
@@ -369,6 +372,15 @@ fn repeated(args: &[String], flag: &str) -> Vec<String> {
 /// direction, but `--destination internal-only` silently defaulting to outward
 /// on a payload the operator believed exempt is a refusal they will read as the
 /// guard misfiring — and the fix they reach for is to look for a way round it.
+/// Print the one-release `.qpack` -> `.pendant` rename notice to stderr, if
+/// `reference` still uses the old name (aegis-fxpbys.3). Never fails the
+/// command: the old name is an alias, not an error.
+pub(crate) fn warn_deprecated_extension(reference: &str) {
+    if let Some(notice) = quipu::share_transport::deprecated_extension_notice(reference) {
+        eprintln!("{notice}");
+    }
+}
+
 fn destination_flag(args: &[String]) -> quipu::share::ShareDestination {
     match flag_value(args, "--destination") {
         None | Some("outward") => quipu::share::ShareDestination::Outward,
