@@ -181,7 +181,10 @@ macro_rules! embed_handler {
                                 .unwrap_or(config.alpha)
                                 == 0.0)
                 } else if stringify!($name) == "search_query" {
-                    i.get("mode").and_then(JsonValue::as_str).unwrap_or("keyword") == "keyword"
+                    i.get("mode")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or("keyword")
+                        == "keyword"
                 } else {
                     false
                 };
