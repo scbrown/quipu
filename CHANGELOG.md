@@ -6,7 +6,43 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- *(server)* Record the receiver-observed socket peer and bounded request-provenance class and missing fields separately from caller-declared identity. Missing transport context remains explicit; forwarded headers do not establish the peer.
+- *(search)* Graph-anchored search behind a default-off flag (#438)([badedd4](https://github.com/scbrown/quipu/commit/badedd41f369877b5dfcc1c599499adc5739cd64))
+- *(merge)* Resolve conflicts with an emitted decisions file (#435)([ed911ec](https://github.com/scbrown/quipu/commit/ed911ec0550e7e9bd0a3f0369eeeffee0c1da799))
+- *(metrics)* Count committed writes by declared provenance (#447)([d80817d](https://github.com/scbrown/quipu/commit/d80817d606519eded43003da52de916f092ce50b))
+- *(hooks)* Quipu owns its session-capture hook: hook session-capture + hooks bundle|install|uninstall|status (#448)([03e0185](https://github.com/scbrown/quipu/commit/03e018575a57cb180d5b476b422cd20fcf6f1f88))
+- *(search)* Transactional SQLite FTS5 keyword index (#449)([adc448c](https://github.com/scbrown/quipu/commit/adc448cd9ddf53ab9f6c82ed185b0c9b422e6581))
+- *(shapes)* TextRule exemptions: exemptRepo, exemptLineMarker, and declare exemptPathRegex (#274)([a2bbd72](https://github.com/scbrown/quipu/commit/a2bbd727a512b08a93f10e27429c20a662333e2b))
+
+### Documentation
+
+- Make share -> import -> promote the obvious bulk-load path (#436)([467ed2e](https://github.com/scbrown/quipu/commit/467ed2ebc03eba3803a0455ab4968c94d71312f5))
+- README conformance line matches the report; drop "zero dependencies" (#440)([161ce06](https://github.com/scbrown/quipu/commit/161ce061d40f4112ae689abdd96f734200567a9b))
+- *(conformance)* Bind conformance ledgers to receiver diagnostics source([ac302da](https://github.com/scbrown/quipu/commit/ac302da1242bd008126e959104f9c56278233f2f))
+
+### Fixed
+
+- *(export)* Refuse unrecognised fields instead of exporting ROOT (#334)([8571911](https://github.com/scbrown/quipu/commit/8571911b33e078af107491d7d994951ec3a42f6d))
+- *(server)* Use jemalloc as quipu-server's allocator (#446)([214680a](https://github.com/scbrown/quipu/commit/214680aff54c0ad30f7d146229e76e51e3e53312))
+- *(update)* Instantiate a constant DELETE/INSERT template once, not per solution (#455)([1aa8de7](https://github.com/scbrown/quipu/commit/1aa8de71c9b083e315120953d64aae8d15948097))
+- *(update)* Enforce the vocabulary gate and SHACL on what a SPARQL update asserts, as /knot does (#422)([483cab8](https://github.com/scbrown/quipu/commit/483cab892acce6b06cb0f69b71d2ad137b78f5d8))
+- *(update)* Bound the whole-store copy an unsliceable update needs (#460)([a0c9b71](https://github.com/scbrown/quipu/commit/a0c9b714c523591d272081e2731c7d9fa6365083))
+- *(metrics)* Attribute authentication refusals and clarify provisioning (#457)([4bfed20](https://github.com/scbrown/quipu/commit/4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4))
+- *(server)* Log observed transport peer and request provenance gaps([b6804aa](https://github.com/scbrown/quipu/commit/b6804aa77bed966b542eea733e51b847505d6d8f))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 27699d22 (#437)([b1ba34b](https://github.com/scbrown/quipu/commit/b1ba34b53c1412b8f5f80e3ecceab432d1e93506))
+- *(conformance)* Re-derive ledgers at 2842f09a (#443)([25cdb77](https://github.com/scbrown/quipu/commit/25cdb77c9e9fcb4d7f8793cb4d5a1640c0bc15e9))
+- *(conformance)* Re-derive ledgers at 214680af (#451)([f2523a0](https://github.com/scbrown/quipu/commit/f2523a0f67405b578bfb78d010f75c9b88c96936))
+- *(conformance)* Re-derive ledgers at 03e01857 (#453)([dd625a8](https://github.com/scbrown/quipu/commit/dd625a84c9236892be95f8f4040905342e60968d))
+- *(conformance)* Re-derive ledgers at adc448cd (#454)([b81f3da](https://github.com/scbrown/quipu/commit/b81f3dacf636fc365d471bd11cb42b99b405e247))
+- *(conformance)* Re-derive ledgers at 1aa8de71 (#456)([c901b2b](https://github.com/scbrown/quipu/commit/c901b2b55f90e1fd392d3dc86c1a50c4fbd7abb6))
+- *(conformance)* Re-derive ledgers at 4bfed20a (#466)([83cdb96](https://github.com/scbrown/quipu/commit/83cdb961a3dbb69549d21be855c3cd66f42f5631))
+
+### Perf
+
+- *(sparql)* Push string FILTERs into the scan; cache compiled REGEX (#433)([2842f09](https://github.com/scbrown/quipu/commit/2842f09af7cd2f362302ae47ca559acb808a4773))
+- *(sparql)* Group rows by moving them, with O(1) group lookup (#459)([a926db3](https://github.com/scbrown/quipu/commit/a926db3a5c2c4c6d41a0152b84d8d09a3bbebea1))
 
 ## [0.11.1] - 2026-10-07
 
