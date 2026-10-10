@@ -455,6 +455,7 @@ impl Store {
         // registration cannot answer wrongly: a narrowed query then fails
         // loudly with "no such function".
         let _ = crate::sparql::string_pushdown::register(&conn);
+        let _ = crate::sparql::status_pushdown::register(&conn);
         Self {
             conn,
             signing: None,
