@@ -289,6 +289,52 @@ instead of a synchronized multi-repo deploy.
 
 ### S3 — registry amendments through the gate
 
+> **Implemented** in [`src/governance/trust_root.rs`](../../src/governance/trust_root.rs)
+> (aegis-kzt0ql.9.4). Before it, a writer holding the bearer could
+> register its own key as `verifier "stiwi"` for a decision policy and
+> the verdict verified: measured, the forged registration landed with
+> every governance flag on. `enforce_graph_authority` could not have
+> stopped it, because nothing in production sets a principal chain.
+>
+> - **Two tiers.** A registration is human-tier iff it carries an
+>   asserted `aegis:trustTier "human"` in ROOT (`Scope::HumanTier`, a SQL
+>   join over asserted facts, so neither inference nor a named graph can
+>   supply it). The decision seal and the escalation router verify ONLY
+>   against human-tier keys. Agent registrations (shuttle's identity
+>   graph, certifiers, the MCP verdict-verify tool) are unchanged: still
+>   writable, and never able to verify a human decision.
+> - **The gate compares state.** Every `transact` snapshots the human-tier
+>   registry (registration -> RDFC digest of its ROOT content, excluding
+>   `aegis:signCount`) before staging and recomputes it after. Any
+>   difference, including one no datum names (a functional-property
+>   supersede), must be covered by an `aegis:RegistryAmendment` in the same
+>   write, signed over
+>   `quipu-registry-amendment-v1|<store id>|<registration>|<digest or "revoked">|<nonce>`
+>   by a key that was human-tier and attested `urn:quipu:policy:trust-root`
+>   BEFORE the write (so a key cannot enrol itself). The nonce is spent in
+>   the write's savepoint (`registry_amendment_nonces`, never pruned).
+>   `trust_root::digest_after` computes the digest a client must sign.
+> - **Always on.** No config flag, and not skipped while recording
+>   verdicts: a switch an agent can flip is not a trust root.
+> - **Bootstrap.** `quipu trust-root bootstrap` (CLI only, no REST/MCP)
+>   enrols the first key with proof of possession, and refuses if a
+>   human-tier marker was EVER asserted in ROOT (full bitemporal history).
+>   A second device is an amendment signed by the first. The ceremony is
+>   [`docs/runbooks/trust-root-ceremony.md`](../runbooks/trust-root-ceremony.md).
+>
+> **Stated limits.** Proof of possession proves the key, not the person:
+> until the ceremony, anyone who can run the CLI against the store file
+> could bootstrap their own key first, and "once ever" would then lock the
+> forgery in. The runbook's fingerprint comparison and a standing alert on
+> the `aegis:TrustRootBootstrap` record cover that window. Root on the
+> quipu host (the DB file, the binary, `import`/`unpack`/`restore`,
+> `fork create`, a physical delete) defeats all of this; the gate
+> constrains graph writers, not hosts. The network paths that skip
+> `transact` (overlay tombstones, freeze, thaw) cannot reach ROOT, which
+> is the only graph the human tier reads. Amendments and the bootstrap
+> PoP verify ed25519 today; the hardware schemes (.9.2) plug into the same
+> verification point.
+
 "Who signs the registry" (deferred in v1) gets the same answer policies
 got: registration writes go through the write gate under a
 meta-authority policy — only a human trust-root identity may amend

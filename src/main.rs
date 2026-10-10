@@ -66,6 +66,7 @@ mod cli_propose;
 mod cli_quarantine;
 mod cli_search;
 mod cli_share_diff;
+mod cli_trust_root;
 mod hook_session_capture;
 mod hooks_install;
 
@@ -144,6 +145,7 @@ fn main() {
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
+        "trust-root" => cli_trust_root::cmd_trust_root(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
@@ -391,6 +393,9 @@ COMMANDS:
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     quipu attest list [--db <path>]
+    quipu trust-root challenge --verifier NAME --public-key HEX [--db <path>]
+    quipu trust-root bootstrap --verifier NAME --public-key HEX --pop-signature HEX [--attests POLICY]... [--db <path>]
+    quipu trust-root status [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
     quipu import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
     quipu import delta <parent-share> <delta-share> [--actor <id>]

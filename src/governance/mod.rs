@@ -32,6 +32,7 @@ pub mod shadow_io;
 pub mod similarity;
 pub mod transition;
 pub mod tree;
+pub mod trust_root;
 pub mod verdict_facts;
 pub mod verifier_registry;
 

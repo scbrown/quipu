@@ -248,6 +248,7 @@ impl Store {
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
         Self::migrate_decision_nonces(&conn)?;
+        Self::migrate_registry_amendment_nonces(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
         Self::migrate_pending_share_queries(&conn)?;
@@ -479,6 +480,7 @@ impl Store {
             gate_clock: None,
             principal_chain: Vec::new(),
             recording_verdicts: false,
+            trust_root_bootstrap: None,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,
             local_vector_backend: None,
