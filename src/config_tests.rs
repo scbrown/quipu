@@ -444,3 +444,12 @@ request_timeout_ms = 30000
     let bare: ConfigFile = toml::from_str("[quipu]\nstore_path = \"/d\"\n").unwrap();
     assert_eq!(bare.quipu.search.request_timeout_ms, 0);
 }
+
+#[test]
+fn structured_search_config_defaults_off_and_loads_explicit_flag() {
+    let default: ConfigFile = toml::from_str("[quipu]\nstore_path='/d'\n").unwrap();
+    assert!(!default.quipu.search.structured);
+    let enabled: ConfigFile =
+        toml::from_str("[quipu]\nstore_path='/d'\n[quipu.search]\nstructured=true\n").unwrap();
+    assert!(enabled.quipu.search.structured);
+}

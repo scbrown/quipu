@@ -139,6 +139,8 @@ pub struct SearchConfig {
     /// SQLite FTS5 keyword search. Default off; activation creates only empty
     /// schema/triggers. Historical rows require explicit bounded backfill.
     pub keyword: bool,
+    /// Explicit structured candidate filters. SQLite-only, default off.
+    pub structured: bool,
     /// Hybrid lexical/vector fusion. Off until its offline evaluation passes.
     pub hybrid: bool,
     /// Default search mode; semantic preserves the existing API.
@@ -166,6 +168,7 @@ impl Default for SearchConfig {
             max_join_rows: 1_000_000,
             anchored: false,
             keyword: false,
+            structured: false,
             hybrid: false,
             mode: "semantic".into(),
             alpha: 0.5,

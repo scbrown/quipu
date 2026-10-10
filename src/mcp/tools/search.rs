@@ -14,6 +14,9 @@ use crate::types::Value;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    if input.get("structured_query").is_some() || input.get("filters").is_some() {
+        return super::structured_search::search(store, input);
+    }
     super::search_fusion::dispatch_search_fusion(store, input)
 }
 

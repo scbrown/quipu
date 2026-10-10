@@ -84,6 +84,15 @@ pub fn cmd_search(args: &[String], db: &str) {
     if let Some(group) = flag_value(args, "--group") {
         input["group_ids"] = serde_json::json!([group]);
     }
+    if let Some(expression) = flag_value(args, "--structured-query") {
+        input["structured_query"] = serde_json::json!(expression);
+    }
+    if let Some(filters) = flag_value(args, "--filters") {
+        input["filters"] = serde_json::from_str(filters).unwrap_or_else(|e| {
+            eprintln!("error: --filters must be valid JSON: {e}");
+            std::process::exit(1);
+        });
+    }
     if let Some(graph) = flag_value(args, "--graph") {
         input["graph"] = serde_json::json!(graph);
     }

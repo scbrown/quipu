@@ -2,6 +2,8 @@
 
 #[path = "search_keyword_tests.rs"]
 mod search_keyword_tests;
+#[path = "search_structured_tests.rs"]
+mod search_structured_tests;
 
 use std::sync::Arc;
 
