@@ -2,7 +2,7 @@
 //! # arming: library — explicitly invoked read operation; no index activation.
 use std::collections::BTreeMap;
 
-use serde_json::{Value, json};
+use serde_json::{Value as JsonValue, json};
 use spargebra::{
     Query,
     algebra::GraphPattern,
@@ -17,10 +17,10 @@ fn invalid(message: &str) -> Error {
 
 /// Search-rooted SELECT. Keyword mode needs no embeddings; hybrid requires both
 /// retrievers to succeed. Search provenance is returned separately from rows.
-pub fn tool_search_query(store: &Store, input: &Value) -> Result<Value> {
+pub fn tool_search_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let mode = input
         .get("mode")
-        .and_then(Value::as_str)
+        .and_then(JsonValue::as_str)
         .unwrap_or("keyword");
     if !matches!(mode, "keyword" | "semantic" | "hybrid") {
         return Err(invalid("mode must be keyword, semantic or hybrid"));
@@ -35,13 +35,13 @@ pub fn tool_search_query(store: &Store, input: &Value) -> Result<Value> {
     };
     let variable = input
         .get("seed_variable")
-        .and_then(Value::as_str)
+        .and_then(JsonValue::as_str)
         .unwrap_or("s");
     let variable =
         Variable::new(variable).map_err(|_| invalid("invalid seed_variable (omit '?')"))?;
     let text = input
         .get("sparql")
-        .and_then(Value::as_str)
+        .and_then(JsonValue::as_str)
         .ok_or_else(|| invalid("sparql is required"))?;
     let mut parsed = spargebra::SparqlParser::new()
         .parse_query(text)
@@ -99,7 +99,7 @@ pub fn tool_search_query(store: &Store, input: &Value) -> Result<Value> {
             "verbose" | "row_labels" => value.is_boolean(),
             "include_kinds" => value
                 .as_array()
-                .is_some_and(|v| v.iter().all(Value::is_string)),
+                .is_some_and(|v| v.iter().all(JsonValue::is_string)),
             _ => false,
         };
         if !valid {
@@ -111,14 +111,19 @@ pub fn tool_search_query(store: &Store, input: &Value) -> Result<Value> {
     if let Some(at) = input.get("valid_at") {
         object.insert("valid_at".into(), at.clone());
     }
-    let mut seeds: BTreeMap<String, Value> = BTreeMap::new();
+    let mut seeds: BTreeMap<String, JsonValue> = BTreeMap::new();
     for retriever in ["keyword", "semantic"] {
         if mode != "hybrid" && mode != retriever {
             continue;
         }
         let mut search = json!({"mode":retriever,"limit":count,"verbose":true});
-        for key in ["query", "valid_at", "entity_type", "group_ids"] {
-            if let Some(value) = input.get(key) {
+        for (key, value) in [
+            ("query", input.get("query")),
+            ("valid_at", input.get("valid_at")),
+            ("entity_type", input.get("entity_type")),
+            ("group_ids", input.get("group_ids")),
+        ] {
+            if let Some(value) = value {
                 search[key] = value.clone();
             }
         }
@@ -150,7 +155,7 @@ pub fn tool_search_query(store: &Store, input: &Value) -> Result<Value> {
                 (seed["rrf_score"].as_f64().unwrap_or(0.0) + 1.0 / (60.0 + rank as f64)).into();
         }
     }
-    let mut seeds: Vec<Value> = seeds.into_values().collect();
+    let mut seeds: Vec<JsonValue> = seeds.into_values().collect();
     seeds.sort_by(|a, b| {
         b["rrf_score"]
             .as_f64()

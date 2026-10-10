@@ -235,7 +235,7 @@ fn http_only_fields_match_handler_reads() {
     };
     assert_eq!(
         array.elems.len(),
-        4,
+        5,
         "audit new HTTP-only handlers explicitly"
     );
     for entry in &array.elems {
@@ -252,6 +252,7 @@ fn http_only_fields_match_handler_reads() {
         let function = match name.value().as_str() {
             "quipu_subscriptions" => "tool_subscriptions",
             "quipu_reason" => "reason",
+            "quipu_search_query" => "tool_search_query",
             "quipu_graph_create" => "tool_graph_create",
             "quipu_graph_label" => "tool_graph_label",
             other => panic!("unmapped HTTP handler {other}"),

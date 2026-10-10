@@ -1,5 +1,6 @@
 use super::*;
 use crate::vector::KnowledgeVectorStore;
+use serde_json::Value;
 
 fn store() -> Store {
     let mut s = Store::open_in_memory().unwrap();
