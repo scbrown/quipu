@@ -40,7 +40,7 @@ pub(super) fn projection(
          AND live.op=1 AND live.valid_to IS NULL)"
     ));
     Ok(Some(format!(
-        "SELECT DISTINCT e,a,v FROM facts INDEXED BY idx_geav WHERE {}",
+        "SELECT e,a,v FROM facts INDEXED BY idx_geav WHERE {} GROUP BY e,a,quipu_term_key(v)",
         predicates.join(" AND ")
     )))
 }

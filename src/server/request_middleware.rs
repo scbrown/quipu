@@ -40,8 +40,8 @@ tokio::task_local! {
 }
 
 /// The request's write provenance, to carry across a `spawn_blocking` hop.
-pub(crate) fn request_write_provenance(
-) -> Option<std::sync::Arc<quipu::write_provenance::RequestProvenance>> {
+pub(crate) fn request_write_provenance()
+-> Option<std::sync::Arc<quipu::write_provenance::RequestProvenance>> {
     REQUEST_WRITE_PROVENANCE
         .try_with(Clone::clone)
         .ok()

@@ -85,6 +85,12 @@ pub(crate) fn register(conn: &Connection) -> rusqlite::Result<()> {
     let flags = FunctionFlags::SQLITE_UTF8
         | FunctionFlags::SQLITE_DETERMINISTIC
         | FunctionFlags::SQLITE_INNOCUOUS;
+    conn.create_scalar_function("quipu_term_key", 1, flags, |ctx| {
+        let bytes: Vec<u8> = ctx.get(0)?;
+        let value = Value::from_bytes(&bytes)
+            .map_err(|e| rusqlite::Error::UserFunctionError(Box::new(e)))?;
+        Ok(value.term_key())
+    })?;
     conn.create_scalar_function("quipu_lexical_language", 1, flags, |ctx| {
         let bytes: Vec<u8> = ctx.get(0)?;
         let value = Value::from_bytes(&bytes)

@@ -622,7 +622,7 @@ fn duplicate_assert_across_transactions_is_idempotent() {
 
     assert_eq!(store.current_facts().unwrap().len(), 1);
 
-    // Second assertion of same (e, a, v) in a different transaction — should be skipped.
+    // A second source claim must not add another term to the current graph.
     store
         .transact(
             &[Datum {
@@ -643,7 +643,7 @@ fn duplicate_assert_across_transactions_is_idempotent() {
     assert_eq!(
         facts.len(),
         1,
-        "duplicate assertion should not create a second row"
+        "duplicate assertion should not create a second RDF term"
     );
 
     // The original fact should remain unchanged.
