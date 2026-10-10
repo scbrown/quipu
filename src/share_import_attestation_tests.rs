@@ -41,6 +41,9 @@ fn real_share(store: &Store) -> (tempfile::TempDir, ShareImportRequest) {
         manifest: serde_json::from_str(&read("manifest.json")).unwrap(),
         export_ntriples: read("export.nt"),
         shapes_turtle: read("shapes.ttl"),
+        queries_turtle: None,
+        query_namespace: None,
+        replace_queries: false,
         source: "https://example.org/producer/share".into(),
         actor: Some("alice".into()),
         accept_exact: false,
@@ -97,6 +100,7 @@ fn attest(store: &Store, m: &ShareManifest) -> AttestationEnvelope {
         issued_at_epoch: NOW,
         nonce: "b".repeat(32),
         signature: String::new(),
+        audience: None,
     };
     let payload = SignedBinding::Share(ShareBinding {
         share_id: &m.share_id,
@@ -276,6 +280,9 @@ fn attested_share(store: &Store, dir: &std::path::Path) -> ShareImportRequest {
         manifest,
         export_ntriples: read("export.nt"),
         shapes_turtle: read("shapes.ttl"),
+        queries_turtle: None,
+        query_namespace: None,
+        replace_queries: false,
         source: "https://example.org/producer/share".into(),
         actor: Some("alice".into()),
         accept_exact: false,

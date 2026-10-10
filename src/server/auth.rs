@@ -1,7 +1,18 @@
 //! Startup validation and diagnostics for write authentication.
 
+#[path = "write_attest.rs"]
+pub(super) mod write_attest;
+
 tokio::task_local! {
     static REQUEST_IDENTITY: Option<quipu::transaction_auth::Identity>;
+}
+
+/// Run `work` with `identity` as the request's authenticated evidence.
+pub(super) async fn run_identified<F: std::future::Future>(
+    identity: Option<quipu::transaction_auth::Identity>,
+    work: F,
+) -> F::Output {
+    REQUEST_IDENTITY.scope(identity, work).await
 }
 
 pub(super) fn request_identity() -> Option<quipu::transaction_auth::Identity> {
@@ -86,6 +97,7 @@ pub(super) async fn run_authorized(
                 principal: p.as_str().to_owned(),
                 credential_id: None,
                 auth_class: "legacy_shared_bearer".to_owned(),
+                attestation: Default::default(),
             });
         REQUEST_IDENTITY.scope(identity, next.run(req)).await
     }
@@ -123,6 +135,7 @@ pub(super) async fn run_named(
         principal: principal.iri.clone(),
         credential_id: Some(principal.credential_id.clone()),
         auth_class: "named_bearer".to_owned(),
+        attestation: Default::default(),
     };
     let response = REQUEST_IDENTITY.scope(Some(identity), next.run(req)).await;
     eprintln!(

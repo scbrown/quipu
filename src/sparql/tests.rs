@@ -3711,3 +3711,375 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
         "ASK over a non-empty store must still be true"
     );
 }
+
+// ── numeric type promotion (aegis-soqv1r, W3C sparql10 type-promotion) ──────
+// integer (and every type derived from it) < decimal < float < double; the
+// result takes the higher operand type. float + float used to come back as
+// xsd:double, and short + short as a double rather than an integer.
+
+fn result_datatype(expr: &str) -> String {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?d WHERE {{ BIND(datatype({expr}) AS ?d) }}"
+    );
+    let result = query(&store, &q).unwrap();
+    match result.rows().first().and_then(|r| r.get("d")) {
+        Some(Value::Ref(id)) => store.resolve(*id).unwrap(),
+        other => panic!("no datatype for {expr}: {other:?}"),
+    }
+}
+
+#[test]
+fn arithmetic_promotes_to_the_higher_operand_type() {
+    let xsd = |t: &str| format!("http://www.w3.org/2001/XMLSchema#{t}");
+    let cases = [
+        (r#""1"^^xsd:float + "1"^^xsd:float"#, "float"),
+        (r#""1"^^xsd:float + "1"^^xsd:decimal"#, "float"),
+        (r#""1"^^xsd:double + "1"^^xsd:float"#, "double"),
+        (r#""1"^^xsd:short + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:unsignedByte + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:short + "1"^^xsd:decimal"#, "decimal"),
+        (r#""1"^^xsd:short + "1"^^xsd:float"#, "float"),
+        ("1 + 1", "integer"),
+        ("1 / 2", "decimal"),
+        (r#""4"^^xsd:float / "2"^^xsd:float"#, "float"),
+    ];
+    for (expr, want) in cases {
+        assert_eq!(result_datatype(expr), xsd(want), "{expr}");
+    }
+}
+
+// ── `=` compares numbers by value across datatypes (aegis-soqv1r) ────────────
+// `1 = 1.0` was false: `=` shared sameTerm's term identity. Ordering already
+// promoted numerics (`1 <= 1.0` was true), so `=` disagreed with `<=` and `>=`.
+
+fn bind_bool(expr: &str) -> Option<Value> {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        &format!("SELECT ?r WHERE {{ BIND(({expr}) AS ?r) }}"),
+    )
+    .unwrap();
+    result.rows().first().and_then(|r| r.get("r").cloned())
+}
+
+#[test]
+fn equals_promotes_numerics_across_datatypes() {
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0e0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 != 1.0"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("1 = 2"), Some(Value::Bool(false)));
+}
+
+// `=` promotes numerics; sameTerm must not. Asserted in BIND, where a type
+// error would surface as an unbound `?r` rather than as `false`. The FILTER
+// test below cannot tell `false` from an error: both drop the row.
+#[test]
+fn same_term_keeps_datatype_identity_beside_numeric_equals() {
+    assert_eq!(bind_bool("sameTerm(1, 1.0)"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("sameTerm(1, 1)"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+}
+
+#[test]
+fn equals_does_not_coerce_strings_to_numbers() {
+    assert_eq!(bind_bool(r#""1" = 1"#), Some(Value::Bool(false)));
+}
+
+#[test]
+fn filter_equals_promotes_numerics() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a = 30.0) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Alice".to_string()]);
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a IN (1, 25.0)) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Bob".to_string()]);
+}
+
+// ── FILTER type errors eliminate the row (aegis-soqv1r, W3C dawg-bev-5/-6) ──
+// An unbound variable has no effective boolean value. That is a SPARQL type
+// error: the row is dropped and the query still answers. It used to fail the
+// whole query. The error propagates through `!` and follows the SPARQL
+// truth tables for `&&` and `||`.
+
+fn bev_query(filter: &str) -> Vec<String> {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {{ ?s ex:name ?n . OPTIONAL {{ ?s ex:missing ?w }} FILTER({filter}) }}"
+    );
+    names(&query(&store, &q).unwrap())
+}
+
+fn all_names() -> Vec<String> {
+    vec!["Alice".to_string(), "Bob".to_string(), "Carol".to_string()]
+}
+
+#[test]
+fn filter_unbound_ebv_drops_the_row_instead_of_failing() {
+    assert!(bev_query("?w").is_empty());
+}
+
+#[test]
+fn filter_not_of_a_type_error_is_still_an_error() {
+    assert!(bev_query("!?w").is_empty());
+}
+
+#[test]
+fn filter_or_true_rescues_a_type_error() {
+    assert_eq!(bev_query("?w || true"), all_names());
+    assert_eq!(bev_query("true || ?w"), all_names());
+}
+
+#[test]
+fn filter_and_false_absorbs_a_type_error() {
+    // F && E = F, so !(F && E) is true and every row survives.
+    assert_eq!(bev_query("!(?w && false)"), all_names());
+    assert_eq!(bev_query("!(false && ?w)"), all_names());
+}
+
+#[test]
+fn filter_type_error_with_true_stays_an_error() {
+    // T && E = E and F || E = E, and negating an error is still an error.
+    assert!(bev_query("!(?w && true)").is_empty());
+    assert!(bev_query("!(false || ?w)").is_empty());
+}
+
+// ── sameTerm in FILTER (aegis-soqv1r) ────────────────────────────────────────
+// Every FILTER(sameTerm(...)) used to error "unsupported FILTER expression"
+// while the same call in BIND answered; the W3C sparql10 sameTerm cases caught it.
+
+#[test]
+fn filter_same_term_variable_and_literal() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER(sameTerm(?n, "Alice")) }"#,
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Alice".to_string()]);
+}
+
+#[test]
+fn filter_same_term_two_variables() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . ?t ex:name ?m . FILTER(sameTerm(?s, ?t) && sameTerm(?n, ?m)) }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice".to_string(), "Bob".to_string(), "Carol".to_string()]
+    );
+}
+
+#[test]
+fn filter_not_same_term_excludes_the_match() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER(!sameTerm(?n, "Alice")) }"#,
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Bob".to_string(), "Carol".to_string()]);
+}
+
+// sameTerm is TERM identity, `=` is VALUE equality. Over quipu's canonical
+// values they differ on datatype: 1 and 1.0 are different terms.
+#[test]
+fn filter_same_term_distinguishes_datatypes() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER(sameTerm(1, 1.0)) }"#,
+    )
+    .unwrap();
+    assert!(names(&result).is_empty());
+}
+
+// "01" and "1" are the same integer VALUE but different TERMS, so sameTerm
+// must be false. It is true today because numeric literals are canonicalised
+// on load and when parsed from a query, so the lexical form never reaches
+// the comparison (aegis-w1w4ec). Kept as a known failure, not deleted.
+#[test]
+#[ignore = "aegis-w1w4ec: numeric lexical forms are canonicalised"]
+fn filter_same_term_non_canonical_lexical_form() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER(sameTerm("01"^^xsd:integer, "1"^^xsd:integer)) }"#,
+    )
+    .unwrap();
+    assert!(names(&result).is_empty());
+}
+
+// ── XSD casts (aegis-soqv1r, W3C sparql10 cast + sort-function) ─────────────
+// Only xsd:double was implemented, so every other cast was silently unbound
+// and ORDER BY xsd:integer(?o) sorted nothing.
+
+fn bind_value(expr: &str) -> Option<Value> {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?r WHERE {{ BIND({expr} AS ?r) }}"
+    );
+    let result = query(&store, &q).unwrap();
+    result.rows().first().and_then(|r| r.get("r").cloned())
+}
+
+#[test]
+fn xsd_casts_from_strings() {
+    assert_eq!(bind_value(r#"xsd:integer("13")"#), Some(Value::Int(13)));
+    assert_eq!(bind_value(r#"xsd:integer("+33.3300")"#), None);
+    assert_eq!(bind_value(r#"xsd:boolean("1")"#), Some(Value::Bool(true)));
+    assert_eq!(bind_value(r#"xsd:boolean("yes")"#), None);
+    let dt = |v: Option<Value>| v.and_then(|v| v.datatype().map(str::to_string));
+    let xsd = |t: &str| Some(format!("http://www.w3.org/2001/XMLSchema#{t}"));
+    assert_eq!(dt(bind_value(r#"xsd:decimal("+33.3300")"#)), xsd("decimal"));
+    assert_eq!(dt(bind_value(r#"xsd:float("-10.2E3")"#)), xsd("float"));
+    assert_eq!(dt(bind_value(r#"xsd:double("13")"#)), xsd("double"));
+    assert_eq!(
+        dt(bind_value(r#"xsd:dateTime("2002-10-10T17:00:00Z")"#)),
+        xsd("dateTime")
+    );
+    assert_eq!(bind_value(r#"xsd:dateTime("true")"#), None);
+    assert_eq!(bind_value(r#"xsd:decimal("string")"#), None);
+}
+
+#[test]
+fn xsd_casts_by_value_and_to_string() {
+    assert_eq!(bind_value("xsd:integer(3.9)"), Some(Value::Int(3)));
+    assert_eq!(bind_value("xsd:boolean(0)"), Some(Value::Bool(false)));
+    assert_eq!(
+        bind_value("xsd:string(<http://example.org/alice>)"),
+        Some(Value::Str("http://example.org/alice".into()))
+    );
+    assert_eq!(bind_value("xsd:integer(<http://example.org/alice>)"), None);
+}
+
+#[test]
+fn order_by_a_cast_sorts_by_the_cast_value() {
+    let mut store = Store::open_in_memory().unwrap();
+    ingest_rdf(
+        &mut store,
+        br#"<http://e/s1> <http://e/p> "2" . <http://e/s2> <http://e/p> "300" . <http://e/s3> <http://e/p> "10" ."#
+            .as_slice(),
+        RdfFormat::Turtle,
+        None,
+        "2026-04-04T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let result = query(
+        &store,
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?o WHERE { ?s <http://e/p> ?o } ORDER BY xsd:integer(?o)",
+    )
+    .unwrap();
+    let order: Vec<_> = result
+        .rows()
+        .iter()
+        .filter_map(|r| r.get("o").cloned())
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            Value::Str("2".into()),
+            Value::Str("10".into()),
+            Value::Str("300".into())
+        ]
+    );
+}
+
+#[test]
+fn xsd_cast_integer_identity_is_exact_above_f64_precision() {
+    let store = Store::open_in_memory().unwrap();
+    let identity = 9_007_199_254_740_993_i64;
+    let cast = |target, value| {
+        super::casts::cast(&store, target, value, |n| n.to_string(), |n| n.to_string())
+    };
+    for value in [
+        Value::Int(identity),
+        Value::Typed {
+            lexical: identity.to_string(),
+            datatype: crate::namespace::XSD_INTEGER.into(),
+        },
+    ] {
+        assert_eq!(
+            cast(crate::namespace::XSD_INTEGER, value.clone()),
+            Some(Value::Int(identity))
+        );
+        assert_eq!(
+            cast(crate::namespace::XSD_STRING, value),
+            Some(Value::Str(identity.to_string()))
+        );
+    }
+}
+
+#[test]
+fn xsd_cast_integer_out_of_range_does_not_saturate() {
+    let store = Store::open_in_memory().unwrap();
+    let cast = |value| {
+        super::casts::cast(
+            &store,
+            crate::namespace::XSD_INTEGER,
+            value,
+            |n| n.to_string(),
+            |n| n.to_string(),
+        )
+    };
+    assert_eq!(cast(Value::Float(1e20)), None);
+    assert_eq!(cast(Value::Float(-1e20)), None);
+    assert_eq!(cast(Value::Float(3.9)), Some(Value::Int(3)));
+}
+
+#[test]
+fn xsd_cast_datetime_checks_calendar_and_timezone() {
+    assert_eq!(bind_value(r#"xsd:dateTime("2024-02-30T12:00:00Z")"#), None);
+    assert_eq!(
+        bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:01")"#),
+        None
+    );
+    assert!(bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:00")"#).is_some());
+}
+
+#[test]
+fn xsd_cast_double_to_string_does_not_saturate_or_spell_infinity_as_inf() {
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("1e20"))"#),
+        Some(Value::Str("1.0E20".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("INF"))"#),
+        Some(Value::Str("INF".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("NaN"))"#),
+        Some(Value::Str("NaN".into()))
+    );
+}
+
+#[test]
+fn xsd_cast_decimal_overflow_is_a_type_error() {
+    let too_large = "9".repeat(400);
+    assert_eq!(bind_value(&format!(r#"xsd:decimal("{too_large}")"#)), None);
+    assert!(bind_value(r#"xsd:decimal("33.33")"#).is_some());
+}

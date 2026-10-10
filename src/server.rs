@@ -3,8 +3,6 @@
 
 use std::sync::Arc;
 
-use parking_lot::FairMutex;
-
 use axum::{
     Router,
     http::StatusCode,
@@ -24,10 +22,16 @@ mod align;
 mod assets;
 #[path = "server/auth.rs"]
 mod auth;
+#[path = "server/auth_response.rs"]
+mod auth_response;
 #[path = "server/base.rs"]
 mod base;
 #[path = "server/entity.rs"]
 mod entity;
+#[path = "server/feed.rs"]
+mod feed;
+#[path = "server/graph_backfill.rs"]
+mod graph_backfill;
 #[path = "server/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "server/graph_store.rs"]
@@ -36,6 +40,12 @@ mod graph_store;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[cfg(feature = "owl")]
+#[path = "server/owl_materialize.rs"]
+mod owl_materialize;
+#[cfg(test)]
+#[path = "server/parse_guard_tests.rs"]
+mod parse_guard_tests;
 #[path = "server/publication.rs"]
 mod publication;
 mod query_endpoint;
@@ -56,15 +66,19 @@ mod tests;
 mod tools;
 #[path = "server/update.rs"]
 mod update;
+#[path = "server/update_eval.rs"]
+mod update_eval;
+#[path = "server/update_slice.rs"]
+mod update_slice;
 #[path = "server/wal_maintenance.rs"]
 mod wal_maintenance;
 
-use base::{health, metrics_handler, print_usage, stats, version};
+use base::{health, metrics_handler, stats, version};
 use entity::{
-    changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
-    entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
-    reconcile_handler, spotlight_handler, transactions,
+    entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
+    entity_turtle_suffix, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
 };
+use feed::{changes_get, events_commit, events_get, transactions};
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use publication::{export, share_payload};
 #[cfg(test)]
@@ -76,15 +90,9 @@ use tools::*;
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
-
     // Asking the binary who it is must NOT touch disk (aegis-j0nq). These are
     // pure reads of compiled-in constants and must stay above Store::open.
-    if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("quipu-server {}", env!("CARGO_PKG_VERSION"));
-        return;
-    }
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        print_usage();
+    if base::handle_identity_args(&args) {
         return;
     }
 
@@ -125,7 +133,6 @@ async fn main() {
     if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
         eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
     }
-
     // Apply the entity-resolution policy so episode ingest actually dedups
     // (hq-uye) — without this, `[quipu.resolution] enabled = true` is inert.
     store.resolution_config_mut().clone_from(&config.resolution);
@@ -138,7 +145,7 @@ async fn main() {
 
     // Apply search/limit guardrails so callers can't request unbounded result
     // sets or scan the whole fact log (hq-gkd).
-    store.search_config_mut().clone_from(&config.search);
+    base::apply_search(&mut store, &config.search);
     // quipu #68: the floors and their consumer land together — a settable knob
     // that nothing reads is the bug config.rs guards against.
     store.labels_config_mut().clone_from(&config.label_floors);
@@ -307,16 +314,10 @@ async fn main() {
     admission::init_read_admission_for_pool(read_pool.len());
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
 
-    let vector_reads_pooled = store.has_sqlite_vector_backend();
-    let state: SharedStore = Arc::new(StoreHandle {
-        graph_metrics: graph_metrics::GraphMetrics::new(&db_path),
-        writer: FairMutex::new(store),
-        readers: read_pool,
-        vector_reads_pooled,
-        federation: config.federation.clone(),
-        #[cfg(feature = "reactive-reasoner")]
-        reasoner: reactive_reasoner,
-    });
+    let handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    #[cfg(feature = "reactive-reasoner")]
+    let handle = handle.with_reasoner(reactive_reasoner);
+    let state: SharedStore = Arc::new(handle);
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
@@ -373,6 +374,7 @@ async fn main() {
         }
     }
 
+    let attest_store = state.clone();
     let app = Router::new()
         .merge(assets::routes())
         // Core API
@@ -446,6 +448,7 @@ async fn main() {
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
+        .route("/embed_backfill_graph", post(graph_backfill::embed_backfill_graph))
         // Entity + history
         .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
@@ -469,9 +472,15 @@ async fn main() {
         .layer(axum::middleware::from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_policy = auth_policy.clone();
+                let attest_store = attest_store.clone();
                 async move {
                     let path = req.uri().path().to_string();
                     let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
+                    // A signed write authenticates by attestation, never by a
+                    // bearer on the same request (aegis-bys8d1).
+                    if is_write && !read_only && req.headers().contains_key(auth::write_attest::HEADER) {
+                        return auth::write_attest::handle(attest_store, req, next).await;
+                    }
                     let auth_header = req
                         .headers()
                         .get(axum::http::header::AUTHORIZATION)
@@ -554,20 +563,7 @@ async fn main() {
                             } else {
                                 ""
                             };
-                            let mut response = (
-                                StatusCode::UNAUTHORIZED,
-                                axum::Json(serde_json::json!({
-                                    "error": format!(
-                                        "unauthorized: {path} is a WRITE endpoint and requires a bearer \
-                                         token. Send `Authorization: Bearer <token>`. Read endpoints \
-                                         (/query, /search, entity reads, /health) are open and need no \
-                                         credential.{why}"
-                                    ),
-                                    "endpoint": path,
-                                    "reason": "missing_or_invalid_bearer_token",
-                                })),
-                            )
-                                .into_response();
+                            let mut response = auth_response::unauthorized(&path, why);
                             response.extensions_mut().insert(
                                 quipu::request_usage::AuthOutcome::Unauthorized,
                             );
@@ -688,5 +684,8 @@ async fn main() {
         });
     }
 
+    // Everything committed before this line is STARTUP in quipu_write_facts_total
+    // (aegis-gwkd76): the work every restart repeats.
+    quipu::write_kind::set_serving();
     quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
 }

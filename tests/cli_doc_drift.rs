@@ -96,7 +96,18 @@ const NOT_COMMANDS: &[&str] = &["load", "query", "help"];
 /// `reference/cli.md` and is out of scope for THIS test, which exists to keep
 /// the sharing primitive discoverable.
 const SHARING_VERBS: &[&str] = &[
-    "share", "import", "status", "merge", "pack", "unpack", "knot",
+    "share",
+    "import",
+    "status",
+    "merge",
+    "pack",
+    "unpack",
+    "knot",
+    "git-merge",
+    "merge-driver",
+    "pendant-resolve",
+    "pendant-check",
+    "diff-textconv",
 ];
 
 #[test]
@@ -207,7 +218,7 @@ fn the_sharing_reference_page_matches_the_help_text_flags() {
 
 /// Pages whose citations must resolve.
 const CITING_PAGES: &[&str] = &[
-    "docs/book/src/sharing/README.md",
+    "docs/book/src/sharing/index.md",
     "docs/book/src/reference/cli-sharing.md",
 ];
 

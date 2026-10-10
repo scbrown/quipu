@@ -53,6 +53,7 @@ fn envelope(
         issued_at_epoch: NOW,
         nonce: "b".repeat(32),
         signature: String::new(),
+        audience: None,
     };
     envelope.signature = hex::encode(
         key.sign(&quipu::session_attestation::canonical_message(
@@ -113,6 +114,9 @@ fn real_imports_and_verifier_failures_increment_exactly_once() {
         manifest: serde_json::from_str(&read("manifest.json")).unwrap(),
         export_ntriples: read("export.nt"),
         shapes_turtle: read("shapes.ttl"),
+        queries_turtle: None,
+        query_namespace: None,
+        replace_queries: false,
         source: "https://example.org/metrics-proof".into(),
         actor: None,
         accept_exact: false,
@@ -186,6 +190,9 @@ fn real_imports_and_verifier_failures_increment_exactly_once() {
         manifest,
         export_ntriples: read_signed("export.nt"),
         shapes_turtle: read_signed("shapes.ttl"),
+        queries_turtle: None,
+        query_namespace: None,
+        replace_queries: false,
         source: "https://example.org/claimed".into(),
         actor: None,
         accept_exact: false,
@@ -213,11 +220,22 @@ fn real_imports_and_verifier_failures_increment_exactly_once() {
         path: "/episode",
         content_type: "application/json",
         body_sha256: "sha256:fixture",
+        audience: None,
     });
     let env = envelope(&key, &binding, &payload);
     assert!(registry.verify(&env, &payload, NOW, 30).is_err());
     assert_eq!(verification("write", "unbound"), 1);
-    registry.register(binding.clone()).unwrap();
+    // A binding registered for shares only is refused in the write domain as
+    // SCOPE, before its signature is checked (aegis-bys8d1), and spends nothing.
+    let share_only = BindingRegistry::default();
+    share_only.register(binding.clone()).unwrap();
+    assert!(share_only.verify(&env, &payload, NOW, 30).is_err());
+    assert_eq!(verification("write", "scope"), 1);
+    assert_eq!(verification("write", "badsig"), 0);
+    // The write-domain refusals below need a binding granted write.
+    let mut writer = binding.clone();
+    writer.allow_write = true;
+    registry.register(writer).unwrap();
     let mut bad = env.clone();
     bad.signature = "00".repeat(64);
     assert!(registry.verify(&bad, &payload, NOW, 30).is_err());

@@ -21,7 +21,7 @@ The binary `.qpack.db` is internal plumbing, not the published artifact. A share
 is the canonical, line-oriented interchange surface that makes review and
 three-way history meaningful:
 
-First [prepare the store's identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+First [prepare the store's identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share)
 and load the shapes governing its data. These outward-share examples assume
 both prerequisites are present in the selected store:
 
@@ -37,7 +37,10 @@ the producer deliberately requests a shapes-free bundle with `--no-shapes`.
 The manifest records the stable store id,
 transaction anchor, graph and shapes hashes, scope, and optional parent-share
 hash. `--turtle` adds a derived `export.ttl` for people; it is not the graph
-identity. The anchored transaction timestamp—not the wall clock—is used for
+identity. Stored queries registered against the scope travel as a sealed
+`queries.ttl` (select with `--queries`, omit with `--no-queries`) and install in
+the receiver's registry under a pack namespace — see
+[Stored queries](../reference/cli-sharing.md#stored-queries-queriesttl). The anchored transaction timestamp—not the wall clock—is used for
 `created_at`, so exporting unchanged state with the same options is
 byte-identical. Use `--parent-share sha256:...` when continuing a lineage.
 

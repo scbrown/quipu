@@ -140,6 +140,29 @@ attribution: `sha256` over `predicate|target|outcome|writer|chain`, binding the
 `aegis:attributedWriter` and `aegis:principalChain` into the signed seal. It is
 deliberately *not* a hash of graph state, which has no stable serialisation.
 
+### Linking a verdict to the judged transaction
+
+The shipped governance shape permits an optional `aegis:gatedTx`: one
+`xsd:integer` greater than or equal to one. It identifies the **committed
+transaction whose delta was judged**, not the later transaction that persists
+the verdict. Transaction IDs are local to their originating store; cross-store
+audits must retain that store's provenance.
+
+Refused or rolled-back attempts omit `gatedTx`. Their attempted transaction row
+is rolled back, so its provisional ID is not a durable identity and must never
+be predicted or reused as the link. Use a durable `write.refused` event identity
+for a refusal correlation when the producer provides one. This shape does not
+introduce that event link. Historical verdicts may also omit `gatedTx`; absence
+means the transaction join is unavailable, not that the verdict was a refusal.
+Do not guess a backfill from timestamps or matching predicate/target pairs.
+
+This is the schema contract, not automatic producer support. A producer adding
+`gatedTx` must bind it into the signed evidence and verdict identity: changing
+the judged transaction must change the seal and identity. Otherwise identical
+outcomes can collapse to one verdict with several transaction IDs, and the link
+itself is not authenticated. SHACL checks cardinality and datatype; it does not
+prove that the referenced transaction exists or that the signature binds it.
+
 ## The Phase-0 root of trust
 
 Trust concentrates in a small, human-owned surface: `aegis:VerifierRegistration`
@@ -183,6 +206,12 @@ delegation only narrows and an empty intersection refuses
 inert for callers that present no principal chain. This gates **writes only** —
 it is not a read-side confidentiality boundary.
 
+The authority reader accepts both legacy and Quechua vocabulary spellings for
+`Principal`, `principalId`, and `authorityOver`, including mixed spellings.
+Identical aliases collapse; conflicting identity values grant no authority.
+Graph grants remain set-valued, and the reader retains its committed root-graph
+scope. This compatibility does not change principal identities or grant writers.
+
 ## Audit & replay
 
 The rest of `src/governance/` closes the loop after the fact:
@@ -203,3 +232,60 @@ under delegation.
 - [REST API reference](../reference/rest-api.md) — the mirrored HTTP routes.
 - `docs/design/policy-edit-hooks.md` — the write-gate design and its backlog.
 - `docs/design/signing-plane.md` — where signing goes next (proposed).
+
+## Post-commit reactions and firing records
+
+`shapes/aegis-ontology.shapes.ttl` defines `aegis:Reaction` and
+`aegis:ReactionFiring` for Chaski. These describe post-commit or scheduled
+reactions. Loading the schema does not start an evaluator, install a graph
+sink, or deliver an alert.
+
+A reaction has one `rdfs:label`, `triggerKind` (`event` or `schedule`),
+`condition` (SPARQL `SELECT ?focus`), `severity` (`info`, `warning`, `critical`
+or `page`), and string `owner`. It requests one or more `action` values:
+`alert`, `page`, `bead`, or `webhook`. The existing string properties
+`severity`, `owner`, and `schedule` are reused.
+
+Event reactions use a comma-separated `eventTypes` string; scheduled reactions
+use an ISO-8601 duration string in `schedule`, such as `PT5M`. Chaski's current
+consumer supports time durations expressed with hours, minutes and seconds.
+`enabled` is an optional boolean; Chaski treats omission as enabled. The graph
+does not assert that default. A single `rdfs:comment` can explain the rule.
+SHACL checks the declared field types, cardinalities and enums. The consumer
+must also validate the trigger-specific configuration and query: the shape
+alone does not parse SPARQL or duration strings.
+
+A firing records a transition, never each evaluation. It has exactly one
+`firedBy` link to a typed Reaction, one IRI `focus`, and one `xsd:dateTime`
+`startedAt`. Its stable IRI identifies the machine-emitted record; it does
+not require an `rdfs:label`. The rule and its durable firing record are BFO
+continuants, separate from the execution that produced the record.
+`resolvedAt` is absent while active and set once via `/set` when
+the condition resolves. A failed or timed-out query is unknown and must not
+resolve an existing firing. A later firing after resolution is a new
+occurrence. SHACL does not enforce these temporal rules or timestamp ordering.
+
+### Stable delivery identity
+
+`ReactionFiring` optionally carries one string `eventId`. When present, derive
+the firing IRI deterministically from **(reaction label, eventId)** using an
+unambiguous encoding, for example a hash of a JSON array containing both
+strings. The event ID identifies an item and transition; including the stable
+reaction label separates reactions receiving the same event. If an adapter's
+event ID does not uniquely identify its focus, it must include that focus in
+the identity input too. Do not substitute a send-time random ID.
+
+For a Chaski outbox event, take `startedAt` from the frozen payload's
+`observed_at`, never the retry time. Persist the graph-sink payload before its
+first send and reuse it unchanged after a crash. Stable identity alone does
+not provide idempotence when timestamps or descriptions change between
+attempts. Verify receiver state after an uncertain write; an `unchanged`
+response alone is not a presence check. Test send-then-crash replay at the sink.
+This schema does not itself implement an idempotent receiver or guarantee
+exactly-once external actions.
+
+For an adapter that evaluates whether work has become unblocked, `condition`
+selects candidate WorkItems with `aegis:blockedOn`; the adapter decides their
+verdict. State that interpretation in the reaction's `rdfs:comment`. Ordinary
+scheduled transition firings may omit `eventId` and retain a durable occurrence
+identity for each transition of the (reaction, focus) pair.

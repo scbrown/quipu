@@ -1,11 +1,12 @@
 # MCP Tools
 
 Quipu exposes its API as MCP (Model Context Protocol) tools for agent
-integration. These tools are available when Quipu runs as a Bobbin subsystem
-or standalone MCP server.
+integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
+`quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
+`knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **46 tools** in a default build, or
-**48** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
+**50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -121,6 +122,34 @@ a tool by its annotation. A moded tool would carry a single, necessarily destruc
 annotation, and every read-only call — including `propose`, the entry point — would be
 refused under a no-approval policy.
 
+### `quipu_merge_decisions`
+
+**READ.** Lists the conflicts of merging an incoming share into ROOT: one row per slot
+with the `base` / `ours` / `theirs` values, the slot's `max_count`, and each side's
+provenance. The rows are bound to ROOT's graph hash and the incoming share id. With
+`propose: true`, each row also gets a mechanical `proposal` (`choose` plus `evidence`).
+It never sets a `decision` and writes nothing.
+
+`incoming` and `base` are shares **inline**, in the shape `/import` takes (`manifest`,
+`export_ntriples`, `shapes_turtle`). Both are verified by hash, and `base` must be the
+incoming share's `parent_share`. A server path is never accepted. REST:
+`POST /merge/decisions`. CLI: `quipu merge <share-dir> --emit-decisions <file> [--propose]`.
+
+### `quipu_merge_apply`
+
+**WRITE.** Finishes the merge from the decisions file with each row's `decision` set
+(`{"choose": "ours"|"theirs"|"base"}` or `{"values": [<N-Triples terms>]}`). It commits
+the clean part of the merge plus every decided slot in one transaction. The
+transaction's source records both parents, the `reviewer`, and the SHA-256 of the
+decisions.
+
+It refuses, and writes nothing, on an undecided row, stale decisions (ROOT or the share
+moved since they were emitted), more values than the slot's `sh:maxCount`, or a value
+that is not an RDF term. It also refuses a field merge-decisions/v1 does not
+define. `dry_run: true` runs every check and returns the counts it would write,
+without writing. REST: `POST /merge/apply`. CLI: `quipu merge <share-dir>
+--decisions <file> --reviewer <who> [--dry-run]`.
+
 ### `quipu_knot`
 
 Assert facts from Turtle data, with optional SHACL validation.
@@ -128,6 +157,7 @@ Assert facts from Turtle data, with optional SHACL validation.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `turtle` | Yes | RDF Turtle data |
+| `blank_node_scope` | No | Explicit document identity for blank nodes; same ID shares only byte-identical input across graphs, distinct IDs separate repeat loads |
 | `timestamp` | No | Transaction-time: when this store came to believe the facts (defaults to now) |
 | `valid_from` | No | Valid-time: when the facts became true of the world. RFC 3339, normalised to UTC `Z`. Omit to reuse `timestamp` |
 | `actor` | No | Who is asserting |
@@ -264,6 +294,18 @@ crew identity (hq-otm) land it should require an authorized principal.
 
 ### `quipu_retract_source`
 
+Identical facts asserted by different sources retain independent ownership.
+Repair removes only the selected source's claims in the selected graph; a fact
+remains visible until its last owner retracts it. Repeating an assertion under
+the same source is idempotent. The reported `retracted` count is the number of
+source-owned statements processed, not the number that disappeared from the
+logical graph. Historical assertions remain in the audit log.
+
+**The ownership fix is forward-only for newly recorded claims.** Older versions
+skipped identical assertions from later producers, so those historical claims
+cannot be reconstructed. Reassert all relevant producer snapshots before
+retracting old shared facts; this release does not backfill ownership.
+
 Retract-only repair of facts owned by a **legacy transaction source**
 (`POST /retract/source`).
 
@@ -299,8 +341,8 @@ Two properties worth knowing before using it:
 
 - **`planned: 0` is a real answer.** It means the named source owns no live
   facts. `quipu_knot` reports `replaced: true, count: 0` both for a retraction
-  that removed nothing and for one that emptied a graph, so this question
-  previously had no answer.
+  that deletes nothing and for one that empties a graph. Read `planned`
+  to distinguish those cases.
 - **Re-keying order is retract FIRST, then re-promote.** The store dedups an
   identical triple to one row carrying one source, and the existence check
   ignores the transaction source — so asserting canonically first is skipped as
@@ -329,9 +371,14 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
+| `mode` | No | `semantic` (default) or opt-in `keyword` (SQLite FTS5 BM25; requires query text, enabled and backfilled index; no embedding provider) |
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
+| `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
+| `graph` | No | Registered graph IRI, or `all`; omitted scope searches ROOT |
+| `graphs` | No | Nonempty list of registered graph IRIs; search their union |
+| `all_graphs` | No | Search ROOT and all registered named graphs, excluding graph metadata |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
 Requires an embedding provider when called with `query` and no `embedding`;
@@ -341,6 +388,43 @@ so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
 | `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label, **not** an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope) |
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
+
+Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+
+Graph selectors are mutually exclusive; unknown graphs are refused. Explicit
+scope results carry `graph` and `graphs`. Semantic scope selects entity
+membership before the result limit on the built-in SQLite backend. Other
+vector backends use bounded best-effort oversampling. Embeddings remain per entity: ROOT text
+is retained for entities with ROOT facts; other entities combine their
+named-graph facts. This is membership scoping, not per-graph embedding text.
+Explicit graph scope supports semantic and keyword ranking; ROOT content and
+anchor reranking are refused with it.
+
+Explicit graph selection requires `[quipu.search] named_graphs = true`.
+The default is false. Prepare named-only vectors with bounded backfill before
+enabling it; the flag also gates automatic named-only embedding text.
+
+Keyword mode returns `score` (positive relevance, higher first), raw SQLite
+`bm25` (lower first), and `ranking_reason: "keyword"`. It indexes literal terms
+and quoted phrases from labels, alternate labels, descriptions including full
+episode bodies, other literal attributes, type names, and entity IRI local-name
+tokens. Phrase/term conjunctions currently match one fact document; structured
+cross-attribute expressions belong to the structured-query stage. The default
+semantic response and scores are unchanged. Keyword mode rejects embeddings,
+anchors and content ranking rather than silently ignoring them.
+
+Activate `[quipu.search] keyword = true`, then run explicit bounded
+`quipu search-index backfill --batch-size 500 --db <path>` calls until status
+reports `complete: true`. Search refuses an incomplete index. Each call commits
+one batch and releases the writer; the CLI refuses UTC minutes 10 through 20
+to protect scheduled ingestion. See [keyword index](./rest-api.md#keyword-index).
+See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
+exceptions, temporal behavior, and bounded candidate recall.
+
+**Anchored search** (`anchor`, `max_hops`, `anchor_mode`, `decay`, `via`,
+`direction`, `explain`) roots the search on one entity and ranks by hop
+distance. It is off unless the server sets `[quipu.search] anchored = true`. See
+[anchored search](./rest-api.md#anchored-search).
 
 ### `quipu_hybrid_search`
 
@@ -449,6 +533,10 @@ re-running the same ASK over the same committed evidence gets the same verdict
 (checked, not trusted). The verdict is returned **unsigned** unless the store
 has a signing identity attached.
 
+Stored `claim` and `evidenceProbe` properties are read under both vocabulary
+namespaces. Identical alias values collapse; conflicting values are refused.
+The stored query text, target identity, and signature inputs are preserved.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `policy` | One of policy/claim | Policy IRI whose `aegis:claim` to evaluate |
@@ -465,6 +553,10 @@ be valid under the verifier's **registered** public key, and the verifier must
 be authorized to attest the predicate. `trusted` is the conjunction — the
 property a consumer should gate on.
 
+Registration classes and verifier/key predicates are read under both vocabulary
+namespaces. Conflicting registered keys are refused, rather than choosing one;
+duplicate aliases carrying the same key are accepted.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `predicate_id` | Yes | Predicate the verdict attests |
@@ -473,24 +565,64 @@ property a consumer should gate on.
 | `evidence_hash` | Yes | Evidence hash the signature seals |
 | `tier` | No | Evidence tier (default: `committed`) |
 | `verifier` | Yes | Verifier IRI whose registered key verifies the signature |
-| `signature` | Yes | Hex ed25519 signature over the verdict message |
+| `signature` | Yes | Signature over the verdict message: hex for `ed25519`; base64url assertion signature for `webauthn-*`; the armored SSH SIGNATURE for `sshsig-sk-ed25519` |
+| `verdict` | No | IRI of the stored verdict carrying this signature: verify as of when the store recorded it (use this for trust decisions) |
+| `signed_at` | No | Explicit valid-time instant (a what-if query; default now) |
+| `tx` | No | Explicit transaction to verify as of (a what-if query; default latest) |
+| `scheme` | No | `ed25519` (default), `webauthn-es256`, `webauthn-eddsa`, or `sshsig-sk-ed25519` |
+| `authenticator_data` | WebAuthn | base64url `authenticatorData` |
+| `client_data_json` | WebAuthn | base64url `clientDataJSON` |
+
+The registry is read **as of the signature** (signing-plane S1): a key that
+has since been rotated still verifies what it signed while registered, and
+cannot verify anything recorded after it was closed. The result's
+`as_of.basis` is `recorded`, `caller-supplied` or `now`. A caller-supplied
+instant is a what-if: `trusted` is then always `false`, and the answer is in
+`would_verify_as_of_supplied_instant`. Otherwise naming a transaction from
+before a revocation would make a revoked key read as trusted.
+
+Hardware schemes are **off by default** (`[quipu.governance]
+hardware_verdict_schemes`); while off, a verdict naming one is refused. A
+hardware verdict verifies only against a registration declaring the same
+`aegis:signatureScheme`, and is trusted only when that same registration
+attests the predicate. WebAuthn registrations carry the base64url COSE key in
+`aegis:publicKey` plus `aegis:webauthnRpId` and `aegis:webauthnOrigin`; SSHSIG
+registrations carry an OpenSSH `sk-ssh-ed25519@openssh.com` public key line.
+The WebAuthn challenge is derived by quipu from the verdict message, never
+taken from the caller, and SSHSIG must use namespace `quipu-verdict`. The
+response's `sign_count` is the authenticator counter to record as the
+registration's `aegis:signCount`. Once a nonzero counter is recorded, a
+signature whose counter does not exceed it (including 0) is refused as a
+possible clone; a credential that has only ever reported 0 is accepted.
+WebAuthn requires user verification (UV); SSHSIG requires user presence and
+reports UV without requiring it.
+See `src/verdict_schemes/mod.rs` for the full rule list.
+
+The as-of rule binds every scheme: a hardware verdict is checked against
+the registrations, grants and recorded `aegis:signCount` in effect at the
+same instant, and a caller-supplied instant leaves it untrusted too.
 
 ### `quipu_verifier_authorized`
 
 Check the Phase-0 verifier registry: may this verifier attest this predicate?
-The discovery half of the governance gate.
+The discovery half of the governance gate. Registration classes and each
+verifier/attests predicate may independently use the legacy or Quechua vocabulary.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `verifier` | Yes | Verifier IRI |
 | `predicate` | Yes | Predicate IRI to attest |
+| `signed_at` | No | Valid-time instant to check at (default now) |
+| `tx` | No | Transaction to check as of (default latest) |
 
 ### `quipu_cooccurrence`
 
 Deterministic, auditable work-item co-occurrence: given a work-item (`Bead`)
 IRI, returns the other work-items that share at least one touched code entity
 via the provenance chain `Bead ←implements− GitCommit −modifies→ entity`.
-A graph query over typed provenance edges, ordered by overlap strength.
+A graph query over typed provenance edges, ordered by overlap strength. Each
+implements/modifies edge may use the legacy or Quechua vocabulary independently;
+duplicate aliases do not inflate shared-entity counts.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -659,6 +791,19 @@ to list every query, its parameters, and their types.
 | `entities_of_type` | `type` (iri), `limit` (int, 100) | All entities of a given `rdf:type` |
 | `labeled_like` | `text` (text), `limit` (int, 50) | Entities whose `rdfs:label` contains `text` (case-insensitive) |
 
+The provenance queries `brief_ground`, `brief_related`, `entity_work`, and
+`cochanged_with` read both legacy vocabulary predicates and their Quechua
+counterparts under `https://scbrown.github.io/quechua/ns#`. Each edge can use
+either spelling independently. Duplicate aliases do not inflate returned paths
+or shared-item counts. Entity IRIs and dataset selection stay unchanged; these
+queries do not require an equivalence reasoner.
+
+The group scope in `quipu_search`, `quipu_search_nodes`, and
+`quipu_search_facts` accepts either vocabulary's `groupId` predicate on the
+provenance episode. Duplicate aliases do not duplicate search results. Other
+groups, unrelated predicates with the same local name, and nodes without an
+episode remain outside a requested group scope.
+
 Parameters are validated and escaped by type before substitution, so values are
 safe against SPARQL injection. The response includes the resolved `sparql`, the
 result `columns`, and `rows`.
@@ -773,7 +918,7 @@ Accept a pending schema proposal. Shape proposals are validated before writing.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to accept |
-| `decided_by` | No | Identity of the approver |
+| `decided_by` | Yes | Identity of the approver |
 | `note` | No | Optional acceptance note |
 | `timestamp` | No | ISO-8601 timestamp |
 
@@ -785,7 +930,7 @@ Reject a pending schema proposal with a reason.
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to reject |
 | `note` | Yes | Reason for rejection |
-| `decided_by` | No | Identity of the rejector |
+| `decided_by` | Yes | Identity of the rejector |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_resolve_entity`
@@ -812,3 +957,9 @@ Manage OWL ontologies: `load` (parse + materialize entailments), `list`, or
 | `name` | For load/remove | Ontology name |
 | `turtle` | For load | OWL ontology in Turtle format |
 | `timestamp` | No | ISO-8601 timestamp |
+
+Hybrid fusion parameters on `quipu_search`: `mode: "hybrid"`, `alpha` (semantic
+weight, 0..1), `fusion` (`weighted` or `rrf`), positive `rrf_k`, and `explain`.
+Server activation and the ready lexical index are required for intermediate
+weights. Alpha endpoints retain exact pure responses. See the REST search
+reference for candidate bounds, scope compatibility, snippets and rollback.

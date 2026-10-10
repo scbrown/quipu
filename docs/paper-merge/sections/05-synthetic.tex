@@ -68,7 +68,7 @@ merge-file}; where git is absent they report \emph{unavailable}, never zero.}
 
 Three readings matter.
 
-\paragraph{The comparison with the nearest neighbour is not about detection.}
+\paragraph{The comparison with the nearest neighbor is not about detection.}
 Summed over the five seeds the oracle contains $54$ conflicts, of which $21$ are
 alias-mint and $33$ are visible at triple level. \op raised exactly those $33$,
 with zero false positives at every individual seed. \ctx raised the
@@ -87,15 +87,15 @@ like when you count what it discarded rather than what it complained about. Only
 \op holds all three at zero while still asking.
 
 \paragraph{A hypothesis of ours did not survive.} We predicted that
-canonicalisation alone would materially beat non-canonical line merge. Against
-the re-serialised arm it does: unparseable output lines go from $116$--$169$ to
-$0$. Against a \emph{stably} serialised Turtle file it does not.
+canonicalization alone would materially beat non-canonical line merge. Against
+the re-serialized arm it does: unparseable output lines go from $116$--$169$ to
+$0$. Against a \emph{stably} serialized Turtle file it does not.
 \texttt{git-canonical} raises \emph{more} conflicts ($106$--$144$) than
 \texttt{git-turtle-stable} ($41$--$59$), because sorting scatters each subject's
 triples into one sorted run where two sides' additions land adjacent and collide,
 whereas subject-grouped Turtle absorbed them into a block. The honest statement
-is narrower than the hypothesis: canonicalisation buys syntactic integrity and
-independence from serialisation order, and it does not by itself reduce conflict
+is narrower than the hypothesis: canonicalization buys syntactic integrity and
+independence from serialization order, and it does not by itself reduce conflict
 count. It is a trade, and we report it as one.
 
 \paragraph{The circularity, stated rather than managed away.} \op and the oracle

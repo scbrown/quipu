@@ -305,10 +305,10 @@ _:node1 <http://example.org/label> "test" .
         assert_eq!(count, 2);
 
         // The blank node should be in the term dictionary.
-        let bnode_id = store
-            .lookup("_:node1")
-            .unwrap()
-            .expect("blank node interned");
+        let label = store.lookup("http://example.org/label").unwrap().unwrap();
+        let bnode_id = store.current_facts().unwrap().into_iter()
+            .find(|f| f.attribute == label).unwrap().entity;
+        assert!(store.resolve(bnode_id).unwrap().starts_with("_:"));
         assert!(bnode_id > 0);
 
         // The reference should point to the blank node.

@@ -47,7 +47,7 @@
 
 # Sharing & Federation
 
-- [Sharing & Federation](sharing/README.md)
+- [Sharing & Federation](sharing/index.md)
   - [Aligning concepts across graphs](sharing/align.md)
 
 # Architecture
@@ -72,6 +72,7 @@
 - [Impact Analysis](recipes/impact-analysis.md)
 - [Incident Correlation](recipes/incident-correlation.md)
 - [Knowledge Ingestion](recipes/knowledge-ingestion.md)
+- [Bulk Loads & Migrations](recipes/bulk-loads.md)
 
 # Benchmarks
 

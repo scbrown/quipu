@@ -1,6 +1,6 @@
 # CLI: sharing, import and legacy packs
 
-Reference for the commands behind [Sharing & Federation](../sharing/README.md).
+Reference for the commands behind [Sharing & Federation](../sharing/index.md).
 Every flag here is checked against `quipu --help` by `tests/cli_doc_drift.rs`, so
 this page cannot quietly fall behind the binary.
 
@@ -14,20 +14,22 @@ interchange format.
 
 ## `quipu share` — produce a share
 
-Prerequisite: [load the identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+Prerequisite: [load the identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share)
 and the shapes governing your data. The default destination is outward.
 An empty block-tier catalogue exits 2 (cannot verify); a matching identifier
 exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this check.
 
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
-            [--shapes NAME]... [--no-shapes] [--parent-share ID]
-            [--since <parent-reference>] [--turtle] [--destination internal]
+            [--shapes NAME]... [--no-shapes] [--queries NAME]... [--no-queries]
+            [--parent-share ID] [--since <parent-reference>] [--turtle]
+            [--destination internal]
 ```
 
 Writes a deterministic, git-native share into `<dir>`: RDFC-1.0 canonical
 `export.nt` (the facts), `shapes.ttl` (the constraints they were validated
-against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
+against), `queries.ttl` (the stored queries that answer questions about them,
+when there are any), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 
 | Flag | Effect |
 |---|---|
@@ -37,6 +39,8 @@ against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 | `--construct <QUERY>` | share exactly what a CONSTRUCT query yields |
 | `--shapes <NAME>` | include a named shape set; repeatable |
 | `--no-shapes` | omit `shapes.ttl` — the receiver then has no constraints to validate against, so prefer not to |
+| `--queries <NAME>` | carry exactly these stored queries in `queries.ttl`; repeatable. Default: every query *registered against* the scope — see [Stored queries](#stored-queries-queriesttl) |
+| `--no-queries` | carry no stored queries; no `queries.ttl` is written |
 | `--parent-share <ID>` | record lineage: the share this one descends from |
 | `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL, not a `share_id` |
 | `--turtle` | additionally write a Turtle view for humans |
@@ -104,12 +108,72 @@ parent cannot be three-way merged — `merge` refuses with *"incoming share has 
 parent_share; three-way merge has no base"* — so record it at production time,
 when you know it, rather than trying to reconstruct it at reconnect time.
 
+## Stored queries (`queries.ttl`)
+
+A share carries the stored queries `quipu_ask` answers by name, so a qpack
+ships its competency questions beside its data. Each query is described as RDF
+in `queries.ttl`; the manifest seals that file's SHA-256 as `queries_hash` and it
+takes part in the `share_id`, so changing one query's text changes the share's
+identity. A share with no queries has no `queries.ttl` and a manifest
+byte-identical to one produced before the member existed.
+
+```turtle
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix quipu: <https://quipu.dev/ontology/> .
+
+<urn:quipu:query:members-of> a quipu:StoredQuery ;
+  quipu:queryName "members-of" ;
+  quipu:queryForm "SELECT" ;
+  dct:description "Who belongs to a team" ;
+  quipu:parameter [ a quipu:QueryParameter ; quipu:parameterName "team" ;
+    quipu:parameterIndex 0 ; quipu:parameterKind "iri" ; quipu:required true ] ;
+  quipu:sparqlTemplate """SELECT ?p WHERE { ?p <http://example.org/memberOf> <{team}> }""" .
+```
+
+`quipu:targetsClass` lists every constant `rdf:type` object in the template's
+patterns. The vocabulary is governed by
+[`shapes/stored-queries.ttl`](https://github.com/scbrown/quipu/blob/main/shapes/stored-queries.ttl),
+which the producer and the importer both apply.
+
+**Which queries a share carries by default.** A query is *registered against*
+the shared graph when `quipu_ask` would answer it from that graph: an unscoped
+query (no dataset) belongs to a ROOT share and to `--group-id` and `--construct`
+slices of ROOT; a dataset-scoped query belongs to a `--graph <IRI>` share whose
+IRI is a member of its dataset, and to nothing else. The dataset IRI itself is
+producer-local and is not carried.
+
+**A carried query is data, not code.** Only `SELECT`, `CONSTRUCT`, `ASK` and
+`DESCRIBE` travel. The form is decided by parsing the template with Quipu's
+SPARQL parser — at share time and again at import — and a SPARQL Update is
+refused at both ends. Import evaluates nothing: a query runs only when somebody
+asks for it, under the receiver's normal read policy and timeouts.
+
+**Import namespaces and never overwrites.** Carried queries install in the
+receiver's registry as `<namespace>/<name>`. The namespace defaults to
+`pack-<12 hex>` derived from the producer's store identity, so newer shares of
+the same pack land on the same names; `--query-namespace` chooses one. A local
+query with the same name is never touched. A *different* definition already at a
+pack-scoped name is reported under `queries.collisions` and left in place, and a
+pack-scoped query the share no longer carries is reported as `stale`.
+`--replace-queries` replaces the differing ones and closes the stale ones
+(closed, never deleted — the prior version stays queryable). A query that targets
+a class the receiver's loaded shapes do not sanction adds the blocker
+`query_off_vocabulary`: the pack is quarantined and none of its queries is
+installed. A full share installs its queries when it stages, before promotion,
+so run `quipu import promote` before asking questions of the staged data in ROOT.
+
+A delta share carries the resulting share's complete `queries.ttl`, like its
+shapes, so queries added, replaced or removed since the parent arrive as what
+the member now says, sealed by the result manifest's `queries_hash`.
+
 ## `quipu import` — receive a share, into quarantine
 
 ```text
 quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>]
-            [--destination internal] [--db <path>]
+            [--destination internal] [--query-namespace NS]
+            [--replace-queries] [--db <path>]
 quipu import delta <parent-share> <delta-share> [--actor <id>]
+            [--query-namespace NS]
 ```
 
 Verifies the manifest and payload hashes, then stages a local directory in its
@@ -130,10 +194,21 @@ share graph hash mismatch: manifest=… actual=…
 | `--source <uri>` | record where the share came from; defaults to the directory, archive path, or URL |
 | `--actor <id>` | attribute the import |
 | `--db <path>` | stage in this store, including archive and URL imports |
+| `--query-namespace <NS>` | install carried queries as `NS/<name>` (`[A-Za-z0-9._-]+`); default `pack-<12 hex>` from the producer's store identity |
+| `--replace-queries` | replace differing `NS/*` queries and close ones the share no longer carries; otherwise both are only reported |
 
 `import delta` verifies the full parent and the delta's lineage, hashes and
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
 result, then sends that result through the same verified in-memory import path.
+
+Loaded local shapes determine admission. Their explicit
+`quipu:onViolation "emit"` diagnostics are advisory; reject-policy Violations
+quarantine the share. Missing policies mean reject, and unknown or conflicting
+policy values refuse. Carried shapes cannot downgrade a local reject policy.
+The report keeps strict `conforms` separate from `blocking`, with complete
+diagnostics and `advisory_results`. An emit-only Violation can therefore produce
+`conforms: false` with `blocking: false`. Vocabulary, integrity, trust and explicit
+promotion requirements still apply.
 
 ## `quipu import promote` — admit a staged share into ROOT
 
@@ -143,7 +218,45 @@ quipu import promote <share-id> [--actor <id>] [--db <path>]
 
 The second, separate verb. Nothing reaches ROOT because a file arrived; it
 reaches ROOT because someone ran this. Keeping admission in its own command is
-the point rather than an inconvenience — see the [primitive](../sharing/README.md).
+the point rather than an inconvenience — see the [primitive](../sharing/index.md).
+
+## The project graph: `quipu share --project` and `quipu load`
+
+```text
+quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]
+quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]
+```
+
+A repository commits its project's graph under `.quipu/`, tool-neutral:
+
+| path | committed | what |
+|---|---|---|
+| `.quipu/project` | yes | one line, the project id; the graph is `urn:quipu:project:<id>` |
+| `.quipu/graph/` | yes | the share bundle for that graph (`manifest.json`, `export.nt`, …) |
+| `.quipu/.gitignore` | yes | written by quipu: an allow-list for the two above |
+| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and the host's PRIVATE signing key |
+
+`share --project <id>` names the project once (it is then committed) and
+re-shares the graph into `.quipu/graph/`. Re-running it replaces the bundle;
+it never re-points a repository at a different id. The outward scrub applies
+exactly as for any share, because the repository may be public; use
+`--destination internal` only for a private one.
+
+`load <dir>`, on a directory holding a share manifest, is the one command a
+fresh clone needs:
+
+```bash
+git clone <repo> && cd <repo>
+quipu load .quipu/graph --db .quipu/local.db
+```
+
+It runs the ordinary [`import`](#quipu-import--receive-a-share-into-quarantine),
+with every gate import has, and then promotes into the bundle's own graph
+instead of ROOT, as a diff. A re-load after `git pull` changes only what
+changed; an unchanged bundle opens no transaction. A quarantined import loads
+nothing. `load <file.ttl>` still means `knot`.
+
+The server equivalent is `POST /import` of the same bundle, which stages it.
 
 ## `quipu status` — has this share diverged?
 
@@ -172,6 +285,57 @@ and records a decision** rather than guessing.
 
 Exit `2` is a distinct code precisely so a script can tell "needs a decision"
 from "went wrong".
+
+### Resolving conflicts: emit, propose, decide, apply
+
+```text
+quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
+```
+
+The same split as `quipu align`: a merge that cannot auto-merge is finished by a
+person, with the evidence in front of them.
+
+1. **Emit.** `--emit-decisions` writes one row per conflict to a JSON file and
+   changes nothing. Each row has the slot (`subject`, `predicate`,
+   `max_count`), the `base` / `ours` / `theirs` values, and each side's
+   provenance: ROOT's current facts with their `valid_from`, transaction, actor
+   and source; the incoming and base shares' id, `created_at`, producer store
+   and whether they are attested. For a person reading it, each row also has a
+   `kind` (`max_count_exceeded` or `delete_replace`) and a `rule` in words
+   ("sh:maxCount 1 on status: ours and theirs together hold 2 values"), and the
+   file carries `labels`: one `rdfs:label` per IRI it mentions. The file is bound
+   to ROOT's graph hash and the incoming share id.
+2. **Propose (agent).** `--propose` also fills each row's `proposal` (`choose`
+   plus `evidence`) from mechanical evidence: a side unchanged from base, the
+   newer side, an attested share. It never sets `decision`.
+3. **Decide (operator, or any tool that edits the file).** A tool may also set
+   `decided_by` and `decided_at` per row; apply echoes them back. They are a
+   claim made by that tool. The attested record is the transaction's reviewer
+   and the decisions file's hash. Set each row's `decision` to
+   `{"choose": "ours"}`, `{"choose": "theirs"}`, `{"choose": "base"}`, or
+   `{"values": ["\"an edited value\""]}` (N-Triples terms).
+4. **Apply.** `--decisions` commits the clean part of the merge plus every
+   decided slot in **one** transaction. Its source records both parents, the
+   reviewer and the SHA-256 of the decisions file, and the output lists each
+   applied row.
+
+Apply refuses, and writes nothing, when:
+
+| Refusal | Why |
+|---|---|
+| a row has no `decision` | nothing is guessed |
+| ROOT or the incoming share changed since the emit | the decisions were made against other data; emit again |
+| the conflicts differ from the file's rows | same reason |
+| a decision has more values than the slot's `sh:maxCount` | it would re-create the conflict |
+| a value is not an RDF term | it cannot be stored |
+| the file has a field merge-decisions/v1 does not define | apply would drop it while the file's hash still covered it |
+
+`--dry-run` runs every check above and reports the counts that apply would
+assert and retract, without writing anything. A CI check uses it to validate a
+decided file before merge.
+
+Plain `quipu merge` without these flags behaves as before.
 
 ## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 
@@ -309,9 +473,18 @@ same the governance plane uses; it is not an HSM.
 
 ```text
 quipu attest register --agent <a> --session <s> --public-key <hex> \
-  --introducer <who> --issued-at <epoch> --expires-at <epoch> [--db <path>]
+  --introducer <who> --issued-at <epoch> --expires-at <epoch> [--allow-write] [--db <path>]
+quipu attest allow-write|deny-write <session> [--db <path>]
+quipu attest revoke <session> [--db <path>]
 quipu attest list [--db <path>]
 ```
+
+A binding is **share-only** unless an operator grants it write (`--allow-write` at
+registration, or `allow-write` later). Only then may its key sign HTTP writes. `list`
+prints each binding's `allow_write`, `expires_at` and `revoked`, so the scope a key
+holds is visible without reading the store. `revoke` keeps the row: a revoked binding
+refuses as `revoked`, which is a different finding from an unbound key. Rotation is a
+new binding plus a revoke of the old one.
 
 **Importing a share never registers its producer.** This is the point, not an
 omission: a key that vouches for the bundle it arrived in vouches for nothing, and an
@@ -335,3 +508,205 @@ merely does not read as failure.
 when that test was written, `--help` documented `share`, `status`, `merge` and
 `unpack` but **not `import`**, so a page-versus-help check would have passed while
 the verb that receives a share stayed undiscoverable.
+
+## `quipu share diff` — what changed between two packs
+
+```text
+quipu share diff <old> <new> [--format text|markdown|json]
+```
+
+Each side is a pack directory (the standard artifact's `payload.nq`, else a
+legacy share's `export.nt`) or a single N-Triples/N-Quads file. Like the Git
+transport commands below, it reads files only and opens no store.
+
+The diff compares **facts**, not lines, and groups them by subject entity:
+
+```text
+~ Alice (people/alice)
+  ~ age: "30"^^xsd:integer -> "31"^^xsd:integer
+  - nickname: "Al"
++ Carol (people/carol)
+  + rdfs:label: "Carol"
+  + role: "designer"
+2 entities: 1 changed, 2 added, 1 removed facts
+```
+
+That is the whole output for the fixture pair in `tests/fixtures/share-diff/`,
+whose raw line diff is 11 lines of full IRIs and blank-node labels: Alice's
+address is a blank node that RDFC relabelled (`_:b0` to `_:c14n7`) without any
+change to its content, and it contributes nothing.
+
+- An entity is shown by its `rdfs:label` with a compact name beside it; an
+  unlabelled IRI is shown compactly (`prefix:local` for well-known vocabularies,
+  otherwise its last two path segments). Predicates show their label or local
+  name. When two distinct predicates under one entity would show the same name
+  (`ex:name` and `schema:name` both labelled "name", or two IRIs ending
+  `/name`), each carries its compact IRI — `name (ex/name)`,
+  `name (schema:name)` — or its full IRI if even those collide. Compaction
+  depends only on the IRI, never on the data, so both sides of a diff name
+  things the same way.
+- `~ predicate: old -> new` is reported only when the slot (subject, predicate,
+  graph) holds exactly one value on **both** sides. A multi-valued slot shows
+  its removed and added values separately.
+- **Blank nodes are matched by structure, not label.** RDFC-1.0 can relabel
+  every blank node between two versions of a payload; a pure relabel is zero
+  lines. A blank node referenced from another node is shown inline
+  (`[ city "Paris" ; zip "75001" ]`) as part of the referencing fact, so an edit
+  inside it is a change of that fact. Structurally identical blank nodes on
+  one slot are one fact with a count: cardinality matters to shapes
+  (`sh:maxCount`), so adding a second copy is shown as
+  `~ p: [ r "v" ] x1 -> [ r "v" ] x2`, and the textconv marks a fact asserted
+  more than once with `xN`. Limits: identical values nested inside an inlined
+  blank node still collapse; a blank node referenced only from inside a
+  blank-node cycle has no named root and is not shown; a blank *graph name*
+  is keyed by its label.
+- `--format markdown` suits a PR comment; `--format json` is the same
+  structure (`entities[].changed/added/removed`, plus totals) for tools.
+
+## `quipu diff-textconv` — readable `git diff` for pack files
+
+```text
+quipu diff-textconv <file>
+```
+
+Prints one payload file as stable, labelled, entity-grouped text: one header
+per entity (sorted by IRI, so a relabel never reorders the file), one
+`predicate: value` line per fact, blank nodes inline. Git's `textconv` runs it
+on both sides of a diff, so an ordinary `git diff`, `git log -p` or `git show`
+reads like this instead of two lines of full IRIs:
+
+```diff
+@@ -1,5 +1,5 @@
+ AAA Tracking (ability/aaa-tracking)
+-  abbrev: "AAA"
++  abbrev: "AAA CHANGED"
+   effectText: "x2 vs. air attacks"
+```
+
+Setup, once per clone (the attribute is already in this repository's
+`.gitattributes`; add it to your own):
+
+```bash
+printf '*.nt diff=quipu\n*.nq diff=quipu\n' >> .gitattributes
+git config diff.quipu.textconv "quipu diff-textconv"
+```
+
+Without the `git config` line the attribute is inert and Git diffs raw lines.
+`git diff --no-textconv` shows the raw form on demand. A file that does not
+parse (a working copy with merge conflict markers, say) is printed unchanged,
+so `git diff` never fails on it. Textconv affects display only: merges, hashes
+and `pendant-check` still operate on the canonical bytes.
+
+## Git transport: driver, decisions, and CI
+
+These commands operate on repository files and immutable Git snapshots. They do
+not open a Quipu store. Use a build with the `shacl` feature (the default).
+
+They shell out to the `git` executable found on `PATH` (the wrapper, the driver's
+snapshot reads, the shapes three-way merge, and `pendant-check` all do). If `git`
+cannot be found, the command exits 1 with `` `git` executable not found on PATH ``
+and writes nothing.
+
+```text
+quipu git-merge <ref>
+quipu merge-driver <base-file> <ours-file> <theirs-file> <path>
+quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
+```
+
+Version attributes for each share directory (adjust `qpack` to your layout):
+
+```gitattributes
+qpack/export.nt merge=quipu
+qpack/shapes.ttl merge=quipu
+qpack/manifest.json merge=quipu
+qpack/manifest.ttl merge=quipu
+```
+
+Start at the repository root with a clean index and worktree. Save the branch
+tips for later checks:
+
+```bash
+ours=$(git rev-parse HEAD)
+theirs=$(git rev-parse topic)
+base=$(git merge-base "$ours" "$theirs")
+quipu git-merge "$theirs"
+```
+
+`git-merge` supplies a command-local `merge.quipu.driver` definition and the
+three immutable commit IDs to its child Git process. Nothing is installed in
+global Git configuration. This context matters: Git does not promise to merge
+`shapes.ttl` before `export.nt`. The driver reads and merges shapes from the
+three commits first, rather than trusting whichever working file happens to
+exist. Directly invoking the low-level driver without context refuses.
+Overlapping shape edits refuse before the wrapper changes the worktree; resolve
+those edits on the branches first. Criss-cross bases and incompatible
+store/scope/destination/layout metadata also refuse.
+
+The graph operator is the same one used by store-level `quipu merge`. Functional
+conflicts retain the base value and create entries in `decisions.json`. No Git
+conflict markers are written to N-Triples. New entities from opposite branches
+with a common type are compared locally: whitespace-normalized, lowercase labels,
+Jaro-Winkler similarity at least 0.90, top five candidates per new entity.
+These are proposals, never automatic identity assertions. No paid model or
+network call is used. This baseline can miss aliases and can propose false
+matches; the decision belongs to the reviewer.
+
+Exit 2 means decisions or Git conflicts remain. Inspect the sidecar, then choose:
+
+```bash
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack conflict:0 ours
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack alias:0 reject
+```
+
+Conflict choices are `base`, `ours`, or `theirs`; alias choices are `accept`
+(add an explicit `owl:sameAs`) or `reject` (keep identities distinct). Resolution
+reconstructs the operator result from Git and refuses stale or altered proposal
+records. The last resolution must pass SHACL. It rewrites canonical `export.nt`,
+regenerates both manifests, drops old attestations and the optional derived
+`export.ttl`, and records `parent_share=ours` plus both IDs in `merge_parents`.
+Input `tx_anchor` and `created_at` remain the ours snapshot's metadata; a Git
+merge does not fabricate a store transaction. Each file is replaced atomically;
+the directory is not a multi-file transaction, so the hash gate must pass before
+use. Review and stage the complete directory, then commit:
+
+```bash
+git add qpack
+git commit
+quipu pendant-check "$base" "$ours" "$theirs" HEAD
+```
+
+The wrapper always stops before commit, including clean merges. It reconciles
+whole qpacks after Git because Git may skip individual drivers when one file is
+unchanged. Blank-node graphs currently refuse divergent merges: canonical blank
+labels are not stable identities across snapshots. Skolemize those nodes first.
+
+**CI is required even when local driver use is documented.** A clone with no
+driver definition, a forge merge button, or a rebase can fall back to text merge.
+The repository's SHACL test job runs `scripts/ci/pendant-merge-check.py` with full
+history and the PR's synthetic merge commit. It also replays two-parent merges introduced on the topic branch, then
+reconstructs base/ours/theirs,
+requires recorded resolutions, compares the committed graph, shapes and manifest
+with the operator result, and validates SHACL. A hand-rehashed unsafe result
+still fails. Push/nightly runs validate the committed packs too; a squash commit
+alone cannot reconstruct the original branch pair, so the PR check remains
+load-bearing. Keep the SHACL test check required in branch protection.
+
+**Known gap: an administrator bypasses the gate.** The replay that can actually
+fail is the PR check. On a `push` event the final replay is trivially
+`(base, ours, theirs) = (before, before, result)`: a fast-forward of the previous
+tip, so it re-validates the committed packs but cannot reconstruct a merge
+that happened elsewhere. This repository's `main` protection uses strict status
+checks, so a squash merge's tree equals the synthetic merge commit the PR check
+tested. It does **not** enforce protection for administrators, so an admin's
+direct push, or an admin merge that skips pending or failing checks, lands a
+qpack that no merge replay has verified. Treat an admin bypass as unverified and
+run `quipu pendant-check` on the original base/ours/theirs yourself, or enable
+"include administrators" if that gap is unacceptable.
+
+Measured on the repository's real Datalinks qpack, replacing the same functional
+value on both branches produces a **text conflict**, not a clean double. Git
+writes three marker lines into the RDF. Separate new IRIs with identical labels
+merge cleanly without an identity decision; disjoint additions merge cleanly and
+correctly. `tests/git_qpack_merge.rs` exercises those cases, decision resolution,
+and the driver-absent CI refusals using actual Git repositories.

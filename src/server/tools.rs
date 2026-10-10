@@ -119,6 +119,9 @@ macro_rules! rw_handler {
                 // finish_deferred_embed.
                 let (out, work) = {
                     let mut st = s.lock();
+                    // A refused signed write stops here, before a tool that
+                    // mutates outside a transaction can act (aegis-bys8d1).
+                    quipu::transaction_auth::refuse_if_refused()?;
                     let out = $tool(&mut st, &i)?;
                     (out, st.take_deferred_embed())
                 };
@@ -160,10 +163,31 @@ macro_rules! embed_handler {
             read_blocking(move || {
                 let original = i.clone();
                 let mut i = i;
-                if i.get("embedding").is_none() {
+                let no_embed = if stringify!($name) == "search" {
+                    let config = &s.search_config;
+                    let configured_mode = if config.mode == "hybrid" && !config.hybrid {
+                        "semantic"
+                    } else {
+                        config.mode.as_str()
+                    };
+                    let mode = i
+                        .get("mode")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or(configured_mode);
+                    mode == "keyword"
+                        || (mode == "hybrid"
+                            && i.get("alpha")
+                                .and_then(JsonValue::as_f64)
+                                .unwrap_or(config.alpha)
+                                == 0.0)
+                } else {
+                    false
+                };
+                if i.get("embedding").is_none() && !no_embed {
                     if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {
-                        // Brief lock: clone the Arc provider, then DROP the guard.
-                        let provider = { s.lock().embedding_provider() };
+                        // The handle's startup copy: never the writer lock, which a
+                        // long write can hold for minutes (aegis-hzh9rz).
+                        let provider = s.embedding_provider.clone();
                         if let Some(provider) = provider {
                             let vec = provider.embed_text(&text)?; // CPU work, LOCK-FREE
                             if let Some(obj) = i.as_object_mut() {
@@ -227,7 +251,18 @@ rw_handler!(queries, quipu::tool_queries);
 // /shapes, whose triples never reach the queryable store). So this is
 // rw_handler! and /ontology is in WRITE_ENDPOINTS.
 #[cfg(feature = "owl")]
-rw_handler!(ontology, quipu::tool_load_ontology);
+pub(crate) async fn ontology(
+    State(s): State<SharedStore>,
+    axum::Json(i): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    if i.get("action").and_then(JsonValue::as_str) == Some("materialize") {
+        return super::owl_materialize::materialize(s, i).await;
+    }
+    ontology_locked(State(s), axum::Json(i)).await
+}
+
+#[cfg(feature = "owl")]
+rw_handler!(ontology_locked, quipu::tool_load_ontology);
 
 // Registered even without the `owl` feature, and deliberately NOT left to 404.
 // The parent bead (aegis-1xb10) was slowed by exactly this ambiguity: /ontology

@@ -36,7 +36,7 @@
     {
       "id": "verify-before-trust",
       "title": "Receiving knowledge is a deliberate act",
-      "source": "docs/book/src/sharing/README.md",
+      "source": "docs/book/src/sharing/index.md",
       "quote": "It does not merge on receipt, and it does not take a peer's word for how trustworthy that peer is.",
       "summary": "Verify the bytes, inspect and adopt the shapes, stage the graph, then deliberately promote it. A share transports knowledge without silently granting it local authority.",
       "code": ["src/share_transport.rs", "src/share_import.rs"],

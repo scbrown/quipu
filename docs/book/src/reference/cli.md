@@ -10,16 +10,19 @@ The `quipu` binary provides a command-line interface for all operations.
 
 ## Build identity
 
-`quipu --version` (also `-V` or `version`) reports two lines without loading
+`quipu --version` (also `-V` or `version`) reports build identity without loading
 configuration or opening a database:
 
 ```text
 quipu <version>
 git_sha: <build-commit>
+git_dirty: <true-or-false>
 ```
 
 The first line retains the version-only format for existing parsers. The second
 line identifies the source commit, or `unknown` when built without Git metadata.
+The third reports the build-time working-tree dirty flag. `quipu-server --version`
+(and `-V`) exposes the same fields with a `quipu-server` first-line prefix.
 Compare known build commits to detect differences between releases; equal version
 strings alone do not establish that two binaries contain the same code.
 
@@ -157,7 +160,7 @@ The three scope flags are mutually exclusive. Omit all three for ROOT.
 ### `quipu share`
 
 Write a deterministic directory intended for git storage and interchange.
-First [load an identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+First [load an identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share)
 and your data's shapes into the same store. The examples below assume that setup.
 Outward shares refuse with exit 2 when no block-tier catalogue is available,
 exit 1 when a rule matches, and exit 0 when the checked payload is clean.
@@ -242,6 +245,39 @@ with `source = "reasoner:<rule-id>"` provenance.
 
 See [Reasoner Reference](reasoner.md) for full details on rule syntax and
 the evaluation model.
+
+### `quipu demotions`
+
+List unsupported Datalog demotions in a premise graph's companion:
+
+```bash
+quipu demotions --db my.db
+quipu demotions --graph urn:example:premises --db my.db
+```
+
+The JSON rows identify the retained record, subject, predicate, object, premise
+graph, deriver source, promotion transaction and invalidation transaction.
+`--graph` defaults to ROOT. The command installs the shipped
+`unsupported_demotions` stored query if missing; a fresh store returns no rows.
+After the companion is initialized, HTTP clients can call
+`POST /ask` with `{"name":"unsupported_demotions"}`; for a named companion, add
+`"params":{"graph":"urn:example:premises#inferred"}`.
+
+Support loss removes the original triple from first-class standing and retains
+one `quipu:DemotedDerivation` reification record. Datalog, OWL and RDFS
+materializers exclude plane bookkeeping from premises. Ordinary graph queries
+can still inspect the record; it does not assert the reified triple. Restored
+support marks it `resolved` and recreates the derivation only in the companion.
+Resolved records remain available through graph queries but leave this list.
+This is truth maintenance, not a promotion or automatic-promotion API.
+Load the product evidence schema alongside the application's other shapes:
+
+```bash
+quipu shapes load demoted-derivations shapes/demoted-derivation.ttl --db my.db
+```
+
+Demotion does not load shapes automatically: installing the first shape set
+would activate the vocabulary gate for unrelated writes in an ungoverned store.
 
 ### `quipu impact <entity-IRI>`
 
@@ -358,6 +394,57 @@ evaluated*, means re-running the selector against the file as it stood, and quip
 has neither the file nor the parser. And the report counts lines it could not
 read rather than skipping them, so `N line(s) unreadable` is always part of the
 summary: conformance over a window that was only partly read is not conformance.
+
+### Git path-policy backstop
+
+```bash
+quipu audit trace.jsonl --repo . --from BASE --to HEAD --json --db my.db
+```
+
+All three Git flags are required together. `BASE` is exclusive; `HEAD` is
+inclusive. Both resolve to full immutable commit ids before enumeration. The
+base must be an ancestor. Shallow repositories and ancestry grafts are refused;
+replacement objects are ignored. The `git`
+object reports those ids, commits and changed paths checked, path-policy count,
+and unresolved coverage. An empty policy catalogue is unproven, not a clean scan.
+
+The additional **git-coverage** pass reads ROOT's **current** action policies
+with `appliesTo` path globs. Globs use the same `glob::Pattern` matching as
+Yupana tripwires. It checks each commit, not just the window's net diff: a
+crossing followed by a revert is still visible. Renames check both old and new
+paths; merges check every parent and the window includes side-branch commits.
+Policy scope is the supplied repository; use a store containing the policies
+intended for that repository. Policies introduced after the audited commits
+also apply: this is a current-policy retrospective audit, not historical policy
+reconstruction.
+
+A changed matching path needs a conclusive evaluation with the exact policy id,
+repository-relative `path`, and full `git_commit` id in the trace record.
+Missing evidence produces a **bypassed enforcement** violation. A path-only
+`deny` crossing produces a violation even with a recorded evaluation: a claim
+that it was blocked cannot excuse the committed crossing. The report includes
+the commit author and declared `Co-Authored-By`, `Claude-Session`, and
+`SHANTY_AGENT` metadata for investigation.
+
+Existing pre-edit spools do **not** emit `git_commit`; they remain valid for the
+trace-only checker but do not establish Git coverage. A trusted producer must
+bind an evaluation to its actual commit; do not backfill every old path record
+with the current tip. This reader does not authenticate such bindings.
+
+Git mode exits **1** for a violation, **2** when Git coverage cannot be verified
+(including malformed trace lines, invalid refs/globs, no path policies, or
+unsupported selector replay without another violation), and **0** otherwise.
+Trace-only incompleteness retains its original semantics. Selector/predicate
+policies with matching `appliesTo` are explicitly unresolved; selectors without
+path scope are outside this pass. Selector replay against committed blobs is a
+separate layer, not a capability claimed by this path-only check.
+
+This catches only changes reaching the selected Git window. Uncommitted edits,
+ignored files and writes outside the repository remain invisible. Authors,
+trailers and trace evidence can be forged: this is an audit backstop, not a
+server-side enforcement boundary. Human edits are audited too, because an
+absent agent trailer does not prove a human author. Signed exception verdicts
+and a required forge check are not implemented by this command.
 
 ### `quipu audit inventory`
 
@@ -646,6 +733,47 @@ Output is one line per hit (`tx <id> (<timestamp>): would have fired on
 so a script that knots on success cannot read an unevaluable candidate as
 clean.
 
+### `quipu gate shadow`
+
+Judge a **candidate policy set** over recorded history before any of it is
+created, and report which committed writes it would refuse that the governing
+set admitted (and the reverse). Never writes.
+
+```bash
+sqlite3 live.db ".backup copy.db"      # a quiescent copy, never the live store
+quipu gate shadow --rules candidate.ttl --db copy.db --since 7d
+quipu gate shadow --rules candidate.ttl --db copy.db --from-tx 1000 --to-tx 2000 --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--rules <file.ttl>` | Candidate policies: action-boundary `aegis:Policy` nodes with `aegis:targets` and `aegis:claim` (required) |
+| `--db <copy.db>` | A quiescent copy of the store (required; see refusals below) |
+| `--since <dur>` | Window: transactions stamped within `90m`, `24h`, `7d`, … |
+| `--from-tx <A> --to-tx <B>` | Explicit window; both together |
+| `--last-txs <N>` | The last N transactions (default: the whole log) |
+| `--max-txs <N>` | Stop after judging N; the report says where it stopped |
+| `--mode add\|replace` | `add` (default) layers the candidate over the governing set, same IRI replacing; `replace` makes the candidate the whole set |
+| `--json` | Machine-readable report |
+
+Each transaction is judged by the **write gate's own evaluator** against the
+post-state it saw, with the router read as of that transaction's time. The
+baseline is the policy set **in force at that transaction**, so a policy change
+inside the window is reported as a boundary and never attributed to the
+candidate.
+
+**Refusals, not advice.** The command refuses the configured live store and any
+path with a `-wal`, `-shm` or `-journal` sidecar (an open connection, or a copy
+taken mid-write): it reads with SQLite `immutable=1`, which ignores locks and
+the WAL and could see torn state on a live file.
+
+**Limits it reports rather than hides:** refused writes are rolled back and
+cannot be replayed, so they are counted, not judged; recorded verdicts are
+joined by `aegis:gatedTx` when present and otherwise by the next-transaction
+convention, with the match rate printed (and `UNMEASURED` when nothing joined);
+and a baseline that would refuse a committed write is counted as the fidelity
+signal (enforcement off then, an approval, or a reconstruction gap).
+
 ### `quipu path`
 
 Golden-path analysis over recorded trajectories: the provenance cone, the
@@ -906,3 +1034,51 @@ feature).
 ```bash
 quipu migrate-vectors --from sqlite --to lancedb --dry-run --db my.db
 ```
+
+### `quipu hook session-capture` and `quipu hooks`
+
+quipu ships one agent hook: a Stop hook that asks the agent, once per session,
+whether the session produced durable knowledge worth writing as an episode.
+The agent may act or reply `skip`; the hook never blocks a second stop.
+
+```bash
+quipu hooks bundle                      # print the hook bundle (schema st.hook-bundle/1)
+quipu hooks install --harness claude    # merge into ~/.claude/settings.json
+quipu hooks install --harness codex     # merge into $CODEX_HOME/config.toml (default ~/.codex)
+quipu hooks status                      # exit 1 unless every harness has the hook
+quipu hooks uninstall                   # remove only quipu's hook
+```
+
+With no `--harness`, both harnesses are written. `--project` writes
+`./.claude/settings.json` or `./.codex/config.toml` instead. Install is
+idempotent, leaves every other hook in place, and keeps the previous file as
+`<file>.bak-quipu`. When a shantytown registry answers (`st ops hooks list`),
+install and uninstall register the bundle with `st` instead, which renders it
+into every role's settings; pass `--no-st` to write the harness config directly.
+
+The hook itself, `quipu hook session-capture`, reads the Stop-hook JSON on
+stdin and prints at most one response. It always exits 0, and every failure is
+silence rather than a malformed response. Its guards, in order:
+
+1. **Scope.** The crew comes from `GT_CREW`, else from a `.../crew/<name>/...`
+   working directory. An unidentified crew is never interrupted.
+   `QUIPU_HOOK_CREWS` (space-separated, default `*`) narrows the scope.
+2. **Loop guard.** `stop_hook_active: true` means the hook already fired this
+   turn, so it stays silent.
+3. **Once per session.** A `solicited-<session_id>` marker in the state
+   directory. Markers older than two days are reaped.
+4. **Durable denominator.** Each solicitation appends
+   `{ts, session_id, crew}` to `solicit-log.jsonl` before it is sent. If that
+   append fails the hook stays silent, so the log can never undercount.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QUIPU_SERVER` | `http://127.0.0.1:3030` | Server URL named in the message |
+| `QUIPU_HOOK_GROUP` | `default` | Episode `group_id` named in the message |
+| `QUIPU_HOOK_CREWS` | `*` | Crews the hook may interrupt |
+| `QUIPU_HOOK_STATE_DIR` | `~/.quipu-hook` | Markers and `solicit-log.jsonl` |
+| `GT_CREW` | (unset) | The crew name, when the cwd does not carry it |
+
+The message tells the agent that writes need a bearer from `QUIPU_AUTH_TOKEN`
+and to send `X-Quipu-Client: session-capture`. The act rate is
+`episodes whose source carries the session id / lines in solicit-log.jsonl`.

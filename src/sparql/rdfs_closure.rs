@@ -255,11 +255,13 @@ fn load(store: &Store, graphs: &[i64]) -> Result<BTreeSet<Triple>> {
     let placeholders = graphs.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
         "SELECT e, a, v FROM facts \
-         WHERE g IN ({placeholders}) AND op = 1 AND valid_to IS NULL"
+         WHERE g IN ({placeholders}) AND op = 1 AND valid_to IS NULL \
+         AND tx NOT IN (SELECT id FROM transactions WHERE source = ?)"
     );
     let mut stmt = store.prepare(&sql)?;
-    let params: Vec<&dyn rusqlite::ToSql> =
+    let mut params: Vec<&dyn rusqlite::ToSql> =
         graphs.iter().map(|g| g as &dyn rusqlite::ToSql).collect();
+    params.push(&crate::store::inferred::PLANE_SOURCE);
     let rows = stmt.query_map(params.as_slice(), |row| {
         Ok((
             row.get::<_, i64>(0)?,

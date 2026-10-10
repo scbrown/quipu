@@ -4,6 +4,7 @@
 //! follow-up): these are the committed-tier read queries `ops`' write path
 //! and the export/audit surfaces share.
 
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 
 use crate::error::Result;
@@ -38,10 +39,7 @@ impl Store {
              WHERE op = 1 AND valid_to IS NULL AND g = ?1 \
              ORDER BY e, a, tx",
         )?;
-        let mut facts = Self::collect_facts(&mut stmt, params![g])?;
-        let mut seen = std::collections::HashSet::new();
-        facts.retain(|f| seen.insert((f.entity, f.attribute, f.value.term_key())));
-        Ok(facts)
+        Self::collect_visible_facts(&mut stmt, params![g])
     }
 
     /// Current asserted facts across a SET of graphs, unioned. The read the
@@ -124,7 +122,7 @@ impl Store {
         let mut changes = Vec::new();
         for (_, mut datum) in events.into_iter().rev() {
             if seen.insert((datum.entity, datum.attribute, datum.value.term_key())) {
-                datum.op = if self.has_literal(datum.entity, datum.attribute, &datum.value, g)? {
+                datum.op = if self.has_fact_claim(datum.entity, datum.attribute, &datum.value, g)? {
                     Op::Assert
                 } else {
                     Op::Retract
@@ -161,7 +159,7 @@ impl Store {
         let mut values = attributes.to_vec();
         values.push(g);
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
     /// Current facts matching BOTH an attribute in `attributes` and a subject in
@@ -204,7 +202,50 @@ impl Store {
         values.extend_from_slice(entities);
         values.extend_from_slice(graphs);
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
+    }
+
+    /// Current facts with an attribute in `attributes` — and, when `entities`
+    /// is given, a subject in it — in EVERY graph, each paired with its graph id.
+    ///
+    /// The read `/update` builds its evaluation slice from (aegis-jm1lcl). One
+    /// `idx_aevt` probe replaces a per-graph loop, and unlike
+    /// [`Store::current_facts_for_attributes_and_entities_in_graphs`] it keeps
+    /// the graph: that reader de-duplicates on `(e, a, v)` across graphs, which
+    /// would merge the same triple held in two graphs. De-duplication here is
+    /// per graph, matching [`Store::current_facts_in_graph`]. Graph filtering is
+    /// the caller's (the meta-graph, for one, is not a dataset graph).
+    pub fn current_graph_facts_for_attributes(
+        &self,
+        attributes: &[i64],
+        entities: Option<&[i64]>,
+    ) -> Result<Vec<(i64, i64, i64, Value)>> {
+        if attributes.is_empty() || entities.is_some_and(<[i64]>::is_empty) {
+            return Ok(Vec::new());
+        }
+        let ph = |n: usize| std::iter::repeat_n("?", n).collect::<Vec<_>>().join(", ");
+        let mut sql = format!(
+            "SELECT g, e, a, v FROM facts INDEXED BY idx_aevt \
+             WHERE op = 1 AND valid_to IS NULL AND a IN ({})",
+            ph(attributes.len())
+        );
+        let mut values = attributes.to_vec();
+        if let Some(entities) = entities {
+            sql.push_str(&format!(" AND e IN ({})", ph(entities.len())));
+            values.extend_from_slice(entities);
+        }
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(values))?;
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            let (g, e, a): (i64, i64, i64) = (row.get(0)?, row.get(1)?, row.get(2)?);
+            let bytes: Vec<u8> = row.get(3)?;
+            if seen.insert((g, e, a, bytes.clone())) {
+                out.push((g, e, a, Value::from_bytes(&bytes)?));
+            }
+        }
+        Ok(out)
     }
 
     /// Current facts whose SUBJECT is one of `entities`, across `graphs`.
@@ -238,7 +279,7 @@ impl Store {
         let mut values = entities.to_vec();
         values.extend_from_slice(graphs);
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
     /// Like [`Store::current_facts_for_attributes_in_graph`], but excluding
@@ -353,7 +394,7 @@ impl Store {
             values.push(rusqlite::types::Value::Text(s.clone()));
         }
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
     /// Return ROOT's facts for a specific entity (current state).
@@ -379,7 +420,113 @@ impl Store {
              WHERE e = ?1 AND op = 1 AND valid_to IS NULL AND g = ?2 \
              ORDER BY a",
         )?;
-        Self::collect_facts(&mut stmt, params![entity, g])
+        Self::collect_visible_facts(&mut stmt, params![entity, g])
+    }
+
+    /// Current asserted facts for an entity across every NAMED graph (never
+    /// ROOT). Search embeds an entity from its ROOT facts; this is the fallback
+    /// for an entity that exists only in named graphs, which otherwise builds no
+    /// text and is never embedded (aegis-rcz5ib.10).
+    pub fn entity_facts_in_named_graphs(&self, entity: i64) -> Result<Vec<Fact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
+             WHERE e = ?1 AND op = 1 AND valid_to IS NULL AND g != 0 \
+             ORDER BY a",
+        )?;
+        Self::collect_visible_facts(&mut stmt, params![entity])
+    }
+
+    /// The graph id of a REGISTERED named graph, or `None`. Scoped reads
+    /// refuse an unregistered IRI rather than falling back to ROOT.
+    pub fn registered_graph_id(&self, graph_iri: &str) -> Result<Option<i64>> {
+        let Some(g) = self.lookup(graph_iri)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .conn
+            .query_row("SELECT g FROM graphs WHERE g = ?1", params![g], |r| {
+                r.get(0)
+            })
+            .optional()?)
+    }
+
+    /// Whether `entity` has a current asserted fact in graph `g`.
+    pub fn entity_in_graph(&self, entity: i64, g: i64) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM facts WHERE g = ?2 AND e = ?1 AND op = 1 \
+                 AND valid_to IS NULL LIMIT 1",
+                params![entity, g],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Whether `entity` is a named-graph-only entity: it has had facts in
+    /// some named graph and has never had a fact in ROOT. Unscoped search
+    /// excludes these so ROOT results are unchanged (aegis-rcz5ib.10).
+    pub fn entity_is_named_graph_only(&self, entity: i64) -> Result<bool> {
+        let ever_root = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM facts WHERE g = 0 AND e = ?1 LIMIT 1",
+                params![entity],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if ever_root {
+            return Ok(false);
+        }
+        let origins: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='named_search_entities')",
+            [],
+            |r| r.get(0),
+        )?;
+        if origins
+            && self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM named_search_entities WHERE entity_id=?1)",
+                params![entity],
+                |r| r.get::<_, bool>(0),
+            )?
+        {
+            return Ok(true);
+        }
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM facts WHERE e = ?1 AND g != 0 LIMIT 1",
+                params![entity],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Retain the origin of a named-only vector independently of fact cleanup.
+    /// Called before a vector write, so partial failure cannot expose a named
+    /// vector through ROOT. This cache is regenerated with named embeddings.
+    pub fn mark_named_search_embedding(&self, entity: i64) -> Result<()> {
+        if !self.entity_is_named_graph_only(entity)? {
+            return Ok(());
+        }
+        self.conn.execute_batch("CREATE TABLE IF NOT EXISTS named_search_entities(entity_id INTEGER PRIMARY KEY REFERENCES terms(id))")?;
+        self.conn.execute(
+            "INSERT OR IGNORE INTO named_search_entities(entity_id) VALUES(?1)",
+            params![entity],
+        )?;
+        Ok(())
+    }
+
+    /// Distinct entities with a current asserted fact in graph `g`.
+    pub fn entities_in_graph(&self, g: i64) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT e FROM facts WHERE g = ?1 AND op = 1 AND valid_to IS NULL ORDER BY e",
+        )?;
+        let rows = stmt.query_map(params![g], |r| r.get(0))?;
+        Ok(rows.collect::<std::result::Result<Vec<i64>, _>>()?)
     }
 
     /// Time-travel query: return ROOT's facts as they were at a given point.
@@ -394,6 +541,9 @@ impl Store {
         );
         if as_of.tx.is_some() {
             sql.push_str(" AND tx <= ?1");
+            if as_of.valid_at.is_none() {
+                sql.push_str(" AND (retracted_tx IS NULL OR retracted_tx > ?1)");
+            }
         }
         if as_of.valid_at.is_some() {
             let param_idx = if as_of.tx.is_some() { "?2" } else { "?1" };
@@ -405,10 +555,10 @@ impl Store {
 
         let mut stmt = self.conn.prepare(&sql)?;
         match (&as_of.tx, &as_of.valid_at) {
-            (Some(tx), Some(vt)) => Self::collect_facts(&mut stmt, params![tx, vt]),
-            (Some(tx), None) => Self::collect_facts(&mut stmt, params![tx]),
-            (None, Some(vt)) => Self::collect_facts(&mut stmt, params![vt]),
-            (None, None) => Self::collect_facts(&mut stmt, params![]),
+            (Some(tx), Some(vt)) => Self::collect_visible_facts(&mut stmt, params![tx, vt]),
+            (Some(tx), None) => Self::collect_visible_facts(&mut stmt, params![tx]),
+            (None, Some(vt)) => Self::collect_visible_facts(&mut stmt, params![vt]),
+            (None, None) => Self::collect_visible_facts(&mut stmt, params![]),
         }
     }
 

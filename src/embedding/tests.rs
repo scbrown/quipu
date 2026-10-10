@@ -521,3 +521,143 @@ fn plain_comment_update_reembeds() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].text, text);
 }
+
+/// Knot one producer snapshot, then drain and apply the deferred embed the
+/// server would run after it. Returns the texts that were queued for ONNX.
+fn republish_and_drain(store: &mut Store, turtle: &str, timestamp: &str) -> Vec<String> {
+    crate::mcp::knot::tool_knot(
+        store,
+        &serde_json::json!({
+            "turtle": turtle, "timestamp": timestamp,
+            "replace_snapshot": true, "snapshot": "bobbin-chunks:r"
+        }),
+    )
+    .unwrap();
+    let Some(work) = store.take_deferred_embed() else {
+        return Vec::new();
+    };
+    let texts: Vec<String> = work.texts().iter().map(|t| (*t).to_string()).collect();
+    let provider: Arc<dyn EmbeddingProvider> = Arc::new(DummyProvider);
+    let embeddings = provider.embed_batch(&work.texts()).unwrap();
+    store.apply_deferred_embed(&work, &embeddings).unwrap();
+    texts
+}
+
+#[test]
+fn snapshot_republish_embeds_only_changed_or_unembedded_entities() {
+    // aegis-tvlxr4: a producer snapshot replace hands the embed hook EVERY
+    // assertion in the snapshot, unchanged ones included, so a daily
+    // republication that changed 82 of 28,337 chunks re-embedded all 28,337.
+    // That ONNX drain outlived the producer's promote deadline and grew the
+    // server into its planned-recycle bound. An entity whose current vector
+    // was built from byte-identical text must not be embedded again.
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(DummyProvider));
+    store.embedding_config_mut().auto_embed = true;
+    store.set_defer_auto_embed(true);
+    let label = "http://www.w3.org/2000/01/rdf-schema#label";
+    let snapshot = |b: &str| {
+        format!(
+            "<http://ex/a> <{label}> \"alpha\" .\n<http://ex/b> <{label}> \"{b}\" .\n<http://ex/c> <{label}> \"gamma\" .\n"
+        )
+    };
+
+    let first = republish_and_drain(&mut store, &snapshot("beta"), "2026-09-29T07:00:00Z");
+    assert_eq!(
+        first.len(),
+        3,
+        "a new snapshot embeds every entity: {first:?}"
+    );
+    assert_eq!(store.vector_count().unwrap(), 3);
+
+    // Byte-identical republish: nothing to embed, and no vector is retired.
+    let same = republish_and_drain(&mut store, &snapshot("beta"), "2026-09-29T07:05:00Z");
+    assert!(same.is_empty(), "unchanged snapshot re-embedded {same:?}");
+    assert_eq!(store.vector_count().unwrap(), 3);
+
+    // One changed entity: only it is embedded.
+    let one = republish_and_drain(&mut store, &snapshot("BETA"), "2026-09-29T07:10:00Z");
+    assert_eq!(one, vec!["BETA".to_string()]);
+    assert_eq!(store.vector_count().unwrap(), 3);
+
+    // An entity left without a current vector (a restart between retiring
+    // the old vector and writing the new one) is healed by the next
+    // republish even though its facts did not change.
+    let c = store.lookup("http://ex/c").unwrap().unwrap();
+    store.close_embedding(c, "2026-09-29T07:11:00Z").unwrap();
+    assert_eq!(store.vector_count().unwrap(), 2);
+    let healed = republish_and_drain(&mut store, &snapshot("BETA"), "2026-09-29T07:15:00Z");
+    assert_eq!(healed, vec!["gamma".to_string()]);
+    assert_eq!(store.vector_count().unwrap(), 3);
+}
+
+fn ingest_named(store: &mut Store, graph_iri: &str, turtle: &str) {
+    let graph = store.overlay_create(graph_iri, 0).unwrap();
+    crate::rdf::ingest_rdf_to_graph(
+        store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+}
+
+#[test]
+fn named_graph_only_entity_gets_embedding_text() {
+    // aegis-rcz5ib.10: an entity that exists only in a named graph used to
+    // build EMPTY text and was never embedded, so search could not reach it.
+    let mut store = Store::open_in_memory().unwrap();
+    ingest_named(
+        &mut store,
+        "urn:test:graph:knowledge",
+        r#"<https://example.org/issues/5877> <http://www.w3.org/2000/01/rdf-schema#label> "beads#5877: Proposal: Memory Beads" ."#,
+    );
+    let id = store
+        .lookup("https://example.org/issues/5877")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        build_entity_text(&store, id).unwrap(),
+        "",
+        "default-off prevents an automatic named-corpus drain"
+    );
+    assert_eq!(
+        super::build_entity_text_for_graph_backfill(&store, id).unwrap(),
+        "beads#5877: Proposal: Memory Beads"
+    );
+    store.search_config_mut().named_graphs = true;
+    assert_eq!(
+        build_entity_text(&store, id).unwrap(),
+        "beads#5877: Proposal: Memory Beads"
+    );
+}
+
+#[test]
+fn root_text_ignores_the_entitys_named_graph_facts() {
+    // ROOT facts define the text of any entity that has them, so adding a
+    // named-graph fallback cannot move an existing ROOT vector.
+    let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().named_graphs = true;
+    ingest_rdf(
+        &mut store,
+        r#"<http://example.org/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice" ."#
+            .as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+    ingest_named(
+        &mut store,
+        "urn:test:graph:other",
+        r#"<http://example.org/alice> <http://www.w3.org/2000/01/rdf-schema#comment> "graph-only note" ."#,
+    );
+    let id = store.lookup("http://example.org/alice").unwrap().unwrap();
+    assert_eq!(build_entity_text(&store, id).unwrap(), "Alice");
+}

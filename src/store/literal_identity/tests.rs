@@ -328,6 +328,9 @@ fn fresh_source_claims_survive_cleanup_in_both_orders() {
             assert_eq!(store.read_model().unwrap().len(), 2);
             let query = "SELECT ?s WHERE { ?s <http://example.org/p> \"1\"^^<http://www.w3.org/2001/XMLSchema#double> }";
             assert_eq!(crate::sparql::query(&store, query).unwrap().rows().len(), 1);
+            let count_query = "SELECT (COUNT(*) AS ?n) WHERE { ?s <http://example.org/p> \"1\"^^<http://www.w3.org/2001/XMLSchema#double> }";
+            let count = crate::sparql::query(&store, count_query).unwrap();
+            assert_eq!(count.rows()[0].get("n"), Some(&Value::Int(1)));
             let (first, last) = if reverse { ("B", "A") } else { ("A", "B") };
             store.retract_episode(first, "2026-01-02", None).unwrap();
             assert_eq!(store.latest_event_offset().unwrap(), offset);

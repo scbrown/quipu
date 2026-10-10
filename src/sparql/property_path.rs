@@ -12,6 +12,9 @@ use crate::types::Value;
 use super::pattern_util::bind_var;
 use super::{Bindings, TemporalContext};
 
+#[path = "property_path_lits.rs"]
+mod lits;
+
 /// Evaluate a property path pattern, returning bindings for subject/object variables.
 pub fn eval_path_pattern(
     store: &Store,
@@ -23,9 +26,38 @@ pub fn eval_path_pattern(
 ) -> Result<Vec<Bindings>> {
     let subj_id = resolve_term_to_id(store, subject, bindings)?;
     let obj_id = resolve_term_to_id(store, object, bindings)?;
-    let pairs = eval_path_expr(store, path, subj_id, obj_id, ctx)?;
+    // A path can END on a literal (aegis-sxlptn). The node engine below works
+    // on (id, id) pairs and cannot represent one, so literal endings are
+    // evaluated separately. A literal object -- constant, or a variable already
+    // bound to one -- can never equal a node, so it skips the node engine
+    // entirely; before this, a constant literal resolved to "unbound" and the
+    // node engine returned every subject with ANY edge on the path.
+    let fixed_lit = lits::fixed_literal(store, object, bindings)?;
+    let pairs = if fixed_lit.is_some() {
+        Vec::new()
+    } else {
+        eval_path_expr(store, path, subj_id, obj_id, ctx)?
+    };
 
     let mut results = Vec::new();
+    if obj_id.is_none() {
+        for (s_id, value) in lits::eval_path_lits(store, path, subj_id, fixed_lit.as_ref(), ctx)? {
+            let mut new_bindings = bindings.clone();
+            let mut compatible = true;
+            bind_term(
+                &mut new_bindings,
+                subject,
+                id_to_value(store, s_id)?,
+                &mut compatible,
+            );
+            if compatible {
+                bind_term(&mut new_bindings, object, value, &mut compatible);
+            }
+            if compatible && !results.contains(&new_bindings) {
+                results.push(new_bindings);
+            }
+        }
+    }
     for (s_id, o_id) in pairs {
         let mut new_bindings = bindings.clone();
         let mut compatible = true;
@@ -53,6 +85,10 @@ pub fn eval_path_pattern(
         && resolve_term_to_id(store, object, bindings)?.is_none()
     {
         for value in literal_node_values(store, ctx)? {
+            // A constant literal object admits only its own zero-length path.
+            if fixed_lit.as_ref().is_some_and(|lit| lit != &value) {
+                continue;
+            }
             let mut identity = bindings.clone();
             let mut compatible = true;
             bind_term(&mut identity, subject, value.clone(), &mut compatible);

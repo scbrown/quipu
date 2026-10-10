@@ -197,7 +197,7 @@ fn comparable_values(values: &[Value]) -> bool {
         || values.iter().all(|value| value.as_lexical().is_some())
 }
 
-fn typed_number(value: f64, datatype: &str) -> Value {
+pub(super) fn typed_number(value: f64, datatype: &str) -> Value {
     let lexical = if datatype == crate::namespace::XSD_DOUBLE {
         let rendered = format!("{value:E}");
         let (mantissa, exponent) = rendered.split_once('E').unwrap_or((&rendered, "0"));

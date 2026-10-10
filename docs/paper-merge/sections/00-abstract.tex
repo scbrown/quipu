@@ -1,7 +1,7 @@
 \begin{abstract}
 Version control works for source code because its merge understands the medium:
 lines. Knowledge graphs shared between people and software agents are not lines,
-and merging their serialisations makes conflicts out of ordering and misses the
+and merging their serializations makes conflicts out of ordering and misses the
 ones that matter. We describe and evaluate a three-way merge for RDF in which
 the \emph{schema} decides what a conflict is: the merge is set algebra over
 canonical triples, and a slot is contended only where a SHACL shape declares
@@ -11,11 +11,11 @@ then validates the merge result, so the schema that defines conflicts also
 audits their resolution.
 
 We do not claim the first three-way merge for RDF. Git-backed RDF versioning
-with merge strategies is established prior work, and the closest neighbour ---
+with merge strategies is established prior work, and the closest neighbor ---
 Quit Store's Context Merge --- is included here as a baseline that this operator
 extends rather than replaces. Our contribution is an implementation in a
 production multi-agent store and an evaluation of what schema-derived conflict
-semantics buys against that neighbour and against six other strategies.
+semantics buys against that neighbor and against six other strategies.
 
 On a synthetic divergence benchmark over five seeds, the shape-aware operator
 raised $33$ conflicts, all true positives, with no false positives, no triples

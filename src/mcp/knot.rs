@@ -163,11 +163,30 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // Context is scoped to the RESOLVED DESTINATION graph unioned with ROOT
     // (quipu-080): earlier chunks of a plane-routed write typed their nodes in
     // that plane, not in ROOT.
+    //
+    // Routed by `quipu:onViolation` exactly as `/episode` routes (aegis-4c3ppi):
+    // the REJECT half gates the write; the EMIT half only observes, its
+    // violations riding this write's savepoint as `shacl.violation` events.
+    // Before this, `/knot` validated the combined document whole, so every
+    // emit-annotated shape was a hard reject on this path only.
     #[cfg(feature = "shacl")]
     if let Some(shapes) = &combined_shapes {
+        let split = crate::shacl::split_shapes_by_policy(shapes);
         let feedback = crate::shacl_context::validate_with_store_context_in_graph(
-            store, shapes, turtle, graph,
+            store,
+            &split.reject,
+            turtle,
+            graph,
         )?;
+        if feedback.conforms && split.has_emit {
+            let observed = crate::shacl_context::validate_with_store_context_in_graph(
+                store,
+                &split.emit,
+                turtle,
+                graph,
+            )?;
+            crate::shacl_context::queue_emit_violations(store, &observed);
+        }
         if !feedback.conforms {
             // A gate refusal, even though this surface reports it as
             // `conforms: false` rather than an Err: record it on the audit
@@ -237,12 +256,14 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         // resolved graph: a snapshot in graph G replaces only G's prior
         // facts under this producer key and leaves ROOT untouched.
         let mut datums = store.plan_source_retraction(&source_tag, graph)?;
-        let mut assertions = crate::rdf::parse_rdf(
+        let mut assertions = crate::rdf::parse_rdf_scoped(
             store,
             turtle.as_bytes(),
             oxrdfio::RdfFormat::Turtle,
             None,
             &valid_from,
+            graph,
+            input.get("blank_node_scope").and_then(JsonValue::as_str),
         )?;
         let count = assertions.len();
         datums.retain(|old| {
@@ -276,7 +297,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         // is `knot:<actor>` — attributable, retractable, and outside the
         // `snapshot:` namespace, which carries authority this write lacks.
         let tagged = crate::store::source_tag::resolve("knot", actor, source);
-        crate::rdf::ingest_rdf_bitemporal(
+        crate::rdf::ingest_rdf_bitemporal_with_scope(
             store,
             turtle.as_bytes(),
             oxrdfio::RdfFormat::Turtle,
@@ -286,6 +307,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             actor,
             Some(&tagged),
             graph,
+            input.get("blank_node_scope").and_then(JsonValue::as_str),
         )?
     };
 

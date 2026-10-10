@@ -248,10 +248,11 @@ class PublishedArtifactsTests(unittest.TestCase):
         # aegis-zmln5e: the strong sentence must not outlive the numbers.
         import copy
         data = REPORT.load(RESULTS)
+        s10 = data["sparql10"]["counts"]
         core_all_pass = all(
             data["classes"][n]["counts"]["passed"] == data["classes"][n]["counts"]["cases"]
             for n in REPORT.CORE_CLAIM_CLASSES
-        )
+        ) and s10["passed"] == s10["cases"]
         block = "\n".join(REPORT.claim_boundary(data))
         self.assertEqual("passes **all**" in block, core_all_pass)
         # Break exactly one core row: the claim must fall back, with no "all".
@@ -303,14 +304,74 @@ class CompetitorTableTests(unittest.TestCase):
                 REPORT.load(RESULTS, tmp)
 
 
-class Sparql10DisclosureTests(unittest.TestCase):
-    """aegis-soqv1r: the 1.1 manifests are the 1.1 ADDITIONS; the 1.0 suite is not scored."""
+class Sparql10Tests(unittest.TestCase):
+    """aegis-soqv1r: the SPARQL 1.0 query tests are scored, and they gate "all"."""
 
-    def test_the_claim_boundary_says_the_sparql10_suite_is_not_run(self):
-        page = REPORT.render_markdown(REPORT.load(RESULTS))
+    def _passing(self, data):
+        import copy
+        data = copy.deepcopy(data)
+        for name in REPORT.CORE_CLAIM_CLASSES:
+            rows = [{**r, "status": "passed"} for r in data["classes"][name]["rows"]]
+            data["classes"][name] = {"rows": rows, "counts": REPORT.tally(rows)}
+        return data
+
+    def test_the_claim_boundary_carries_the_sparql10_score(self):
+        data = REPORT.load(RESULTS)
+        page = REPORT.render_markdown(data)
         boundary = page.split("**Claim boundary")[1].split("\n\n")[0]
-        self.assertIn("The SPARQL 1.0 suite is not run.", boundary)
+        c = data["sparql10"]["counts"]
+        self.assertIn(f"SPARQL 1.0 query **{c['passed']}/{c['cases']}**", boundary)
         self.assertIn("sparql/sparql10", boundary)
+        self.assertIn("## SPARQL 1.0 query tests", page)
+
+    def test_a_failing_sparql10_row_alone_withdraws_all(self):
+        data = self._passing(REPORT.load(RESULTS))
+        rows = [{**r, "status": "passed"} for r in data["sparql10"]["rows"]]
+        data["sparql10"] = {"rows": rows, "counts": REPORT.tally(rows)}
+        self.assertIn("passes **all**", "\n".join(REPORT.claim_boundary(data)))
+        rows[0] = {**rows[0], "status": "failed"}
+        data["sparql10"] = {"rows": rows, "counts": REPORT.tally(rows)}
+        self.assertNotIn("passes **all**", "\n".join(REPORT.claim_boundary(data)))
+
+    def test_a_short_sparql10_ledger_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            shutil.copytree(RESULTS, tmp / "results")
+            path = tmp / "results" / "sparql10-evaluation.json"
+            ledger = json.loads(path.read_text())
+            ledger["results"] = ledger["results"][1:]
+            path.write_text(json.dumps(ledger))
+            with self.assertRaises(REPORT.LedgerError):
+                REPORT.load(tmp / "results")
+
+
+class Sparql12Tests(unittest.TestCase):
+    """aegis-mhee08: SPARQL 1.2 runs what needs nothing new and enumerates the rest."""
+
+    def test_the_page_carries_the_sparql12_section(self):
+        page = REPORT.render_markdown(REPORT.load(RESULTS))
+        self.assertIn("## SPARQL 1.2 query tests", page)
+        self.assertIn("never run", page)
+
+    def _mutated(self, change):
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        shutil.copytree(RESULTS, tmp / "results")
+        path = tmp / "results" / "sparql12.json"
+        ledger = json.loads(path.read_text())
+        change(ledger)
+        path.write_text(json.dumps(ledger))
+        return tmp / "results"
+
+    def test_a_triple_term_case_scored_as_run_is_refused(self):
+        def run_one(ledger):
+            row = next(r for r in ledger["results"] if "triple-terms" in r["manifest"])
+            row["status"] = "passed"
+        with self.assertRaises(REPORT.LedgerError):
+            REPORT.load(self._mutated(run_one))
+
+    def test_a_short_sparql12_ledger_is_refused(self):
+        with self.assertRaises(REPORT.LedgerError):
+            REPORT.load(self._mutated(lambda ledger: ledger["results"].pop()))
 
 
 class RdfSyntaxTableTests(unittest.TestCase):
@@ -742,6 +803,72 @@ class ArmSeparationTest(unittest.TestCase):
                     ["git", "worktree", "remove", "--force", str(work)],
                     cwd=root, capture_output=True, check=False,
                 )
+
+
+class ReportStaleTest(unittest.TestCase):
+    """`--report-stale` turns a stale STAMP into a CI signal, not a red run.
+
+    aegis-qmrymu: 17 of 37 PR conformance runs in 13.5h failed on the
+    provenance arm alone, each cleared by a hand re-derive. With the flag a
+    stale stamp exits 0 and writes `stale=true`, which the workflow uses to
+    re-derive automatically. The three outcomes are asserted separately
+    because the flag must never turn "could not look" into "fresh".
+    """
+
+    def _run(self, root, output, *args, env_extra=None):
+        import os
+
+        env = dict(os.environ, GITHUB_OUTPUT=str(output))
+        env.pop("GITHUB_BASE_REF", None)
+        env.update(env_extra or {})
+        return subprocess.run(
+            [sys.executable, str(root / "benchmark/public/conformance_report.py"),
+             "--check", "--pr-base", "", "--arm", "provenance", *args],
+            cwd=root, capture_output=True, text=True, check=False, env=env,
+        )
+
+    def test_a_stale_stamp_is_reported_and_exits_zero(self):
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("::notice title=Ledger stamp is stale::", result.stdout)
+            self.assertEqual(output.read_text(), "stale=true\n")
+
+    def test_without_the_flag_a_stale_stamp_still_blocks(self):
+        # The control: the flag is the only thing that changes the exit code.
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertFalse(output.exists(), "no output is written without the flag")
+
+    def test_a_current_stamp_reports_not_stale(self):
+        with head_tree_fixture(stale=False) as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(output.read_text(), "stale=false\n")
+
+    def test_unverified_still_fails_and_claims_nothing(self):
+        # A checkout where the ledger's revision is absent is UNVERIFIED (2).
+        # Reporting it as "not stale" would let CI skip the re-derive on a
+        # check that never looked.
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            for ledger_path in (work / "benchmark/public/results").glob("*.json"):
+                data = json.loads(ledger_path.read_text())
+                for key in data:
+                    if key.endswith("quipu_revision"):
+                        data[key] = "0" * 40
+                ledger_path.write_text(json.dumps(data))
+            subprocess.run(
+                [sys.executable, str(work / "benchmark/public/conformance_report.py")],
+                cwd=work, capture_output=True, text=True, check=True,
+            )
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertFalse(output.exists(), "UNVERIFIED must not write stale=false")
 
 
 class RemedyNamesEveryStepTest(unittest.TestCase):

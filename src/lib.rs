@@ -21,6 +21,7 @@ pub mod impact;
 pub mod lattice;
 pub mod lattice_fold;
 pub mod lattice_kind;
+pub mod lexical;
 mod literal_identity;
 pub mod mcp;
 pub mod metrics;
@@ -30,7 +31,10 @@ pub mod namespace;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+mod search_graph_scope;
 pub mod transaction_auth;
+pub mod write_kind;
+pub mod write_provenance;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
 #[cfg(feature = "owl")]
@@ -51,6 +55,7 @@ pub mod provider;
 pub mod rdf;
 mod rdf_export;
 mod rdf_graph_store;
+mod rdf_scope;
 pub mod reasoner;
 pub mod reconcile;
 pub mod report;
@@ -63,6 +68,8 @@ pub mod session_attestation;
 #[cfg(feature = "shacl")]
 pub mod shacl;
 #[cfg(feature = "shacl")]
+mod shacl_admission;
+#[cfg(feature = "shacl")]
 pub mod shacl_context;
 pub mod share;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,
@@ -74,23 +81,39 @@ pub mod pack_full_text;
 // The format gate + `restore`. Filesystem-bound like `pack_load`, so gated the
 // same way.
 #[cfg(not(target_arch = "wasm32"))]
+pub mod git_merge;
+#[cfg(not(target_arch = "wasm32"))]
+mod git_merge_alias;
+#[cfg(not(target_arch = "wasm32"))]
+mod git_merge_repo;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod pack_restore;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod project_graph;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
 pub mod share_completeness;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_compose;
 pub mod share_delta;
+// Entity-grouped, blank-node-stable payload diffs and the `git diff` textconv
+// rendering (aegis-fxpbys.1). Pure apart from `read_payload`, which is gated.
+pub mod share_diff;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
+pub mod share_merge_decisions;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share_merge_decisions_view;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_mint;
 mod share_promotion;
+pub mod share_queries;
 pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;
 pub mod sparql;
+pub mod sparql_structure;
 pub mod store;
 pub mod time;
 pub mod types;
@@ -98,6 +121,7 @@ pub mod vector;
 pub mod vector_delegate;
 #[cfg(feature = "lancedb")]
 pub mod vector_lance;
+pub mod verdict_schemes;
 pub mod vocabulary;
 pub mod w3c;
 
@@ -124,7 +148,10 @@ pub use context::{
     KnowledgeRelevance, tool_context, tool_unified_search,
 };
 pub use derivation::{DerivationMethod, Rederivation};
-pub use embedding::{DeferredEmbed, EmbeddingProvider, NO_PROVIDER_HELP, build_entity_text};
+pub use embedding::{
+    DeferredEmbed, EmbeddingProvider, NO_PROVIDER_HELP, build_entity_text,
+    build_entity_text_for_graph_backfill,
+};
 pub use episode::{
     Episode, IngestResolutionOpts, IngestResult, episode_provenance, ingest_batch, ingest_episode,
     ingest_episode_with_resolution,
@@ -148,6 +175,8 @@ pub use mcp::align::{tool_align_apply, tool_align_decide, tool_align_propose};
 pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;
+#[cfg(not(target_arch = "wasm32"))]
+pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions};
 pub use mcp::named_query::tool_ask;
 #[cfg(feature = "owl")]
 pub use mcp::owl::tool_load_ontology;

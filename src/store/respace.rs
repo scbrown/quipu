@@ -169,7 +169,19 @@ fn classify_optional_column(table: &str, column: &str) -> Option<TermIdKind> {
         // Carries "outward"/"internal", never a term id (aegis-9f899e).
         "destination",
     ];
-    (table == "pack_manifest" && PACK_MANIFEST.contains(&column)).then_some(TermIdKind::None)
+    // Forward compatibility before the review producer creates its table.
+    // Closed column vocabulary: future term-ID columns must still refuse.
+    const IMPORT_REVIEWS: &[&str] = &[
+        "share_id",
+        "state",
+        "first_seen",
+        "updated_at",
+        "notice_policy",
+        "payload",
+    ];
+    ((table == "pack_manifest" && PACK_MANIFEST.contains(&column))
+        || (table == "import_reviews" && IMPORT_REVIEWS.contains(&column)))
+    .then_some(TermIdKind::None)
 }
 
 /// Map one id from the source space into the destination space. **The

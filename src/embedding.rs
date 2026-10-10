@@ -80,7 +80,24 @@ See docs/book/src/concepts/embeddings.md.";
 ///
 /// Returns an empty string if the entity has no facts (fully retracted).
 pub fn build_entity_text(store: &Store, entity_id: i64) -> Result<String> {
-    let facts = store.entity_facts(entity_id)?;
+    build_entity_text_with_named(store, entity_id, store.search_config().named_graphs)
+}
+
+/// Prepare graph vectors explicitly while automatic named-graph embedding is
+/// disabled. The bounded maintenance caller owns pacing and stale-text checks.
+pub fn build_entity_text_for_graph_backfill(store: &Store, entity_id: i64) -> Result<String> {
+    build_entity_text_with_named(store, entity_id, true)
+}
+
+fn build_entity_text_with_named(store: &Store, entity_id: i64, named: bool) -> Result<String> {
+    // ROOT facts define the text of any entity that has them, so no ROOT
+    // entity's vector changes. An entity that exists only in named graphs used
+    // to build no text and was never embedded, which hid whole graphs from
+    // search (aegis-rcz5ib.10); fall back to its named-graph facts.
+    let mut facts = store.entity_facts(entity_id)?;
+    if facts.is_empty() && named && store.entity_is_named_graph_only(entity_id)? {
+        facts = store.entity_facts_in_named_graphs(entity_id)?;
+    }
     if facts.is_empty() {
         return Ok(String::new());
     }
@@ -230,23 +247,34 @@ pub(crate) fn collect_embed_work(
         .map(|d| d.entity)
         .collect();
 
-    // Close embeddings for entities that had retractions.
-    for &eid in &retracted {
-        vs.close_embedding(eid, timestamp)?;
-    }
-
-    // Build texts for all touched entities.
+    // Build texts for all touched entities. A producer snapshot replace hands
+    // this EVERY entity in the snapshot, unchanged ones included, so skip an
+    // entity whose current vector was built from byte-identical text: the
+    // vector is already right, and re-embedding it cost a full-repository ONNX
+    // drain on every republication (aegis-tvlxr4). An entity with no current
+    // vector is still embedded, which heals one left bare by a restart.
     let mut items: Vec<(i64, String)> = Vec::new();
+    let mut seen = BTreeSet::new();
     for &eid in entity_ids {
+        seen.insert(eid);
         let text = build_entity_text(store, eid)?;
-        if !text.is_empty() {
-            // For assertions on entities without prior retractions,
-            // close the old embedding before creating a new one.
-            if !retracted.contains(&eid) {
+        if text.is_empty() {
+            if retracted.contains(&eid) {
                 vs.close_embedding(eid, timestamp)?;
             }
-            items.push((eid, text));
+            continue;
         }
+        if vs.current_embedding_text(eid)?.as_deref() == Some(text.as_str()) {
+            continue;
+        }
+        // Close the old embedding before creating a new one.
+        vs.close_embedding(eid, timestamp)?;
+        items.push((eid, text));
+    }
+
+    // Close embeddings for retracted entities the caller did not list.
+    for &eid in retracted.difference(&seen) {
+        vs.close_embedding(eid, timestamp)?;
     }
 
     Ok(DeferredEmbed {
@@ -276,6 +304,7 @@ pub(crate) fn apply_deferred_embed(
         if current != *text {
             continue; // stale — a newer writer owns this entity's embedding
         }
+        store.mark_named_search_embedding(*eid)?;
         vs.embed_entity(*eid, text, emb, &work.timestamp)?;
         written += 1;
     }
@@ -311,6 +340,7 @@ pub(crate) fn auto_embed_entities(
         let embeddings = provider.embed_batch(&texts)?;
 
         for ((eid, text), emb) in chunk.iter().zip(embeddings.iter()) {
+            store.mark_named_search_embedding(*eid)?;
             vs.embed_entity(*eid, text, emb, timestamp)?;
             embedded += 1;
         }

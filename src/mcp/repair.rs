@@ -124,14 +124,11 @@ fn resolve_committed_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
 /// re-asserted is what creates duplicates. So the condition is real in the
 /// store this tool will be pointed at.
 ///
-/// It cannot be reproduced through today's assert path: `stage_and_guard` skips
-/// an assertion when an active `(e, a, v)` already exists in the graph, so a
-/// producer re-running under the same source writes nothing the second time.
-/// The live duplicates predate that skip. `dedupe` is therefore tested as a
-/// function against a constructed plan rather than end-to-end — an end-to-end
-/// fixture PASSES WITHOUT THIS FUNCTION and would be a vacuous guard.
-/// Retracting a triple once is also the correct semantics: the duplicate rows
-/// are one statement, not N.
+/// Same-source assertions are idempotent, but separate producers retain their
+/// own physical claims. This deduplication counts statements owned by the
+/// selected source; applying the plan closes only that source's claims.
+/// Other producers keep the logical statement visible until its last claim
+/// is removed. Historical duplicate rows under one source close together.
 pub(super) fn dedupe(plan: Vec<Datum>) -> Vec<Datum> {
     let mut out: Vec<Datum> = Vec::with_capacity(plan.len());
     for d in plan {

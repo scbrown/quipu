@@ -9,9 +9,12 @@ pub mod entailment;
 #[cfg(feature = "owl")]
 pub mod explain;
 pub mod governance;
+mod governance_hardware;
 pub mod graphiti;
 pub mod impact;
 pub mod knot;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod merge_decisions;
 pub mod named_query;
 #[cfg(feature = "owl")]
 pub mod owl;
@@ -26,6 +29,7 @@ pub mod search;
 mod tests;
 pub mod tools;
 mod value;
+mod verdict_witness;
 
 use serde_json::Value as JsonValue;
 

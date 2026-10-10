@@ -167,12 +167,7 @@ impl StoredQuery {
         // Substitute probes and PARSE. A template that only parses for some
         // argument values is not a template, and finding that out at call time
         // means finding out in someone else's session.
-        let mut probe = self.template.clone();
-        for p in &self.params {
-            probe = probe.replace(&format!("{{{}}}", p.name), probe_value(&p.kind));
-        }
-        crate::sparql::sparql_parser()
-            .parse_query(&probe)
+        crate::sparql_structure::parse_query(crate::sparql::sparql_parser(), &self.probe_sparql())?
             .map_err(|e| {
                 Error::InvalidValue(format!(
                     "query '{}': template does not parse as SPARQL: {e}",
@@ -184,6 +179,19 @@ impl StoredQuery {
 }
 
 impl StoredQuery {
+    /// The template with every placeholder replaced by a kind-correct stand-in.
+    ///
+    /// Parseable exactly when the template is, which is what lets a share
+    /// inspect a query's FORM and targeted classes without rendering real
+    /// arguments — and without evaluating anything (aegis-fxpbys.2).
+    pub(crate) fn probe_sparql(&self) -> String {
+        let mut probe = self.template.clone();
+        for p in &self.params {
+            probe = probe.replace(&format!("{{{}}}", p.name), probe_value(&p.kind));
+        }
+        probe
+    }
+
     /// Build executable SPARQL by validating and substituting `args`.
     ///
     /// Renders through `ParamKind::render` — the SAME function the compiled-in

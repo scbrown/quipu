@@ -1,5 +1,8 @@
 //! Tests for the server's lock discipline and handler wiring.
 
+#[path = "search_keyword_tests.rs"]
+mod search_keyword_tests;
+
 use std::sync::Arc;
 
 use axum::{
@@ -492,6 +495,42 @@ async fn precomputed_search_does_not_queue_behind_the_writer() {
     thread.join().unwrap();
 }
 
+/// The TEXT-query sibling of the test above, and the path that actually
+/// stalled (aegis-hzh9rz). A text `/search` embeds its query first, and it used
+/// to take the WRITER lock just to fetch the provider. Measured in a lab: a
+/// 23 MB `/knot/promote` held the writer ~2 min, every text `/search` timed out
+/// at 15 s, while a supplied-vector search answered in 0.3 s and pooled
+/// `/query` in 8 ms. The supplied-vector test above passed throughout, because
+/// it never reaches the provider fetch.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn text_search_does_not_queue_behind_the_writer() {
+    let (_dir, handle) = pooled_handle_with_provider(1, Some(Arc::new(SleepyProvider)));
+    let shared = Arc::new(handle);
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = shared.clone();
+    let thread = std::thread::spawn(move || {
+        let _writer = holder.lock();
+        locked_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    locked_rx.recv().unwrap();
+
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        search(
+            State(shared),
+            axum::Json(json!({ "query": "x", "limit": 1 })),
+        ),
+    )
+    .await;
+    release_tx.send(()).unwrap();
+    thread.join().unwrap();
+    let _ = result
+        .expect("text search queued behind the writer to fetch the embedding provider")
+        .expect("text search failed on a read-only pooled connection");
+}
+
 /// Tokio cannot cancel blocking tasks after they start. Admission therefore
 /// has to happen in async space: cancelling a waiter must prevent its closure
 /// from ever entering the blocking pool.
@@ -959,9 +998,21 @@ fn three_js_is_vendored_and_never_fetched() {
 /// Build a file-backed handle with a real pool, plus the tempdir that owns the
 /// database file for the test's lifetime.
 pub(super) fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
+    pooled_handle_with_provider(readers, None)
+}
+
+/// [`pooled_handle`] with an embedding provider installed BEFORE the handle is
+/// built, the order `serve` uses.
+pub(super) fn pooled_handle_with_provider(
+    readers: usize,
+    provider: Option<Arc<dyn EmbeddingProvider>>,
+) -> (tempfile::TempDir, super::StoreHandle) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("pool.db").to_str().unwrap().to_string();
-    let store = Store::open(&path).unwrap();
+    let mut store = Store::open(&path).unwrap();
+    if let Some(provider) = provider {
+        store.set_embedding_provider(provider);
+    }
     let mut conns = Vec::new();
     for _ in 0..readers {
         let mut r = Store::open_read_only(&path).unwrap();
@@ -970,6 +1021,8 @@ pub(super) fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreH
     }
     let handle = super::StoreHandle {
         graph_metrics: super::graph_metrics::GraphMetrics::new(&path),
+        embedding_provider: store.embedding_provider(),
+        search_config: store.search_config().clone(),
         writer: parking_lot::FairMutex::new(store),
         vector_reads_pooled: true,
         federation: quipu::config::FederationConfig::default(),
@@ -1612,3 +1665,88 @@ async fn read_admission_bounds_concurrent_blocking_reads() {
         let _ = t.await;
     }
 }
+
+#[path = "source_claims_tests.rs"]
+mod source_claims;
+
+/// aegis-rcz5ib.10: the named-graph backfill is BOUNDED per call (pacing is
+/// the caller's), embeds only that graph's un-vectored entities, never touches
+/// ROOT, and reports what is left.
+#[test]
+fn graph_backfill_is_bounded_per_call_and_skips_root() {
+    use quipu::KnowledgeVectorStore as _;
+
+    let batches = Arc::new(parking_lot::Mutex::new(vec![]));
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(RecordingProvider {
+        batches: batches.clone(),
+    }));
+    store.embedding_config_mut().dimension = 8;
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<http://example.org/root> <http://www.w3.org/2000/01/rdf-schema#label> \"root entity\" ."[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+    let graph = store.graph_create("urn:test:graph:knowledge").unwrap();
+    let mut nt = String::new();
+    for i in 0..70 {
+        nt.push_str(&format!(
+            "<http://example.org/item{i:02}> <http://www.w3.org/2000/01/rdf-schema#label> \"item {i:02}\" .\n"
+        ));
+    }
+    // A ROOT entity may also have overlay facts and no vector. Adding its
+    // first vector here would change the previously observed ROOT ranking.
+    nt.push_str("<http://example.org/root> <http://www.w3.org/2000/01/rdf-schema#label> \"overlay label\" .\n");
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut store,
+        nt.as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    let first =
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
+    assert_eq!((first.embedded, first.remaining), (50, 20));
+    assert!(
+        batches.lock().iter().all(|&n| n <= 32),
+        "one ONNX call exceeded the 32-entity batch: {:?}",
+        batches.lock()
+    );
+    let second =
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
+    assert_eq!((second.embedded, second.remaining), (20, 0));
+    let third =
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:knowledge", 50)
+            .unwrap();
+    assert_eq!(
+        (third.embedded, third.remaining),
+        (0, 0),
+        "idempotent once complete"
+    );
+    assert_eq!(
+        shared.lock().vector_count().unwrap(),
+        70,
+        "only the graph's entities are embedded; the ROOT entity is untouched"
+    );
+    assert!(
+        super::graph_backfill::backfill_graph_embeddings(&shared, "urn:test:graph:missing", 50)
+            .is_err(),
+        "an unknown graph is refused"
+    );
+}
+
+#[path = "graph_backfill_temporal_tests.rs"]
+mod graph_backfill_temporal;

@@ -14,6 +14,9 @@ pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome}
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
 struct Staged {
     tx_id: i64,
+    /// What this write did, for `quipu_write_facts_total` (aegis-gwkd76). Taken
+    /// from values staging computes anyway: no extra store read.
+    counts: StagedCounts,
     /// The COMPLETE set of changes this write made to the current-fact view, or
     /// `None` when the write path cannot vouch that it is complete.
     ///
@@ -34,33 +37,42 @@ struct Staged {
     retracts: Vec<Datum>,
 }
 
+/// Datum counts a staged write already knows (see `metrics::writes`).
+#[derive(Clone, Copy)]
+struct StagedCounts {
+    inferred: usize,
+    asserted: usize,
+    retracted: usize,
+    superseded: usize,
+}
+
+/// Every current fact one producer's source tag owns in one graph.
+///
+/// `+f.g` is deliberate (aegis-m6agjy). Written as a plain `f.g = ?2`, SQLite
+/// drives the join from `facts` through `idx_geav (g, ...)`, because that index
+/// also satisfies the `ORDER BY` and the store keeps no `sqlite_stat1` to say
+/// the source is selective. That visits every fact in the graph and looks up each
+/// one's transaction, so every snapshot replacement paid for a whole-graph walk
+/// however small the snapshot: a ~4s floor on each `/knot` replace, measured on
+/// both yupana-promote and camayoc-producer, while holding the single writer.
+/// The unary `+` takes `g` out of index selection, so the plan becomes
+/// `idx_tx_source (source=?)` then `idx_tx (tx=?)` plus a small sort. Both halves
+/// are needed: on a 1.5M-fact copy of the live schema the index alone left the
+/// plan unchanged (885ms), `+f.g` alone scanned the table (972ms), and together
+/// they took 0.05ms, returning identical rows in identical order.
+///
+/// `f.v` in the `ORDER BY` keeps that order EXACT. The old plan read facts in
+/// `idx_geav (g, e, a, v)` order, so rows sharing `(e, a)` came out by `v`
+/// without the statement saying so; on a production copy 19,867 of 29,349 rows
+/// for one repo's source share their `(e, a)`. Without `f.v` the new plan
+/// returns the same rows with those ties in a different order.
+pub(crate) const SOURCE_RETRACTION_SQL: &str = "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
+     FROM facts f JOIN transactions t ON f.tx = t.id \
+     WHERE t.source = ?1 AND +f.g = ?2 AND f.op = 1 AND f.valid_to IS NULL \
+     ORDER BY f.e, f.a, f.v";
+
 impl Store {
     // -- Write path --
-
-    /// Atomically apply already-planned changes to multiple RDF graphs.
-    ///
-    /// Each graph still passes through the normal authority, SHACL, OWL, and
-    /// governed-policy gates. The outer savepoint makes a multi-operation
-    /// SPARQL Update all-or-nothing across those graph-scoped transactions.
-    pub fn transact_graph_batches(
-        &mut self,
-        batches: &[(i64, Vec<Datum>)],
-        timestamp: &str,
-        actor: Option<&str>,
-        source: Option<&str>,
-    ) -> Result<()> {
-        self.conn.execute_batch("SAVEPOINT quipu_multi_graph")?;
-        for (graph, datums) in batches {
-            if let Err(error) = self.transact_to_graph(datums, timestamp, actor, source, *graph) {
-                self.conn
-                    .execute_batch("ROLLBACK TO quipu_multi_graph; RELEASE quipu_multi_graph")?;
-                self.read_model.borrow_mut().clear();
-                return Err(error);
-            }
-        }
-        self.conn.execute_batch("RELEASE quipu_multi_graph")?;
-        Ok(())
-    }
 
     /// Atomically write a batch of datums in a single transaction.
     /// Returns the transaction id.
@@ -153,6 +165,7 @@ impl Store {
         match self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source) {
             Ok(mut staged) => {
                 let tx_id = staged.tx_id;
+                let counts = staged.counts;
                 // Taken before `staged` moves into after_commit_hooks below.
                 let effective = staged.effective.take();
                 self.conn.execute_batch("RELEASE quipu_transact")?;
@@ -166,7 +179,28 @@ impl Store {
                 self.maintain_read_model(graph, effective.as_deref(), tx_id);
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
-                crate::metrics::metrics().observe_write(datums.len() as u64);
+                let kind = crate::write_kind::classify(actor, source);
+                crate::metrics::metrics().observe_write(&crate::metrics::writes::WriteCounts {
+                    submitted: datums.len() as u64,
+                    inferred: counts.inferred as u64,
+                    asserted: counts.asserted as u64,
+                    retracted: counts.retracted as u64,
+                    superseded: counts.superseded as u64,
+                    root: graph == crate::schema::ROOT_GRAPH,
+                    kind,
+                });
+                // Count the commit under the requesting client's declared
+                // provenance (aegis-7zp4rc). The engine's own writers that a
+                // request merely triggers are not that client's writes.
+                if !matches!(
+                    kind,
+                    crate::write_kind::WriteKind::Verdict
+                        | crate::write_kind::WriteKind::Reasoner
+                        | crate::write_kind::WriteKind::Migration
+                ) && let Some(p) = crate::write_provenance::current()
+                {
+                    crate::metrics::metrics().observe_write_provenance(&p);
+                }
                 // Q-VERDICT-PERSIST: outside the savepoint, so the accept case
                 // and the denial case below record identically.
                 self.flush_pending_verdicts(timestamp, actor);
@@ -252,7 +286,7 @@ impl Store {
         let superseded = 0usize;
 
         let (asserts, retracts) =
-            self.stage_literal_facts(&staged_datums, graph, tx_id, timestamp, retract_source)?;
+            self.stage_source_claims(&staged_datums, graph, tx_id, timestamp, retract_source)?;
         let written_asserts: Vec<_> = asserts.iter().collect();
         let written_retracts: Vec<_> = retracts.iter().collect();
 
@@ -273,6 +307,13 @@ impl Store {
         // Same contract and refusal plumbing as the placement check above.
         self.verify_transition_signatures(&staged_datums, graph)
             .map_err(|e| self.stash_refusal("transition", e, staged_datums.len()))?;
+
+        // Verdict signature-scheme gate (src/verdict_schemes): a registration
+        // declaring an unknown scheme, or a hardware scheme while
+        // `hardware_verdict_schemes` is off, rolls back. Always on; inert for
+        // any write that does not assert `aegis:signatureScheme`.
+        self.refuse_disabled_signature_schemes(&staged_datums)
+            .map_err(|e| self.stash_refusal("signature-scheme", e, staged_datums.len()))?;
 
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
@@ -317,6 +358,12 @@ impl Store {
 
         Ok(Staged {
             tx_id,
+            counts: StagedCounts {
+                inferred: staged_datums.len().saturating_sub(datums.len()),
+                asserted: written_asserts.len(),
+                retracted: written_retracts.len(),
+                superseded,
+            },
             effective,
             #[cfg(feature = "reactive-reasoner")]
             asserts,
@@ -714,12 +761,7 @@ impl Store {
         graph: i64,
     ) -> Result<Vec<Datum>> {
         let facts = {
-            let mut stmt = self.conn.prepare(
-                "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
-                 FROM facts f JOIN transactions t ON f.tx = t.id \
-                 WHERE t.source = ?1 AND f.g = ?2 AND f.op = 1 AND f.valid_to IS NULL \
-                 ORDER BY f.e, f.a",
-            )?;
+            let mut stmt = self.conn.prepare(SOURCE_RETRACTION_SQL)?;
             Self::collect_facts(&mut stmt, params![source_tag, graph])?
         };
         // Keep a label for nodes still referenced by another producer, so a
