@@ -585,3 +585,68 @@ fn the_bootstrap_path_stays_closed_once_the_registry_is_empty_again() {
     refused(store.transact_trust_root_bootstrap(reg, &datums, TS));
     assert!(decision_keys(&store).is_empty());
 }
+
+#[test]
+fn human_registry_reads_legacy_quechua_and_mixed_terms() {
+    let q = "https://scbrown.github.io/quechua/ns#";
+    for public_type in [false, true] {
+        for public_fields in [false, true] {
+            let mut store = Store::open_in_memory().unwrap();
+            let kp = keypair();
+            let enrolled = enrol(&mut store, &kp);
+            let iri = &enrolled.registration;
+            let facts = store
+                .entity_facts(store.lookup(iri).unwrap().unwrap())
+                .unwrap();
+            let mut change = Vec::new();
+            for f in facts {
+                let predicate = store.resolve(f.attribute).unwrap();
+                let replacement = if public_type && predicate == RDF_TYPE {
+                    if f.value
+                        == Value::Ref(store.lookup(&ns("VerifierRegistration")).unwrap().unwrap())
+                    {
+                        Some((
+                            predicate.clone(),
+                            Value::Ref(store.intern(&format!("{q}VerifierRegistration")).unwrap()),
+                        ))
+                    } else {
+                        None
+                    }
+                } else if public_fields {
+                    predicate
+                        .strip_prefix(DEFAULT_BASE_NS)
+                        .filter(|n| matches!(*n, "verifier" | "publicKey" | "attests"))
+                        .map(|n| (format!("{q}{n}"), f.value.clone()))
+                } else {
+                    None
+                };
+                if let Some((new_predicate, new_value)) = replacement {
+                    change.push(d(&store, iri, &predicate, f.value, Op::Retract));
+                    change.push(d(&store, iri, &new_predicate, new_value, Op::Assert));
+                }
+            }
+            if !change.is_empty() {
+                amend_with(&mut store, &kp, "stiwi", iri, change, &nonce(), None).unwrap();
+            }
+            assert_eq!(
+                human_keys(&store).unwrap(),
+                vec![(iri.clone(), "stiwi".into(), pk(&kp))]
+            );
+            assert_eq!(
+                snapshot(&store).unwrap().amenders,
+                vec![("stiwi".into(), pk(&kp))]
+            );
+            assert_eq!(
+                registered_keys(
+                    &store,
+                    "stiwi",
+                    Some(TRUST_ROOT_POLICY),
+                    &Witness::now(),
+                    Scope::HumanTier
+                )
+                .unwrap(),
+                vec![pk(&kp)]
+            );
+        }
+    }
+}

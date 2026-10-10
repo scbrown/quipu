@@ -124,18 +124,33 @@ fn human_registry(store: &Store) -> Result<BTreeMap<String, String>> {
 
 /// Current ROOT string values of `entity`'s `predicate`.
 fn strings(store: &Store, entity: &str, predicate: &str) -> Result<Vec<String>> {
-    let (Some(e), Some(a)) = (store.lookup(entity)?, store.lookup(predicate)?) else {
+    let Some(e) = store.lookup(entity)? else {
         return Ok(Vec::new());
     };
-    Ok(store
-        .entity_facts(e)?
-        .into_iter()
-        .filter(|f| f.attribute == a)
-        .filter_map(|f| match f.value {
-            Value::Str(s) | Value::Typed { lexical: s, .. } => Some(s),
-            _ => None,
-        })
-        .collect())
+    let mut predicates = vec![predicate.to_string()];
+    if let Some(name @ ("verifier" | "publicKey" | "attests")) =
+        predicate.strip_prefix(DEFAULT_BASE_NS)
+    {
+        predicates.push(format!("https://scbrown.github.io/quechua/ns#{name}"));
+    }
+    let mut attrs = Vec::new();
+    for p in predicates {
+        if let Some(id) = store.lookup(&p)? {
+            attrs.push(id);
+        }
+    }
+    let mut values = Vec::new();
+    for f in store.entity_facts(e)? {
+        if !attrs.contains(&f.attribute) {
+            continue;
+        }
+        if let Value::Str(s) | Value::Typed { lexical: s, .. } = f.value {
+            if !values.contains(&s) {
+                values.push(s);
+            }
+        }
+    }
+    Ok(values)
 }
 
 fn sole(values: Vec<String>) -> Option<String> {
@@ -148,17 +163,19 @@ fn sole(values: Vec<String>) -> Option<String> {
 }
 
 fn is_registration(store: &Store, entity: &str) -> Result<bool> {
-    let (Some(e), Some(t), Some(c)) = (
-        store.lookup(entity)?,
-        store.lookup(RDF_TYPE)?,
-        store.lookup(&ns("VerifierRegistration"))?,
-    ) else {
+    let (Some(e), Some(t)) = (store.lookup(entity)?, store.lookup(RDF_TYPE)?) else {
         return Ok(false);
     };
+    let mut classes = Vec::new();
+    for namespace in [DEFAULT_BASE_NS, "https://scbrown.github.io/quechua/ns#"] {
+        if let Some(id) = store.lookup(&format!("{namespace}VerifierRegistration"))? {
+            classes.push(id);
+        }
+    }
     Ok(store
         .entity_facts(e)?
         .into_iter()
-        .any(|f| f.attribute == t && f.value == Value::Ref(c)))
+        .any(|f| f.attribute == t && matches!(f.value, Value::Ref(id) if classes.contains(&id))))
 }
 
 /// Record the human-tier registry before a write is staged.
