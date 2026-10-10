@@ -17,6 +17,22 @@ write-coverage metrics. Model and session values are not added to logs.
 
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
+## Queued write timeouts
+
+When a request budget expires before a tool write starts, the server returns
+HTTP **503**, `Retry-After: 1`, and a JSON error with `code: "write_not_started"`,
+`write_started: false`, and `waited_ms`. This covers write admission and the
+first writer acquisition of the tool endpoints, including `/episode` and
+`/set`. The check runs before signed nonce settlement. The tool did not run,
+so the caller can retry after the indicated delay.
+
+A real query timeout still returns **408** with query-specific advice. Do not
+infer that a write was unrun merely from a 408, a zero elapsed time, a transport
+failure, or a gateway error. A timeout after execution begins may have committed;
+verify the requested facts and preserve the same payload before retrying.
+These diagnostics do not change the configured request budget or bound direct
+protocol handlers that bypass tool-write admission.
+
 ## Unrecognized request fields
 
 Successful tool-backed JSON endpoints report unrecognized top-level request keys

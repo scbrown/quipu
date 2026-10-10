@@ -52,7 +52,22 @@ where
     // budget has to cover the queue, because the queue is where a wedged store
     // spends a request's life (aegis-raq1ok). Stamping it after `acquire()`
     // would reproduce the per-query default's blind spot one layer up.
+    let started = std::time::Instant::now();
     let deadline = request_budget();
+    admit_with_deadline(admission, kind, deadline, started, f).await
+}
+
+async fn admit_with_deadline<T, F>(
+    admission: &'static tokio::sync::Semaphore,
+    kind: &'static str,
+    deadline: Option<quipu::time::Deadline>,
+    started: std::time::Instant,
+    f: F,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
     let permit = admission.acquire().await.map_err(|_| {
         AppError::from(quipu::Error::InvalidValue(format!(
             "{kind} admission is closed"
@@ -64,9 +79,40 @@ where
         // and reused, so a leaked deadline would be inherited by an unrelated
         // later request on the same thread.
         let _deadline = quipu::time::set_request_deadline(deadline);
+        let _wait = WriteWaitGuard::start((kind == "write").then_some(started));
+        if kind == "write" {
+            reject_expired_write()?;
+        }
         f()
     })
     .await
+}
+
+thread_local! {
+    static WRITE_WAIT_START: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
+
+struct WriteWaitGuard(Option<std::time::Instant>);
+impl WriteWaitGuard {
+    fn start(started: Option<std::time::Instant>) -> Self {
+        Self(WRITE_WAIT_START.with(|cell| cell.replace(started)))
+    }
+}
+impl Drop for WriteWaitGuard {
+    fn drop(&mut self) {
+        WRITE_WAIT_START.with(|cell| cell.set(self.0));
+    }
+}
+
+/// Call only before the first write: this error guarantees the tool did not run.
+/// Checking again after a commit would mislabel an indeterminate result as safe.
+pub(crate) fn reject_expired_write() -> Result<(), AppError> {
+    if quipu::time::request_deadline().is_some_and(|deadline| deadline.passed()) {
+        let waited_ms =
+            WRITE_WAIT_START.with(|cell| cell.get().map_or(0, |start| start.elapsed().as_millis()));
+        return Err(quipu::Error::WriteAdmissionTimeout { waited_ms }.into());
+    }
+    Ok(())
 }
 
 /// Wall-clock budget covering queue time AND execution, in milliseconds.
@@ -89,8 +135,15 @@ pub(crate) fn init_request_budget_ms(ms: u64) {
     }
 }
 
+#[cfg(test)]
+tokio::task_local! { static TEST_REQUEST_BUDGET_MS: u64; }
+
 fn request_budget() -> Option<quipu::time::Deadline> {
     let ms = REQUEST_BUDGET_MS.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    let ms = TEST_REQUEST_BUDGET_MS
+        .try_with(|value| *value)
+        .unwrap_or(ms);
     (ms > 0).then(|| quipu::time::Deadline::after_millis(ms))
 }
 
@@ -174,4 +227,189 @@ where
     T: Send + 'static,
 {
     admit_blocking_with(admission, "read", f).await
+}
+
+#[cfg(test)]
+mod write_timeout_tests {
+    use super::*;
+    use axum::response::IntoResponse;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    fn hold_writer(
+        shared: super::super::SharedStore,
+    ) -> (std::sync::mpsc::Sender<()>, std::thread::JoinHandle<()>) {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            let _held = shared.writer.lock();
+            ready_tx.send(()).unwrap();
+            let _released = release_rx.recv();
+        });
+        ready_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        (release_tx, thread)
+    }
+
+    async fn assert_write_not_started(error: AppError) {
+        let response = error.into_response();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(response.headers()[axum::http::header::RETRY_AFTER], "1");
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "write_not_started");
+        assert_eq!(body["write_started"], false);
+        assert!(body["waited_ms"].as_u64().unwrap() >= 20);
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("write did not run")
+        );
+        assert!(!body["error"].as_str().unwrap().contains("query_timeout_ms"));
+    }
+
+    #[tokio::test]
+    async fn expired_write_admission_never_invokes_handler() {
+        let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+        let permit = admission.acquire().await.unwrap();
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = ran.clone();
+        let waiter = tokio::spawn(admit_with_deadline(
+            admission,
+            "write",
+            Some(quipu::time::Deadline::after_millis(20)),
+            std::time::Instant::now(),
+            move || {
+                flag.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+        ));
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+        drop(permit);
+        assert_write_not_started(waiter.await.unwrap().unwrap_err()).await;
+        assert!(!ran.load(Ordering::SeqCst));
+        assert_eq!(admission.available_permits(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn expired_writer_lock_never_invokes_tool() {
+        let shared = Arc::new(super::super::StoreHandle::writer_only(
+            quipu::Store::open_in_memory().unwrap(),
+        ));
+        let (release, holder) = hold_writer(shared.clone());
+        let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = ran.clone();
+        let other = shared.clone();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let waiter = tokio::spawn(admit_with_deadline(
+            admission,
+            "write",
+            Some(quipu::time::Deadline::after_millis(200)),
+            std::time::Instant::now(),
+            move || {
+                entered_tx.send(()).unwrap();
+                let _guard = other.write_lock()?;
+                flag.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+        ));
+        tokio::time::timeout(std::time::Duration::from_secs(2), entered_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        release.send(()).unwrap();
+        holder.join().unwrap();
+        assert_write_not_started(waiter.await.unwrap().unwrap_err()).await;
+        assert!(!ran.load(Ordering::SeqCst));
+        assert_eq!(admission.available_permits(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn actual_write_handler_refuses_before_creating_a_graph() {
+        let shared = Arc::new(super::super::StoreHandle::writer_only(
+            quipu::Store::open_in_memory().unwrap(),
+        ));
+        let (release, holder) = hold_writer(shared.clone());
+        let other = shared.clone();
+        let waiter = tokio::spawn(TEST_REQUEST_BUDGET_MS.scope(
+            200,
+            super::super::tools::graph_create(
+                axum::extract::State(other),
+                axum::Json(serde_json::json!({ "graph": "urn:timeout:control" })),
+            ),
+        ));
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        release.send(()).unwrap();
+        holder.join().unwrap();
+        assert_write_not_started(waiter.await.unwrap().unwrap_err()).await;
+        let graphs = quipu::tool_graph_list(&shared.read(), &serde_json::json!({})).unwrap();
+        assert!(!graphs.to_string().contains("urn:timeout:control"));
+        // Control: exactly the same real handler creates the graph without a budget.
+        let _created = super::super::tools::graph_create(
+            axum::extract::State(shared.clone()),
+            axum::Json(serde_json::json!({ "graph": "urn:timeout:control" })),
+        )
+        .await
+        .unwrap();
+        let graphs = quipu::tool_graph_list(&shared.read(), &serde_json::json!({})).unwrap();
+        assert!(graphs.to_string().contains("urn:timeout:control"));
+    }
+
+    #[tokio::test]
+    async fn expired_read_retains_query_timeout_response() {
+        let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+        let result = admit_with_deadline(
+            admission,
+            "read",
+            Some(quipu::time::Deadline::after_millis(0)),
+            std::time::Instant::now(),
+            || {
+                let store = quipu::Store::open_in_memory()?;
+                let _result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
+                Ok(())
+            },
+        )
+        .await;
+        let response = result.unwrap_err().into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::REQUEST_TIMEOUT);
+        assert!(
+            response
+                .headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .is_none()
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("narrow the query"));
+        assert!(body.get("write_started").is_none());
+    }
+
+    #[tokio::test]
+    async fn unexpired_write_runs_and_thread_context_is_restored() {
+        let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+        let result =
+            admit_with_deadline(admission, "write", None, std::time::Instant::now(), || {
+                reject_expired_write()?;
+                Ok(42)
+            })
+            .await
+            .unwrap();
+        assert_eq!(result, 42);
+        assert_eq!(admission.available_permits(), 1);
+        assert!(WRITE_WAIT_START.with(std::cell::Cell::get).is_none());
+        assert!(quipu::time::request_deadline().is_none());
+    }
 }

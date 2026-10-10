@@ -28,6 +28,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Distinguish writes rejected before execution from query timeouts: HTTP 503 with `write_not_started` and `Retry-After`, while read timeouts retain HTTP 408.
+
 - *(export)* Refuse unrecognised fields instead of exporting ROOT (#334)([8571911](https://github.com/scbrown/quipu/commit/8571911b33e078af107491d7d994951ec3a42f6d))
 - *(server)* Use jemalloc as quipu-server's allocator (#446)([214680a](https://github.com/scbrown/quipu/commit/214680aff54c0ad30f7d146229e76e51e3e53312))
 - *(update)* Instantiate a constant DELETE/INSERT template once, not per solution (#455)([1aa8de7](https://github.com/scbrown/quipu/commit/1aa8de71c9b083e315120953d64aae8d15948097))
