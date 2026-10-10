@@ -170,6 +170,19 @@ impl StoreHandle {
         guard
     }
 
+    /// First writer acquisition for tool handlers. Budget rejection precedes
+    /// attestation settlement, so a refused unrun write does not spend its nonce.
+    pub(crate) fn write_lock(
+        &self,
+    ) -> Result<parking_lot::FairMutexGuard<'_, quipu::Store>, super::base::AppError> {
+        let guard = self.writer.lock();
+        super::admission::reject_expired_write()?;
+        if let Some(pending) = quipu::transaction_auth::current_attestation() {
+            let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
+        }
+        Ok(guard)
+    }
+
     /// A READ connection from the pool, or the writer when the pool is empty.
     ///
     /// Only call this where the work is genuinely read-only: the connection is

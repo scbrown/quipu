@@ -24,6 +24,7 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let path = db.to_str().unwrap();
     let mut store = Store::open(path).unwrap();
     store.search_config_mut().keyword = true;
+    store.search_config_mut().anchored = true;
     store.search_config_mut().hybrid = true;
     store.search_config_mut().mode = "keyword".into();
     store.search_config_mut().named_graphs = true;
@@ -77,6 +78,14 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let mut results = Vec::new();
     for (input, count) in [
         (json!({"mode":"keyword","query":"walneedle"}), 1),
+        (
+            json!({"mode":"keyword","query":"walneedle","anchor":"https://example.org/device","anchor_mode":"filter","explain":true}),
+            1,
+        ),
+        (
+            json!({"mode":"hybrid","alpha":0,"query":"walneedle","anchor":"https://example.org/device"}),
+            1,
+        ),
         (json!({"query":"walneedle"}), 1),
         (json!({"mode":"hybrid","alpha":0,"query":"walneedle"}), 1),
         (
@@ -92,19 +101,24 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
             1,
         ),
     ] {
+        let ranking = if input.get("anchor").is_some() {
+            "anchored"
+        } else {
+            "keyword"
+        };
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             super::super::tools::search(State(shared.clone()), axum::Json(input)),
         )
         .await;
-        results.push((result, count));
+        results.push((result, count, ranking));
     }
     release_tx.send(()).unwrap();
     worker.join().unwrap();
-    for (result, count) in results {
+    for (result, count, ranking) in results {
         let result = result.unwrap().unwrap();
         assert_eq!(result.0["count"], count);
-        assert_eq!(result.0["ranking"], "keyword");
+        assert_eq!(result.0["ranking"], ranking);
         assert!(result.0.get("ignored_fields").is_none());
     }
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -178,4 +192,66 @@ async fn semantic_embedding_does_not_wait_for_a_busy_reader() {
         worker.join().unwrap(),
         "configuration lookup must not park embedding behind a busy reader"
     );
+}
+
+#[tokio::test]
+async fn search_query_http_is_read_only_and_keyword_default_never_embeds() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("corpus.db");
+    let path = db.to_str().unwrap();
+    let mut store = Store::open(path).unwrap();
+    store.search_config_mut().keyword = true;
+    store.initialize_lexical_index().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    store.set_embedding_provider(Arc::new(ForbiddenEmbed(calls.clone())));
+    let datum = quipu::Datum {
+        entity: store.intern("https://example.org/device").unwrap(),
+        attribute: store
+            .intern("http://www.w3.org/2000/01/rdf-schema#label")
+            .unwrap(),
+        value: quipu::Value::Str("walneedle".into()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op: quipu::Op::Assert,
+    };
+    store
+        .transact(&[datum], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    let readers = super::super::ReadPool::open(path, &store, 1);
+    assert_eq!(readers.len(), 1);
+    let shared = Arc::new(super::super::StoreHandle::serving(
+        store,
+        readers,
+        path,
+        Default::default(),
+    ));
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = shared.clone();
+    let worker = std::thread::spawn(move || {
+        let _hold = holder.lock();
+        ready_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    ready_rx.recv().unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        super::super::tools::search_query(
+            State(shared.clone()),
+            axum::Json(json!({"query":"walneedle","sparql":"SELECT ?s ?label WHERE {?s <http://www.w3.org/2000/01/rdf-schema#label> ?label}"})),
+        ),
+    )
+    .await;
+    release_tx.send(()).unwrap();
+    worker.join().unwrap();
+    let result = result.unwrap().unwrap();
+    assert_eq!(result.0["result"]["count"], 1);
+    assert_eq!(result.0["retrieval_mode"], "keyword");
+    assert!(result.0.get("ignored_fields").is_none());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    // Existing /search defaults to semantic and must still call the provider.
+    let semantic =
+        super::super::tools::search(State(shared), axum::Json(json!({"query":"walneedle"}))).await;
+    assert!(semantic.is_err());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }

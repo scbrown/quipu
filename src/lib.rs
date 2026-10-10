@@ -246,3 +246,7 @@ pub use vector_lance::LanceVectorStore;
 /// Native MCP protocol adapters over the governed HTTP application.
 #[cfg(feature = "mcp")]
 pub mod mcp_transport;
+
+/// Bounded search-seeded SPARQL SELECT queries.
+pub mod search_query;
+pub use search_query::tool_search_query;

@@ -17,6 +17,22 @@ write-coverage metrics. Model and session values are not added to logs.
 
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
+## Queued write timeouts
+
+When a request budget expires before a tool write starts, the server returns
+HTTP **503**, `Retry-After: 1`, and a JSON error with `code: "write_not_started"`,
+`write_started: false`, and `waited_ms`. This covers write admission and the
+first writer acquisition of the tool endpoints, including `/episode` and
+`/set`. The check runs before signed nonce settlement. The tool did not run,
+so the caller can retry after the indicated delay.
+
+A real query timeout still returns **408** with query-specific advice. Do not
+infer that a write was unrun merely from a 408, a zero elapsed time, a transport
+failure, or a gateway error. A timeout after execution begins may have committed;
+verify the requested facts and preserve the same payload before retrying.
+These diagnostics do not change the configured request budget or bound direct
+protocol handlers that bypass tool-write admission.
+
 ## Unrecognized request fields
 
 Successful tool-backed JSON endpoints report unrecognized top-level request keys
@@ -886,7 +902,8 @@ semantic and keyword endpoints retain their configured result limits.
 Both branches retain temporal, graph and provenance scopes. Intermediate hybrid
 weights use semantic type inference for both branches (`infer_types: true`);
 asserted-only hybrid type scopes are refused until both branches support them.
-Content and anchor reranking are not yet composed with intermediate fusion.
+Content reranking is not composed with intermediate fusion. Graph anchors
+compose with semantic, keyword and hybrid ranking when `anchored = true`.
 Intermediate weights require query text; an optional embedding supplies the
 semantic branch. Endpoints retain their pure modes' input requirements and
 restrictions (keyword rejects embeddings; semantic permits an embedding without
@@ -1026,14 +1043,31 @@ facts (`valid_at` applies). `owl:sameAs` costs no hop. `rdf:type`,
 `rdfs:subClassOf`, PROV links, `distinctFrom`, `mentions` and `inDocument` are
 not traversed. Without that, everything is two hops from everything through a
 class, an activity or a document. A node with more than 150 edges is reached
-but not expanded; the anchor itself is always expanded. The walk stops at 5,000
+but not expanded along ordinary edges; zero-cost aliases remain traversable.
+Non-anchor reads fetch at most 151 object edges per direction before applying
+the hub rule. At the outer hop ring, only alias edges are queried. The anchor
+read is bounded by the node budget, and a possibly incomplete ring is reported
+as truncated. The walk stops at 5,000
 nodes. The response's `anchor` block reports `reached`, `hubs_not_expanded`,
 `truncated` and `truncated_at_hop`. A truncated ring is never presented as
 complete.
 
 Each result gains `hops` (null when unreachable) and `text_score` (the
-unanchored score). The 200 best unanchored candidates are reordered, so an
-entity outside that pool is not added by being near the anchor.
+blended text score before hop ranking). Global text candidates and candidates
+restricted to the bounded neighbourhood are unioned before fusion. Each source
+gets half the configured candidate pool; each text branch is capped at 1,000.
+This admits a near text match that falls below the global pool. Normalization
+and ranks use that bounded union. Anchored result limits above 1,000 are refused.
+Explicit named-graph anchors remain unsupported; traversal is ROOT-only.
+Malformed anchors and traversal options are refused.
+
+The CLI exposes the same controls:
+
+```bash
+quipu search "backup failure" --mode hybrid --alpha 0.5 --fusion rrf \
+  --anchor https://example.org/host --max-hops 3 --anchor-mode sort \
+  --direction both --decay 0.5 --explain
+```
 
 ### `POST /hybrid_search`
 
@@ -1363,8 +1397,13 @@ trigger scans. WAL size still comes from a current filesystem metadata read.
 `quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
 including pending requests, cancelled requests and metrics scrapes. It has no
 labels and resets when the process restarts. Use it to measure arrival rate:
-`quipu_http_requests_total` and `quipu_http_client_requests_total` count completed
-responses, so low completion rates alone do not establish low traffic.
+`quipu_http_requests_total` and `quipu_http_client_requests_total` count terminal
+request observations, including dropped request futures with synthetic status
+499. Endpoint histograms and client-duration counters include elapsed time until
+that drop. `quipu_http_requests_cancelled_total{client,endpoint}` separately
+counts dropped futures; its client budget is 31 named callers plus `other`, and
+endpoint labels use route templates. Low terminal rates alone do not establish
+low traffic.
 
 `quipu_http_auth_refusals_total{client,endpoint,method,expected_probe}` counts
 completed HTTP 401 responses, including protected GET requests. Observed
@@ -1421,6 +1460,15 @@ adds `status`, `duration_ms`, and the actual `auth_outcome`; `/query` responses
 also add `query_shape` and `result_size`. Logs contain normalized attribution
 and bounded metadata, never the Authorization header or response body. Slow or
 failed query text retains its existing separate diagnostic line.
+
+Dropping a polled request future also emits one `request_complete` with
+`completion_outcome: "cancelled"`, synthetic `status: 499` and elapsed time.
+No HTTP 499 response is delivered. Authorization remains `pending` and result
+metadata is absent because no response established those values. Normal responses
+use `completion_outcome: "response"`. This records abandonment of the HTTP
+future, including cancellation during shutdown; it does not prove that a blocking
+worker stopped or that a write did not commit. Response-body streaming after the
+handler returns is outside this measurement.
 
 ### UI assets (not documented individually)
 
@@ -1773,3 +1821,11 @@ manifest; `{"queries": {...}}` runs the batch and returns candidates per
 query, scored the way `/resolve` scores.
 
 RDF `/knot` loads accept `blank_node_scope`: distinct IDs separate repeated identical input; the same ID shares blank nodes across graphs only for byte-identical input. By default, whole-document bytes and destination graph define scope.
+
+### POST /search_query
+
+Search first, then evaluate SELECT from at most100 distinct seed IRIs.
+Keyword mode defaults and needs no embeddings; hybrid fuses successful lexical
+and semantic retrieval with reciprocal rank fusion. Seed ranks and explicit
+bounded completeness accompany the ordinary query result. See
+[the request and scope contract](../../../design/search-rooted-sparql.md).
