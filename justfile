@@ -21,6 +21,11 @@ setup:
 check:
     pre-commit run --all-files
 
+# Query performance gate controls (offline; no fixture or server required).
+test-query-perf:
+    python3 scripts/quipu-query-perf.py self-test
+    python3 scripts/ci/test-query-perf.py
+
 
 
 # === Rust ===

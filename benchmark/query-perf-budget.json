@@ -1,0 +1,27 @@
+{
+  "source": "aegis-66ny04, 2026-10-08: release build, generated fixture (150k entities, 2.1M triples, 26 graphs)",
+  "measured": {
+    "note": "p50 ms pushed / defeated, ratio, on a 20-core dev host; budgets sit well below the ratios and well above the times",
+    "C0_control_exact": "24",
+    "Q1_status_pred": "271 / 162, 0.6x (not narrowed here: a slow-path guard)",
+    "Q2_graph_literal_substr": "45 / 245, 5.5x",
+    "Q3_label_regex": "23 / 361, 15.5x",
+    "Q4_subject_contains": "11 / 2529, 239x",
+    "Q5_comment_contains": "22 / 411, 19x",
+    "Q6_type_regex_count": "140 / 334, 2.4x",
+    "Q7_graph_var_contains": "4406, known slow (aegis-nmouik)",
+    "Q8_label_lcase_contains": "29 / 472, 16x",
+    "Q9_subject_strstarts": "9 / 352, 39x"
+  },
+  "classes": {
+    "Q1_status_pred": {"min_ratio": 0, "max_p95_ms": 3000, "max_rel_c0": 60},
+    "Q2_graph_literal_substr": {"min_ratio": 2.5, "max_p95_ms": 1000, "max_rel_c0": 12},
+    "Q3_label_regex": {"min_ratio": 5, "max_p95_ms": 1000, "max_rel_c0": 8},
+    "Q4_subject_contains": {"min_ratio": 30, "max_p95_ms": 1000, "max_rel_c0": 6},
+    "Q5_comment_contains": {"min_ratio": 5, "max_p95_ms": 1000, "max_rel_c0": 8},
+    "Q6_type_regex_count": {"min_ratio": 1.5, "max_p95_ms": 2000, "max_rel_c0": 30},
+    "Q7_graph_var_contains": {"min_ratio": 0, "max_p95_ms": 30000, "max_rel_c0": 1000000},
+    "Q8_label_lcase_contains": {"min_ratio": 5, "max_p95_ms": 1000, "max_rel_c0": 8},
+    "Q9_subject_strstarts": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 6}
+  }
+}
