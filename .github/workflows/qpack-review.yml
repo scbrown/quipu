@@ -22,6 +22,16 @@ on:
       - "**/decisions.json"
       - "scripts/ci/qpack-review.py"
       - ".github/workflows/qpack-review.yml"
+      - "src/share_pack_review*.rs"
+      - "src/cli_share_diff.rs"
+      - "src/share_diff*.rs"
+      - "src/git_merge*.rs"
+      - "src/shacl*.rs"
+      - "src/shacl/**"
+      - "src/lib.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "tests/share_review*.rs"
 
 # READ-ONLY by default. Posting a PR comment needs a write token, which is a
 # security-posture decision, so it lives in the separate `comment` job below and
@@ -52,6 +62,10 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
       # `shacl` is required: without it the report says NOT CHECKED and the
       # gate refuses rather than passing.
+      - name: Unavailable SHACL library control
+        run: cargo test --locked --no-default-features --test share_review_no_shacl
+      - name: Gate regression controls
+        run: cargo test --locked --features shacl --test share_review
       - run: cargo build --locked --features shacl --bin quipu
       - name: Review changed packs
         env:

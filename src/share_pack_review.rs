@@ -260,7 +260,7 @@ fn check_shacl(input: &ReviewInput<'_>, labels: &Labels) -> Result<ShaclReview> 
     let Some(new_shapes) = input.new_shapes else {
         return Ok(ShaclReview::NotChecked {
             reason: "the new pack ships no shapes.ttl".into(),
-            gate_must_fail: false,
+            gate_must_fail: true,
         });
     };
     let old = tally(input.old_shapes, input.old)?;

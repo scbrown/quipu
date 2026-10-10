@@ -595,7 +595,10 @@ Sections always appear in this order:
    stops conforming. If the new pack ships no shapes, or the binary was built
    without the `shacl` feature, the section says **NOT CHECKED**. That is not a
    zero, and `--fail-on-introduced` refuses (exit 1) on a build without SHACL
-   rather than pass. Blank-node labels are collapsed when matching, because
+   rather than pass. A surviving pack with missing new shapes also refuses this gate.
+Whole pack deletion is distinguished by the workflow only when every artifact
+file is absent at the head; incomplete surviving packs refuse. No new-head
+validation is claimed for a proven deletion. Blank-node labels are collapsed when matching, because
    RDFC may relabel every blank node between versions.
 3. **Merge decisions.** When the change carries a `decisions.json` sidecar from
    `quipu git-merge` (see below), each conflict is listed with its subject,

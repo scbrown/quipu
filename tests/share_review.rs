@@ -213,7 +213,7 @@ fn missing_shapes_is_not_checked_never_zero() {
     assert!(matches!(
         r.shacl,
         ShaclReview::NotChecked {
-            gate_must_fail: false,
+            gate_must_fail: true,
             ..
         }
     ));
@@ -345,6 +345,36 @@ fn ci_script_is_red_only_for_an_introduced_violation() {
         md.contains("SHACL 0 introduced") && md.contains("**Green:** 1 pack"),
         "{md}"
     );
+    let (code, md) = head("shapes-deleted", &|| {
+        std::fs::remove_file(pack.join("shapes.ttl")).unwrap();
+    });
+    assert_eq!(code, 1, "{md}");
+    assert!(!md.contains("**Green:**"), "{md}");
+    let (code, md) = head("unshaped-new-pack", &|| {
+        let new_pack = repo.join("data/unshaped");
+        std::fs::create_dir_all(&new_pack).unwrap();
+        std::fs::write(new_pack.join("export.nt"), read("clean-new", "payload.nq")).unwrap();
+        std::fs::write(new_pack.join("manifest.json"), "{}\n").unwrap();
+    });
+    assert_eq!(code, 1, "{md}");
+    assert!(!md.contains("**Green:**"), "{md}");
+    let (code, md) = head("shapes-malformed", &|| {
+        std::fs::write(pack.join("shapes.ttl"), "not Turtle {\n").unwrap();
+    });
+    assert_eq!(code, 1, "{md}");
+    let (code, md) = head("partial-deletion", &|| {
+        std::fs::remove_file(pack.join("export.nt")).unwrap();
+    });
+    assert_eq!(code, 1, "{md}");
+    let (code, md) = head("whole-deletion", &|| {
+        std::fs::remove_dir_all(&pack).unwrap();
+    });
+    assert_eq!(code, 0, "{md}");
+    assert!(
+        md.contains("Deleted pack") && md.contains("not applicable"),
+        "{md}"
+    );
+    assert!(!md.contains("SHACL 0 introduced"), "{md}");
     let (code, md) = head("fixture-only", &|| {
         let d = repo.join("tests/fixtures/x");
         std::fs::create_dir_all(&d).unwrap();
@@ -352,4 +382,31 @@ fn ci_script_is_red_only_for_an_introduced_violation() {
     });
     assert_eq!(code, 0, "{md}");
     assert!(md.contains("No qpack changed"), "{md}");
+}
+
+#[test]
+fn cli_missing_or_malformed_shapes_refuses_gate_but_report_is_informational() {
+    let temp = tempfile::tempdir().unwrap();
+    let new = temp.path().join("new");
+    std::fs::create_dir(&new).unwrap();
+    std::fs::write(new.join("payload.nq"), read("clean-new", "payload.nq")).unwrap();
+    std::fs::write(new.join("manifest.json"), "{}\n").unwrap();
+    let probe = |gated: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quipu"));
+        command
+            .args(["share", "diff"])
+            .arg(dir("clean-old"))
+            .arg(&new)
+            .arg("--report");
+        if gated {
+            command.arg("--fail-on-introduced");
+        }
+        command.output().unwrap()
+    };
+    assert!(probe(false).status.success());
+    let missing = probe(true);
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&missing.stdout).contains("NOT CHECKED"));
+    std::fs::write(new.join("shapes.ttl"), "not Turtle {\n").unwrap();
+    assert_eq!(probe(true).status.code(), Some(1));
 }

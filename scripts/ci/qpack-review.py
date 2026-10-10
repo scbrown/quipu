@@ -128,6 +128,7 @@ def main():
 
     parts = [MARKER, "# qpack review", ""]
     failed = []
+    deleted = 0
     if not packs:
         parts.append(
             "No qpack changed in this pull request. A pack is a directory holding "
@@ -137,6 +138,20 @@ def main():
             parts.append("\nPack-like files changed outside any pack: " + ", ".join(
                 f"`{d}`" for d in candidates))
     for directory in packs:
+        head_files = names(repo, args.head, directory)
+        if not head_files.intersection(PACK_FILES):
+            # Only a proven absence of ALL artifact files is a whole deletion.
+            # Missing validation on a surviving pack must use the strict gate.
+            parts += [f"## `{directory}`", "",
+                      "**Deleted pack:** no payload, manifest, shapes or decisions remain at the head. "
+                      "New-head SHACL validation is not applicable.", ""]
+            deleted += 1
+            continue
+        if not is_pack(head_files):
+            parts += [f"## `{directory}`", "",
+                      "**Incomplete surviving pack:** payload and manifest are required.", ""]
+            failed.append(directory)
+            continue
         with tempfile.TemporaryDirectory() as tmp:
             code, report, err = review(repo, binary, base, args.head, directory, Path(tmp))
         parts += [f"## `{directory}`", ""]
@@ -155,7 +170,8 @@ def main():
         f"**Red:** {len(failed)} pack(s) introduce SHACL violations or could not be reviewed: "
         + ", ".join(f"`{d}`" for d in failed)
         if failed
-        else f"**Green:** {len(packs)} pack(s) reviewed, no introduced SHACL violations."
+        else f"**Green:** {len(packs) - deleted} pack(s) reviewed, no introduced SHACL violations; "
+             f"{deleted} whole pack deletion(s) explicitly identified."
     )
     parts += ["---", verdict, ""]
     body = "\n".join(parts)
