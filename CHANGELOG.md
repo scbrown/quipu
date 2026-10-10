@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- *(server)* Record the receiver-observed socket peer and bounded request-provenance class and missing fields separately from caller-declared identity. Missing transport context remains explicit; forwarded headers do not establish the peer.
+
 ## [0.11.1] - 2026-10-07
 
 ### Added
