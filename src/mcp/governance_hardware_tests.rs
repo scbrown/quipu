@@ -387,3 +387,78 @@ fn a_quechua_namespace_registration_is_trusted_like_a_legacy_one() {
     let ok = tool_verdict_verify(&store, &v).unwrap();
     assert_eq!(ok["trusted"], true, "{ok:#}");
 }
+
+/// aegis-mbob8m (from wu's review of #344). The caller records the assertion's
+/// counter as the registration's new `aegis:signCount`. If it does so in the
+/// SAME transaction as the verdict, a re-verify at the recorded basis reads
+/// the registry AS OF that transaction, so it sees the verdict's own counter,
+/// and the `WebAuthn` strictly-increasing rule would refuse a valid verdict.
+fn recorded_basis_verify(sign_count_in_same_tx: bool) -> serde_json::Value {
+    let mut store = enabled_store();
+    let auth = Authenticator::es256();
+    ingest(
+        &mut store,
+        &webauthn_registration(&auth, "; a:signCount 10 "),
+    )
+    .unwrap();
+    let mut c = Ceremony::for_message(MESSAGE);
+    c.sign_count = 11;
+    let mut input = webauthn_verdict(&auth, &c);
+    let sig = input["signature"].as_str().unwrap().to_string();
+    let verdict_ttl = format!("a:verdict-1 a:signature \"{sig}\" .\n");
+    if sign_count_in_same_tx {
+        // One transaction: the verdict and the counter it consumed.
+        ingest(
+            &mut store,
+            &format!("{verdict_ttl}a:passkey a:signCount 11 .\n"),
+        )
+        .unwrap();
+    } else {
+        ingest(&mut store, &verdict_ttl).unwrap();
+        ingest(&mut store, "a:passkey a:signCount 11 .\n").unwrap();
+    }
+    input["verdict"] = json!("http://aegis.gastown.local/ontology/verdict-1");
+    tool_verdict_verify(&store, &input).unwrap()
+}
+
+#[test]
+fn a_counter_recorded_in_a_later_tx_reverifies_at_the_recorded_basis() {
+    let out = recorded_basis_verify(false);
+    assert_eq!(out["as_of"]["basis"], "recorded", "{out:#}");
+    assert_eq!(out["trusted"], true, "{out:#}");
+}
+
+#[test]
+fn a_counter_recorded_in_the_verdicts_own_tx_reverifies_at_the_recorded_basis() {
+    let out = recorded_basis_verify(true);
+    assert_eq!(out["as_of"]["basis"], "recorded", "{out:#}");
+    assert_eq!(out["trusted"], true, "{out:#}");
+}
+
+/// The other side of the same boundary: reading the counter one transaction
+/// earlier must not let a stale assertion launder itself. A clone presenting
+/// 11 after 15 was recorded, written alongside a same-transaction counter of
+/// 11, is still compared with 15 and refused.
+#[test]
+fn a_stale_assertion_with_a_same_tx_lowered_counter_is_still_refused() {
+    let mut store = enabled_store();
+    let auth = Authenticator::es256();
+    ingest(
+        &mut store,
+        &webauthn_registration(&auth, "; a:signCount 15 "),
+    )
+    .unwrap();
+    let mut c = Ceremony::for_message(MESSAGE);
+    c.sign_count = 11;
+    let mut input = webauthn_verdict(&auth, &c);
+    let sig = input["signature"].as_str().unwrap().to_string();
+    ingest(
+        &mut store,
+        &format!("a:verdict-2 a:signature \"{sig}\" .\na:passkey a:signCount 11 .\n"),
+    )
+    .unwrap();
+    input["verdict"] = json!("http://aegis.gastown.local/ontology/verdict-2");
+    let out = tool_verdict_verify(&store, &input).unwrap();
+    assert_eq!(out["trusted"], false, "{out:#}");
+    assert!(out["reasons"].to_string().contains("counter"), "{out:#}");
+}
