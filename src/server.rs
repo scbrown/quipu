@@ -36,6 +36,8 @@ mod graph_backfill;
 mod graph_metrics;
 #[path = "server/graph_store.rs"]
 mod graph_store;
+#[path = "server/graph_store_compact.rs"]
+mod graph_store_compact;
 #[path = "server/handle.rs"]
 mod handle;
 #[path = "server/input_fields.rs"]
