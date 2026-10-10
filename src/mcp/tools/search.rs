@@ -475,40 +475,23 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
     // Try to extract a pushdown filter from SPARQL type constraints.
     let pushdown = sparql_filter.and_then(extract_type_filter);
 
-    // Step 1: If SPARQL filter provided, get candidate entity IRIs for post-filter.
-    // This is always needed as a fallback (SQLite) and safety net (complex SPARQL).
-    let candidate_iris: Option<Vec<String>> = if let Some(sparql) = sparql_filter {
-        let result = crate::sparql::query(store, sparql)?;
-        let mut iris = Vec::new();
-        for row in result.rows() {
-            if let Some(first_var) = result.variables().first() {
-                match row.get(first_var) {
-                    Some(crate::types::Value::Ref(id)) => {
-                        iris.push(store.resolve(*id)?);
-                    }
-                    Some(crate::types::Value::Str(s)) => {
-                        iris.push(s.clone());
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Some(iris)
-    } else {
-        None
-    };
+    let _budget = super::search_scoped::request_budget(store);
+    let candidate_iris = sparql_filter
+        .map(|sparql| super::search_scoped::candidates(store, sparql, valid_at))
+        .transpose()?;
 
-    // Step 2: Vector search with predicate pushdown (LanceDB) or oversample (SQLite).
-    let all_matches = store.vector_store().vector_search_filtered(
+    // Step 2: SQLite scores scoped candidates before top-K; other backends retain pushdown.
+    let all_matches = super::search_scoped::matches(
+        store,
         &embedding,
         limit,
         pushdown.as_deref(),
         valid_at,
+        candidate_iris.as_deref(),
     )?;
 
     // Step 3: Post-filter by SPARQL candidates when present.
     // With LanceDB pushdown the filter is redundant but harmless (belt + suspenders).
-    // With SQLite fallback (oversampled, no pushdown) this is essential.
     let filtered: Vec<_> = if let Some(ref candidates) = candidate_iris {
         all_matches
             .into_iter()
