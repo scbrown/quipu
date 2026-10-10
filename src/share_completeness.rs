@@ -84,6 +84,8 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("attestation_nonces", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
+    // Local scope-bound cache/coverage state; reconstructed views must reconcile.
+    ("project_summary_scopes", Disposition::Excluded),
     // Local derived-index cursor/highwater. A reconstructed store has its
     // own fact rowids and must start a new bounded backfill.
     ("lexical_progress", Disposition::Excluded),

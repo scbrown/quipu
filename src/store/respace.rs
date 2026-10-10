@@ -155,6 +155,21 @@ pub(super) fn classify_live_schema(conn: &Connection) -> Result<Vec<ClassifiedCo
 /// `COLUMN_CLASSIFICATION` would break its exact-schema invariant. They still
 /// get a closed vocabulary here: a future added column refuses until named.
 fn classify_optional_column(table: &str, column: &str) -> Option<TermIdKind> {
+    // Opt-in local projection state is not present in a default store.
+    // Graph keys remap; coverage/stamps/payload are not term identity.
+    if table == "project_summary_scopes" {
+        return match column {
+            "project" | "ephemeral" => Some(TermIdKind::Id),
+            "store_id"
+            | "schema_id"
+            | "generation"
+            | "published_generation"
+            | "evaluated_at"
+            | "valid_until"
+            | "payload" => Some(TermIdKind::None),
+            _ => None,
+        };
+    }
     const PACK_MANIFEST: &[&str] = &[
         "id",
         "pack_format",

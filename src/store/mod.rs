@@ -27,6 +27,7 @@ mod open;
 pub(crate) use open::open_file_immutable;
 pub mod ops;
 pub mod overlays;
+pub mod project_summaries;
 pub mod push;
 pub mod queries;
 pub mod read_model;
