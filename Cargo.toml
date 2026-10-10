@@ -114,6 +114,8 @@ hex = "0.4"
 # hardware verdict schemes. Already in the lock file transitively.
 base64 = "0.22"
 spargebra = "0.4"
+# XML Schema calendar validation; promote the existing lock-file version.
+oxsdatatypes = "=0.2.2"
 regex = "1"
 rudof_rdf = { version = "0.3.16", optional = true }
 shacl_engine = { package = "shacl", version = "0.3.16", optional = true }

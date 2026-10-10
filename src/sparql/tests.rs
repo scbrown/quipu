@@ -4016,14 +4016,22 @@ fn xsd_cast_integer_identity_is_exact_above_f64_precision() {
     let cast = |target, value| {
         super::casts::cast(&store, target, value, |n| n.to_string(), |n| n.to_string())
     };
-    assert_eq!(
-        cast(crate::namespace::XSD_INTEGER, Value::Int(identity)),
-        Some(Value::Int(identity))
-    );
-    assert_eq!(
-        cast(crate::namespace::XSD_STRING, Value::Int(identity)),
-        Some(Value::Str(identity.to_string()))
-    );
+    for value in [
+        Value::Int(identity),
+        Value::Typed {
+            lexical: identity.to_string(),
+            datatype: crate::namespace::XSD_INTEGER.into(),
+        },
+    ] {
+        assert_eq!(
+            cast(crate::namespace::XSD_INTEGER, value.clone()),
+            Some(Value::Int(identity))
+        );
+        assert_eq!(
+            cast(crate::namespace::XSD_STRING, value),
+            Some(Value::Str(identity.to_string()))
+        );
+    }
 }
 
 #[test]
@@ -4041,4 +4049,37 @@ fn xsd_cast_integer_out_of_range_does_not_saturate() {
     assert_eq!(cast(Value::Float(1e20)), None);
     assert_eq!(cast(Value::Float(-1e20)), None);
     assert_eq!(cast(Value::Float(3.9)), Some(Value::Int(3)));
+}
+
+#[test]
+fn xsd_cast_datetime_checks_calendar_and_timezone() {
+    assert_eq!(bind_value(r#"xsd:dateTime("2024-02-30T12:00:00Z")"#), None);
+    assert_eq!(
+        bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:01")"#),
+        None
+    );
+    assert!(bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:00")"#).is_some());
+}
+
+#[test]
+fn xsd_cast_double_to_string_does_not_saturate_or_spell_infinity_as_inf() {
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("1e20"))"#),
+        Some(Value::Str("1.0E20".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("INF"))"#),
+        Some(Value::Str("INF".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("NaN"))"#),
+        Some(Value::Str("NaN".into()))
+    );
+}
+
+#[test]
+fn xsd_cast_decimal_overflow_is_a_type_error() {
+    let too_large = "9".repeat(400);
+    assert_eq!(bind_value(&format!(r#"xsd:decimal("{too_large}")"#)), None);
+    assert!(bind_value(r#"xsd:decimal("33.33")"#).is_some());
 }

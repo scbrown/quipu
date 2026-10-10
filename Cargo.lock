@@ -4680,6 +4680,7 @@ dependencies = [
  "oxigraph",
  "oxrdf",
  "oxrdfio",
+ "oxsdatatypes",
  "oxttl",
  "parking_lot",
  "petgraph 0.7.1",
