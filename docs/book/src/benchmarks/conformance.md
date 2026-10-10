@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu does **not** pass every approved W3C SPARQL 1.1 Query, Update, Protocol
-> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **184/242**.
+> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **167/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **199/242**.
 > Exceptions, each named below: federated query (`SERVICE`) passes 6/7, with 1 refused by policy (variable
 > endpoints); entailment regimes are scored separately (35/70 passed, 0 failing, 35 declared non-goals);
 > SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.
@@ -15,7 +15,7 @@
 > The update-syntax suites are not run yet.
 > **The SPARQL 1.0 query tests are scored separately.** The SPARQL 1.1 manifests hold what
 > 1.1 added; the 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query
-> conformance. Quipu passes 184/242 of the approved ones, with 42 failing, 6 errors and 10 not comparable; see [SPARQL 1.0 query tests](#sparql-10-query-tests).
+> conformance. Quipu passes 199/242 of the approved ones, with 33 failing, 0 errors and 10 not comparable; see [SPARQL 1.0 query tests](#sparql-10-query-tests).
 > **This score is fitted to this suite.** Quipu's failures here were found by running this suite
 > and fixed against it, case by case, so a perfect score is partly a record of that work rather
 > than an independent sample. Other stores measured with the same harness were not tuned to it.
@@ -29,7 +29,7 @@ You can re-derive every number on this page yourself — the commands are below.
 
 For what Quipu does with a graph once it is correct — handing it to another
 store, and composing another store's without trusting it — see
-[Sharing & Federation](../sharing/README.md). That page states its own claim
+[Sharing & Federation](../sharing/index.md). That page states its own claim
 boundary for `SERVICE`, including the configured-endpoint policy deviation scored below.
 
 ## What was measured
@@ -37,9 +37,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4` |
-| Quipu revision (syntax) | `4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4` |
-| Quipu version | `quipu 0.11.1` |
+| Quipu revision (evaluation) | `c8f9c320d66eda5df775331fdab55cc57a32fabe` |
+| Quipu revision (syntax) | `c8f9c320d66eda5df775331fdab55cc57a32fabe` |
+| Quipu version | `quipu 0.12.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -52,13 +52,13 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 168 | 0 | 0 | 0 | 168 |
+| query evaluation | 167 | 1 | 0 | 0 | 168 |
 | federated query (`SERVICE`) | 6 | 0 | 0 | 1 | 7 |
 | result format | 10 | 0 | 0 | 0 | 10 |
 | protocol | 34 | 0 | 0 | 0 | 34 |
 | update | 93 | 0 | 0 | 0 | 93 |
 | entailment | 35 | 0 | 0 | 35 | 70 |
-| **all classes** | **432** | **0** | **0** | **36** | **468** |
+| **all classes** | **431** | **1** | **0** | **36** | **468** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -73,7 +73,7 @@ shown separately, so a design choice is not presented as a wrong answer.
 
 | System | Version | Query evaluation | Of those failures, same value | Update |
 |---|---|---:|---:|---:|
-| quipu | `quipu 0.11.1` | 168/168 | — | 93/93 |
+| quipu | `quipu 0.12.0` | 167/168 | — | 93/93 |
 | RDF4J | `6.1.0` | 162/168 | 5 | 87/93 |
 | Oxigraph | `0.5.11` | 159/168 | 8 | 93/93 |
 | Jena Fuseki | `6.2.0` | 155/168 | 12 | 93/93 |
@@ -101,7 +101,7 @@ the manifests have not marked approved.
 
 | Format | RDF 1.1 | RDF 1.2 |
 |---|---:|---:|
-| Turtle | 306/313 | not supported (0/106) |
+| Turtle | 313/313 | not supported (0/106) |
 | N-Triples | 70/70 | not supported (0/70) |
 | N-Quads | 0/87 (87 unsupported) | not supported (0/68) |
 | TriG | 0/357 (357 unsupported) | not supported (0/61) |
@@ -112,13 +112,32 @@ manifests and not run: a loader that rejects all RDF 1.2 input would "pass" ever
 negative-syntax case, and those passes would read as partial support. No RDF 1.2
 case is scored as a pass until the support exists.
 
+### Known deviation: literal lexical identity
+
+The current loader canonicalizes integer and double literals: for example,
+`"01"^^xsd:integer` is stored and exported as `"1"^^xsd:integer`.
+It also converts an ill-typed boolean such as `"z"^^xsd:boolean` to `false`,
+and rejects some ill-typed numeric literals during loading. These are known
+deviations, not the intended storage contract; affected cases remain failures.
+
+The chosen contract is to preserve lexical form and datatype as RDF term
+identity, including ill-typed literals, and derive numeric values separately.
+Distinct terms such as `"01"` and `"1"` with the same integer datatype must
+coexist even though their numeric values compare equal. This follows
+[RDF 1.1 literal term equality](https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal).
+An expression's effective boolean value must not replace the stored term.
+
+The preservation fix is not implemented yet. Existing data cannot recover
+discarded spellings; a future compatibility plan must preserve legacy term
+identity, exact retraction and history without inventing missing lexical forms.
+
 Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)
 and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).
 
 ## SPARQL 1.0 query tests
 
 The approved W3C SPARQL 1.0 query-evaluation tests (`sparql/sparql10`) at the same
-rdf-tests revision (`369a90d1`), run by the same runner: **184/242** pass.
+rdf-tests revision (`369a90d1`), run by the same runner: **199/242** pass.
 
 Most SPARQL 1.0 answers are RDF result-set graphs (`rs:ResultSet`). They are read with
 rdflib, pinned, with literal normalisation off, so `"01"^^xsd:integer` stays `01`.
@@ -128,13 +147,11 @@ RDF/XML answers, which the runner does not read.
 
 | Family | Passed | Failed | Error | Unsupported | Cases |
 |---|---:|---:|---:|---:|---:|
-| `expr-builtin` | 10 | 14 | 0 | 0 | 24 |
-| `open-world` | 3 | 8 | 6 | 0 | 17 |
-| `sort` | 2 | 1 | 0 | 10 | 13 |
-| `cast` | 1 | 6 | 0 | 0 | 7 |
+| `expr-builtin` | 12 | 12 | 0 | 0 | 24 |
+| `open-world` | 5 | 12 | 0 | 0 | 17 |
+| `sort` | 3 | 0 | 0 | 10 | 13 |
 | `distinct` | 6 | 5 | 0 | 0 | 11 |
-| `expr-equals` | 8 | 4 | 0 | 0 | 12 |
-| `construct` | 3 | 2 | 0 | 0 | 5 |
+| `expr-equals` | 10 | 2 | 0 | 0 | 12 |
 | `reduced` | 1 | 1 | 0 | 0 | 2 |
 | `regex` | 3 | 1 | 0 | 0 | 4 |
 | `algebra` | 14 | 0 | 0 | 0 | 14 |
@@ -143,6 +160,8 @@ RDF/XML answers, which the runner does not read.
 | `bnode-coreference` | 1 | 0 | 0 | 0 | 1 |
 | `boolean-effective-value` | 7 | 0 | 0 | 0 | 7 |
 | `bound` | 1 | 0 | 0 | 0 | 1 |
+| `cast` | 7 | 0 | 0 | 0 | 7 |
+| `construct` | 5 | 0 | 0 | 0 | 5 |
 | `dataset` | 12 | 0 | 0 | 0 | 12 |
 | `expr-ops` | 7 | 0 | 0 | 0 | 7 |
 | `graph` | 11 | 0 | 0 | 0 | 11 |
@@ -157,6 +176,57 @@ Some failures are the lexical-form design choice described above (a number is st
 by value, so `"01"` reads back as `1`); others are engine defects being fixed.
 Every case, with its diagnostic, is in
 [`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).
+
+### Named SPARQL 1.0 deviations
+
+These are the current ledger's non-passing cases, including loader errors and
+runner limitations. Listing a case does not claim its engine defect is fixed.
+
+| W3C test | Status | Diagnostic |
+|---|---|---|
+| `:open-eq-03` | failed | actual result differs from expected multiset |
+| `:open-eq-04` | failed | actual result differs from expected multiset |
+| `:open-eq-06` | failed | actual result differs from expected multiset |
+| `:open-eq-07` | failed | actual result differs from expected multiset |
+| `:open-eq-08` | failed | actual result differs from expected multiset |
+| `:open-eq-10` | failed | actual result differs from expected multiset |
+| `:open-eq-11` | failed | actual result differs from expected multiset |
+| `:open-eq-12` | failed | actual result differs from expected multiset |
+| `:date-2` | failed | actual result differs from expected multiset |
+| `:date-3` | failed | actual result differs from expected multiset |
+| `:open-cmp-01` | failed | actual result differs from expected multiset |
+| `:open-cmp-02` | failed | actual result differs from expected multiset |
+| `:dawg-str-2` | failed | actual result differs from expected multiset |
+| `:dawg-isBlank-1` | failed | actual result differs from expected multiset |
+| `:dawg-datatype-2` | failed | actual result differs from expected multiset |
+| `:dawg-lang-1` | failed | actual result differs from expected multiset |
+| `:dawg-lang-2` | failed | actual result differs from expected multiset |
+| `:dawg-isURI-1` | failed | actual result differs from expected multiset |
+| `:dawg-isIRI-1` | failed | actual result differs from expected multiset |
+| `:dawg-langMatches-4` | failed | actual result differs from expected multiset |
+| `:lang-case-insensitive-eq` | failed | actual result differs from expected multiset |
+| `:sameTerm-simple` | failed | actual result differs from expected multiset |
+| `:sameTerm-eq` | failed | actual result differs from expected multiset |
+| `:sameTerm-not-eq` | failed | actual result differs from expected multiset |
+| `:eq-2-1` | failed | actual result differs from expected multiset |
+| `:eq-2-2` | failed | actual result differs from expected multiset |
+| `:dawg-regex-003` | failed | actual result differs from expected multiset |
+| `:no-distinct-1` | failed | actual result differs from expected multiset |
+| `:distinct-1` | failed | actual result differs from expected multiset |
+| `:no-distinct-2` | failed | actual result differs from expected multiset |
+| `:no-distinct-9` | failed | actual result differs from expected multiset |
+| `:distinct-9` | failed | actual result differs from expected multiset |
+| `:dawg-sort-1` | unsupported |  |
+| `:dawg-sort-2` | unsupported |  |
+| `:dawg-sort-3` | unsupported |  |
+| `:dawg-sort-4` | unsupported |  |
+| `:dawg-sort-5` | unsupported |  |
+| `:dawg-sort-6` | unsupported |  |
+| `:dawg-sort-7` | unsupported |  |
+| `:dawg-sort-8` | unsupported |  |
+| `:dawg-sort-9` | unsupported |  |
+| `:dawg-sort-10` | unsupported |  |
+| `:reduced-2` | failed | actual result differs from expected multiset |
 
 ## SPARQL 1.2 query tests
 
@@ -195,7 +265,7 @@ moves the most per fix.
 |---|---:|---:|---:|---:|---:|
 | `functions` | 57 | 0 | 0 | 0 | 57 |
 | `property-path` | 24 | 0 | 0 | 0 | 24 |
-| `aggregates` | 22 | 0 | 0 | 0 | 22 |
+| `aggregates` | 21 | 1 | 0 | 0 | 22 |
 | `subquery` | 14 | 0 | 0 | 0 | 14 |
 | `negation` | 11 | 0 | 0 | 0 | 11 |
 | `bind` | 10 | 0 | 0 | 0 | 10 |
@@ -209,6 +279,15 @@ moves the most per fix.
 
 Every test that does not pass is listed here with its W3C identifier, so a
 claim of progress can be checked against a specific case rather than a count.
+
+<details>
+<summary><code>aggregates</code> — 1 of 22 not passing</summary>
+
+| Test | Name | Status | Reason |
+|---|---|---|---|
+| `:agg-min-02` | MIN with GROUP BY | failed | `actual result differs from expected multiset` |
+
+</details>
 
 ## Federated query (`SERVICE`)
 
@@ -321,7 +400,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-10-08T20:21:02Z by [CI run](https://github.com/scbrown/quipu/actions/runs/37837741337), from quipu `4bfed20aa28a`.
+Ledger re-derived 2026-10-10T20:55:10Z by [CI run](https://github.com/scbrown/quipu/actions/runs/38085253283), from quipu `c8f9c320d66e`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.

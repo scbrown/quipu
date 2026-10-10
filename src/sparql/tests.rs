@@ -3929,3 +3929,184 @@ fn filter_same_term_non_canonical_lexical_form() {
     .unwrap();
     assert!(names(&result).is_empty());
 }
+
+// ── XSD casts (aegis-soqv1r, W3C sparql10 cast + sort-function) ─────────────
+// Only xsd:double was implemented, so every other cast was silently unbound
+// and ORDER BY xsd:integer(?o) sorted nothing.
+
+fn bind_value(expr: &str) -> Option<Value> {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?r WHERE {{ BIND({expr} AS ?r) }}"
+    );
+    let result = query(&store, &q).unwrap();
+    result.rows().first().and_then(|r| r.get("r").cloned())
+}
+
+#[test]
+fn xsd_casts_from_strings() {
+    assert_eq!(bind_value(r#"xsd:integer("13")"#), Some(Value::Int(13)));
+    assert_eq!(bind_value(r#"xsd:integer("+33.3300")"#), None);
+    assert_eq!(bind_value(r#"xsd:boolean("1")"#), Some(Value::Bool(true)));
+    assert_eq!(bind_value(r#"xsd:boolean("yes")"#), None);
+    let dt = |v: Option<Value>| v.and_then(|v| v.datatype().map(str::to_string));
+    let xsd = |t: &str| Some(format!("http://www.w3.org/2001/XMLSchema#{t}"));
+    assert_eq!(dt(bind_value(r#"xsd:decimal("+33.3300")"#)), xsd("decimal"));
+    assert_eq!(dt(bind_value(r#"xsd:float("-10.2E3")"#)), xsd("float"));
+    assert_eq!(dt(bind_value(r#"xsd:double("13")"#)), xsd("double"));
+    assert_eq!(
+        dt(bind_value(r#"xsd:dateTime("2002-10-10T17:00:00Z")"#)),
+        xsd("dateTime")
+    );
+    assert_eq!(bind_value(r#"xsd:dateTime("true")"#), None);
+    assert_eq!(bind_value(r#"xsd:decimal("string")"#), None);
+}
+
+#[test]
+fn xsd_casts_by_value_and_to_string() {
+    assert_eq!(bind_value("xsd:integer(3.9)"), Some(Value::Int(3)));
+    assert_eq!(bind_value("xsd:boolean(0)"), Some(Value::Bool(false)));
+    assert_eq!(
+        bind_value("xsd:string(<http://example.org/alice>)"),
+        Some(Value::Str("http://example.org/alice".into()))
+    );
+    assert_eq!(bind_value("xsd:integer(<http://example.org/alice>)"), None);
+}
+
+#[test]
+fn order_by_a_cast_sorts_by_the_cast_value() {
+    let mut store = Store::open_in_memory().unwrap();
+    ingest_rdf(
+        &mut store,
+        br#"<http://e/s1> <http://e/p> "2" . <http://e/s2> <http://e/p> "300" . <http://e/s3> <http://e/p> "10" ."#
+            .as_slice(),
+        RdfFormat::Turtle,
+        None,
+        "2026-04-04T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let result = query(
+        &store,
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?o WHERE { ?s <http://e/p> ?o } ORDER BY xsd:integer(?o)",
+    )
+    .unwrap();
+    let order: Vec<_> = result
+        .rows()
+        .iter()
+        .filter_map(|r| r.get("o").cloned())
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            Value::Str("2".into()),
+            Value::Str("10".into()),
+            Value::Str("300".into())
+        ]
+    );
+}
+
+#[test]
+fn xsd_cast_integer_identity_is_exact_above_f64_precision() {
+    let store = Store::open_in_memory().unwrap();
+    let identity = 9_007_199_254_740_993_i64;
+    let cast = |target, value| {
+        super::casts::cast(&store, target, value, |n| n.to_string(), |n| n.to_string())
+    };
+    for value in [
+        Value::Int(identity),
+        Value::Typed {
+            lexical: identity.to_string(),
+            datatype: crate::namespace::XSD_INTEGER.into(),
+        },
+    ] {
+        assert_eq!(
+            cast(crate::namespace::XSD_INTEGER, value.clone()),
+            Some(Value::Int(identity))
+        );
+        assert_eq!(
+            cast(crate::namespace::XSD_STRING, value),
+            Some(Value::Str(identity.to_string()))
+        );
+    }
+}
+
+#[test]
+fn xsd_cast_integer_out_of_range_does_not_saturate() {
+    let store = Store::open_in_memory().unwrap();
+    let cast = |value| {
+        super::casts::cast(
+            &store,
+            crate::namespace::XSD_INTEGER,
+            value,
+            |n| n.to_string(),
+            |n| n.to_string(),
+        )
+    };
+    assert_eq!(cast(Value::Float(1e20)), None);
+    assert_eq!(cast(Value::Float(-1e20)), None);
+    assert_eq!(cast(Value::Float(3.9)), Some(Value::Int(3)));
+}
+
+#[test]
+fn xsd_cast_datetime_checks_calendar_and_timezone() {
+    assert_eq!(bind_value(r#"xsd:dateTime("2024-02-30T12:00:00Z")"#), None);
+    assert_eq!(
+        bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:01")"#),
+        None
+    );
+    assert!(bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:00")"#).is_some());
+}
+
+#[test]
+fn xsd_cast_double_to_string_does_not_saturate_or_spell_infinity_as_inf() {
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("1e20"))"#),
+        Some(Value::Str("1.0E20".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("INF"))"#),
+        Some(Value::Str("INF".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("NaN"))"#),
+        Some(Value::Str("NaN".into()))
+    );
+}
+
+#[test]
+fn xsd_cast_decimal_overflow_is_a_type_error() {
+    let too_large = "9".repeat(400);
+    assert_eq!(bind_value(&format!(r#"xsd:decimal("{too_large}")"#)), None);
+    assert!(bind_value(r#"xsd:decimal("33.33")"#).is_some());
+}
+
+// ── CONSTRUCT template blank nodes are fresh per solution (aegis-soqv1r) ────
+// One template label used to be reused for every row, fusing all solutions
+// into one node (W3C sparql10 construct-3/-4).
+
+#[test]
+fn construct_template_blank_node_is_fresh_per_solution() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+         CONSTRUCT { [ rdf:subject ?s ; rdf:object ?n ] } WHERE { ?s ex:name ?n }",
+    )
+    .unwrap();
+    let QueryResult::Graph(triples) = result else {
+        panic!("CONSTRUCT did not return a graph");
+    };
+    let subjects: std::collections::HashSet<_> =
+        triples.iter().map(|t| t.subject.clone()).collect();
+    assert_eq!(
+        subjects.len(),
+        3,
+        "one fresh node per solution: {subjects:?}"
+    );
+    assert_eq!(triples.len(), 6);
+}

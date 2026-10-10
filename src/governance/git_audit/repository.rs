@@ -1,0 +1,190 @@
+//! Read-only Git plumbing; no worktree contents, hooks or external diff drivers.
+use std::collections::BTreeSet;
+use std::path::Path;
+use std::process::Command;
+
+use super::invalid;
+use crate::error::Result;
+
+pub(super) struct Window {
+    pub from: String,
+    pub to: String,
+    pub commits: Vec<String>,
+}
+
+fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
+    let output = Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove("GIT_SHALLOW_FILE")
+        .env_remove("GIT_GRAFT_FILE")
+        .arg("--no-replace-objects")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .output()
+        .map_err(|e| invalid(format!("cannot run git: {e}")))?;
+    if !output.status.success() {
+        return Err(invalid(format!(
+            "git {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    Ok(output.stdout)
+}
+
+fn text(repo: &Path, args: &[&str]) -> Result<String> {
+    String::from_utf8(git(repo, args)?)
+        .map_err(|_| invalid("non-UTF-8 Git metadata/path; coverage unproven"))
+}
+
+fn resolve(repo: &Path, reference: &str) -> Result<String> {
+    Ok(text(
+        repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            &format!("{reference}^{{commit}}"),
+        ],
+    )?
+    .trim()
+    .into())
+}
+
+pub(super) fn window(repo: &Path, from: &str, to: &str) -> Result<Window> {
+    if text(repo, &["rev-parse", "--is-shallow-repository"])?.trim() != "false" {
+        return Err(invalid(
+            "shallow repository: fetch full history before auditing",
+        ));
+    }
+    if !text(repo, &["rev-parse", "--show-prefix"])?
+        .trim()
+        .is_empty()
+    {
+        return Err(invalid("--repo must name the repository root"));
+    }
+    let grafts = text(repo, &["rev-parse", "--git-path", "info/grafts"])?;
+    let grafts = repo.join(grafts.trim());
+    match std::fs::read(&grafts) {
+        Ok(bytes) if !bytes.is_empty() => {
+            return Err(invalid("Git grafts rewrite ancestry; coverage is unproven"));
+        }
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            return Err(invalid(format!("cannot inspect Git grafts: {e}")));
+        }
+        _ => {}
+    }
+    let from = resolve(repo, from)?;
+    let to = resolve(repo, to)?;
+    git(repo, &["merge-base", "--is-ancestor", &from, &to])?;
+    let commits = text(
+        repo,
+        &[
+            "rev-list",
+            "--reverse",
+            "--topo-order",
+            &format!("{from}..{to}"),
+            "--",
+        ],
+    )?
+    .lines()
+    .map(str::to_owned)
+    .collect();
+    Ok(Window { from, to, commits })
+}
+
+pub(super) fn paths(repo: &Path, commit: &str) -> Result<BTreeSet<String>> {
+    let parents = text(repo, &["show", "-s", "--format=%P", commit, "--"])?;
+    let parents: Vec<_> = parents.split_whitespace().collect();
+    if parents.len() < 2 {
+        return diff_paths(repo, commit, None);
+    }
+    // Ordinary merges carry changes already audited at their introducing
+    // commits. Only a path different from EVERY parent is new merge evidence.
+    // Intersect pairwise tree diffs, retaining mode and deletion changes too.
+    let mut introduced = diff_paths(repo, commit, Some(parents[0]))?;
+    for parent in &parents[1..] {
+        let changed = diff_paths(repo, commit, Some(parent))?;
+        introduced.retain(|path| changed.contains(path));
+    }
+    Ok(introduced)
+}
+
+fn diff_paths(repo: &Path, commit: &str, parent: Option<&str>) -> Result<BTreeSet<String>> {
+    let mut args = vec![
+        "diff-tree",
+        "--root",
+        "-r",
+        "--no-commit-id",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--ignore-submodules=none",
+    ];
+    if let Some(parent) = parent {
+        args.push(parent);
+    }
+    args.extend([commit, "--"]);
+    let output = text(repo, &args)?;
+    Ok(output
+        .split('\0')
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+pub(super) fn attribution(repo: &Path, commit: &str) -> Result<String> {
+    let meta = text(
+        repo,
+        &["show", "-s", "--format=%an <%ae>%n%B", commit, "--"],
+    )?;
+    let mut lines = meta.lines();
+    let author = lines.next().unwrap_or("unknown author");
+    let trailers: Vec<&str> = lines
+        .filter(|line| {
+            line.split_once(':').is_some_and(|(key, _)| {
+                ["Co-Authored-By", "Claude-Session", "SHANTY_AGENT"]
+                    .iter()
+                    .any(|k| key.eq_ignore_ascii_case(k))
+            })
+        })
+        .collect();
+    Ok(format!(
+        "author {author:?}, declared trailers {trailers:?} (unauthenticated)"
+    ))
+}
+
+/// Read the exact committed regular-file blob, never following symlinks.
+pub(super) fn blob(repo: &Path, commit: &str, path: &str) -> Result<String> {
+    let entry = text(
+        repo,
+        &["ls-tree", "-z", commit, "--", &format!(":(literal){path}")],
+    )?;
+    let (metadata, found) = entry
+        .split_once('\t')
+        .ok_or_else(|| invalid("path was deleted; no committed source to replay"))?;
+    if found.strip_suffix('\0') != Some(path) {
+        return Err(invalid("Git blob lookup did not resolve the exact path"));
+    }
+    let fields: Vec<_> = metadata.split_whitespace().collect();
+    if fields.len() != 3 || !matches!(fields[0], "100644" | "100755") || fields[1] != "blob" {
+        return Err(invalid(
+            "selector replay requires a regular file, not a symlink or submodule",
+        ));
+    }
+    let size: u64 = text(repo, &["cat-file", "-s", fields[2]])?
+        .trim()
+        .parse()
+        .map_err(|_| invalid("invalid Git blob size"))?;
+    if size > 8 * 1024 * 1024 {
+        return Err(invalid("committed source exceeds the 8 MiB replay limit"));
+    }
+    text(repo, &["cat-file", "blob", fields[2]])
+}

@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.11.1"
+version = "0.12.0"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -101,6 +101,7 @@ tar = "0.4"
 # format, on native and wasm alike.
 rusqlite = { version = "0.40", features = ["bundled", "functions", "hooks", "serialize"] }
 thiserror = "2"
+bigdecimal = "0.4.10"
 oxrdf = { version = "0.3", features = ["rdfc-10"] }
 oxttl = "0.2"
 oxrdfio = "0.2"
@@ -114,7 +115,10 @@ hex = "0.4"
 # hardware verdict schemes. Already in the lock file transitively.
 base64 = "0.22"
 spargebra = "0.4"
+# XML Schema calendar validation; promote the existing lock-file version.
+oxsdatatypes = "=0.2.2"
 regex = "1"
+glob = "0.3"
 rudof_rdf = { version = "0.3.16", optional = true }
 shacl_engine = { package = "shacl", version = "0.3.16", optional = true }
 serde = { version = "1", features = ["derive"] }
@@ -181,7 +185,7 @@ owl = []
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
 mcp = ["dep:libc", "dep:url", "dep:rmcp", "dep:tower", "dep:axum", "dep:tokio", "dep:tower-http"]
-server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "remote", "jemalloc"]
+server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "dep:futures", "remote", "jemalloc"]
 # quipu-server's global allocator; implied by `server` so every deployed build
 # carries it (aegis-67p0lj). Reported in /version features as `jemalloc`.
 jemalloc = ["dep:tikv-jemallocator"]

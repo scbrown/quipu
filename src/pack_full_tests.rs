@@ -17,7 +17,7 @@ fn tmp(name: &str) -> (tempfile::TempDir, String) {
         .unwrap();
     let path = dir
         .path()
-        .join("out.qpack.db")
+        .join("out.pendant.db")
         .to_string_lossy()
         .into_owned();
     (dir, path)

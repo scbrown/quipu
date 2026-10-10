@@ -1,6 +1,6 @@
 # CLI: sharing, import and legacy packs
 
-Reference for the commands behind [Sharing & Federation](../sharing/README.md).
+Reference for the commands behind [Sharing & Federation](../sharing/index.md).
 Every flag here is checked against `quipu --help` by `tests/cli_doc_drift.rs`, so
 this page cannot quietly fall behind the binary.
 
@@ -14,7 +14,7 @@ interchange format.
 
 ## `quipu share` — produce a share
 
-Prerequisite: [load the identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+Prerequisite: [load the identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share)
 and the shapes governing your data. The default destination is outward.
 An empty block-tier catalogue exits 2 (cannot verify); a matching identifier
 exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this check.
@@ -201,6 +201,15 @@ share graph hash mismatch: manifest=… actual=…
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
 result, then sends that result through the same verified in-memory import path.
 
+Loaded local shapes determine admission. Their explicit
+`quipu:onViolation "emit"` diagnostics are advisory; reject-policy Violations
+quarantine the share. Missing policies mean reject, and unknown or conflicting
+policy values refuse. Carried shapes cannot downgrade a local reject policy.
+The report keeps strict `conforms` separate from `blocking`, with complete
+diagnostics and `advisory_results`. An emit-only Violation can therefore produce
+`conforms: false` with `blocking: false`. Vocabulary, integrity, trust and explicit
+promotion requirements still apply.
+
 ## `quipu import promote` — admit a staged share into ROOT
 
 ```text
@@ -209,7 +218,45 @@ quipu import promote <share-id> [--actor <id>] [--db <path>]
 
 The second, separate verb. Nothing reaches ROOT because a file arrived; it
 reaches ROOT because someone ran this. Keeping admission in its own command is
-the point rather than an inconvenience — see the [primitive](../sharing/README.md).
+the point rather than an inconvenience — see the [primitive](../sharing/index.md).
+
+## The project graph: `quipu share --project` and `quipu load`
+
+```text
+quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]
+quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]
+```
+
+A repository commits its project's graph under `.quipu/`, tool-neutral:
+
+| path | committed | what |
+|---|---|---|
+| `.quipu/project` | yes | one line, the project id; the graph is `urn:quipu:project:<id>` |
+| `.quipu/graph/` | yes | the share bundle for that graph (`manifest.json`, `export.nt`, …) |
+| `.quipu/.gitignore` | yes | written by quipu: an allow-list for the two above |
+| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and the host's PRIVATE signing key |
+
+`share --project <id>` names the project once (it is then committed) and
+re-shares the graph into `.quipu/graph/`. Re-running it replaces the bundle;
+it never re-points a repository at a different id. The outward scrub applies
+exactly as for any share, because the repository may be public; use
+`--destination internal` only for a private one.
+
+`load <dir>`, on a directory holding a share manifest, is the one command a
+fresh clone needs:
+
+```bash
+git clone <repo> && cd <repo>
+quipu load .quipu/graph --db .quipu/local.db
+```
+
+It runs the ordinary [`import`](#quipu-import--receive-a-share-into-quarantine),
+with every gate import has, and then promotes into the bundle's own graph
+instead of ROOT, as a diff. A re-load after `git pull` changes only what
+changed; an unchanged bundle opens no transaction. A quarantined import loads
+nothing. `load <file.ttl>` still means `knot`.
+
+The server equivalent is `POST /import` of the same bundle, which stages it.
 
 ## `quipu status` — has this share diverged?
 
@@ -515,6 +562,80 @@ change to its content, and it contributes nothing.
   is keyed by its label.
 - `--format markdown` suits a PR comment; `--format json` is the same
   structure (`entities[].changed/added/removed`, plus totals) for tools.
+
+## `quipu share diff --report` — the pull-request review
+
+```text
+quipu share diff <old> <new> --report [--format markdown|json]
+    [--old-shapes <ttl>] [--new-shapes <ttl>] [--decisions <json>]
+    [--fail-on-introduced]
+```
+
+The report a reviewer reads when a pull request changes a pack. When `<old>`
+and `<new>` are pack directories, each side's `shapes.ttl` and the new side's
+`decisions.json` are picked up from the directory; the flags name them
+explicitly otherwise. The repository's `pendant review` workflow
+(`.github/workflows/pendant-review.yml`) runs it for every pack a pull request
+touches and publishes the result as the check's job summary.
+
+### Reading the PR report
+
+Sections always appear in this order:
+
+1. **Facts.** The `quipu share diff` output above: per-entity changed, added
+   and removed facts, by label.
+2. **SHACL violations introduced.** Old data is validated against the old
+   pack's shapes, new data against the new pack's shapes, and the report lists
+   the violations that occur more often in new than in old, keyed by focus
+   node, path, constraint component and value. A violation already present
+   before the change is counted as *pre-existing*, never as introduced; the
+   count of violations the change *resolves* is shown beside it. When the
+   shapes change, a row whose old data already fails the NEW shapes is marked
+   *shapes change*: the data did not move, the rules did, and the pack still
+   stops conforming. If the new pack ships no shapes, or the binary was built
+   without the `shacl` feature, the section says **NOT CHECKED**. That is not a
+   zero, and `--fail-on-introduced` refuses (exit 1) on a build without SHACL
+   rather than pass. A surviving pack with missing new shapes also refuses this gate.
+Whole pack deletion is distinguished by the workflow only when every artifact
+file is absent at the head; incomplete surviving packs refuse. No new-head
+validation is claimed for a proven deletion. Blank-node labels are collapsed when matching, because
+   RDFC may relabel every blank node between versions.
+3. **Merge decisions.** When the change carries a `decisions.json` sidecar from
+   `quipu git-merge` (see below), each conflict is listed with its subject,
+   predicate, the constraint that made it a conflict (`sh:maxCount 1`), the
+   base/ours/theirs values and the recorded resolution, or **UNRESOLVED**. Alias
+   proposals recorded by the driver are listed the same way. The CI script
+   renders a sidecar only when the pull request adds or changes it.
+4. **Alias caveat.** Always present. A triple-level diff, merge or validation
+   cannot see two different IRIs minted for one real entity; such a pair looks
+   like two healthy entities. Below the caveat are advisory candidates: an
+   entity ADDED by the change whose normalized label is at least 0.90
+   Jaro-Winkler-similar to a same-type entity in the old pack, or to another
+   added entity. This is the merge driver's proposer, reused. No candidates is
+   not evidence of no aliases.
+5. **Summary.** The report's last line, used as the check annotation title:
+
+```text
+pendant review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates
+```
+
+`--format json` carries the same structure (`diff`, `shacl`, `decisions`,
+`alias_candidates`, `summary`). With `--fail-on-introduced` the exit status is
+3 when at least one violation is introduced; the report is printed in full
+first.
+
+The check is **red only** when a pack introduces a SHACL violation or its report
+cannot be computed. Everything else is information for the reviewer. A pack, for
+the workflow, is a directory holding `export.nt` or `payload.nq` together with
+`manifest.json` or `manifest.ttl`; the two versions compared are the merge-base
+version and the pull request head. The workflow runs with a read-only token. It
+can also keep one sticky PR comment up to date, but only when the repository
+variable `QPACK_REVIEW_COMMENT` is `true`: that job needs `pull-requests: write`,
+and granting it is a security-posture decision, so it is off by default.
+
+High-stakes (class-B) DecisionRecords are not settled by approving the pull
+request. They are resolved through the hardware-signed human verdict tracked as
+aegis-kzt0ql.9; the report only shows them.
 
 ## `quipu diff-textconv` — readable `git diff` for pack files
 

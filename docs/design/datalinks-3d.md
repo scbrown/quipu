@@ -212,7 +212,7 @@ the tarball directly.
 | `src/http_auth.rs` | Both paths on the unauthenticated read allowlist |
 | `scripts/ingest-repos.py` | Repo → Turtle for CodeModule / CodeSymbol / Document / Section |
 | `scripts/export-datalinks.sh` | Produces a canonical outward text share for the Pages demo |
-| `docs/book/src/datalinks/` | The published demo: page + committed text qpack |
+| `docs/book/src/datalinks/` | The published demo: page + committed text pendant |
 | `justfile` | `just datalinks`, `just ingest-repos`, `just docs-assets`, `just docs-data` |
 
 ## The published demo
@@ -229,11 +229,11 @@ environment. mdBook copies non-markdown files in `src/` verbatim, which is what
 puts the page at `/quipu/datalinks/`.
 
 The demo data is a committed canonical text share in
-`docs/book/src/datalinks/qpack/`: `export.nt`, `shapes.ttl` and the producer's
+`docs/book/src/datalinks/pendant/`: `export.nt`, `shapes.ttl` and the producer's
 manifest. It preserves the original 374-node Alpha Centauri snapshot; it does
 not regenerate the game graph at build time.
 
-`just docs-assets` packages those exact text files as `demo.qpack.tar.gz` and
+`just docs-assets` packages those exact text files as `demo.pendant.tar.gz` and
 copies the renderer from `ui/`. It needs neither Rust nor a Quipu server.
 The page loads that archive through the **same WebAssembly Quipu worker as
 [the repository explorer](../book/src/explore/.)**: verify the manifest, adopt
@@ -244,10 +244,10 @@ same damping, convergence threshold and dangling-mass redistribution as before.
 
 To author a replacement snapshot, supply Turtle, its application shapes, and
 a reviewed identifier-policy catalogue (see
-[preparing an outward share](../book/src/sharing/README.md#prepare-an-outward-share)):
+[preparing an outward share](../book/src/sharing/index.md#prepare-an-outward-share)):
 
 ```bash
-# Move the existing qpack directory aside before producing a replacement.
+# Move the existing pendant directory aside before producing a replacement.
 just docs-data graph.ttl shapes.ttl identifier-policy.ttl
 ```
 

@@ -3,6 +3,9 @@
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "request_completion.rs"]
+mod request_completion;
+
 static REQUEST_STARTS: AtomicU64 = AtomicU64::new(0);
 
 /// Arrivals include pending/cancelled requests and the metrics scrape itself.
@@ -17,6 +20,7 @@ pub(crate) fn render_request_starts(out: &mut String) {
         "quipu_http_requests_started_total {}",
         REQUEST_STARTS.load(Ordering::Relaxed)
     );
+    request_completion::cancellations().render(out);
 }
 
 tokio::task_local! {
@@ -111,39 +115,70 @@ async fn log_request_with_sequence(
         .get("x-quipu-agent")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
+    let peer = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|info| info.0);
+    let provenance = write_provenance_of(req.headers(), &client, &endpoint);
+    let attributed = |log| {
+        quipu::request_usage::with_request_context(
+            quipu::request_usage::with_declared_attribution(
+                log,
+                declared_host.as_deref(),
+                declared_agent.as_deref(),
+            ),
+            peer,
+            provenance.as_deref(),
+        )
+    };
     eprintln!(
         "{}",
-        quipu::request_usage::with_declared_attribution(
-            quipu::request_usage::structured_request_log(
-                "request_start",
-                id,
-                &client,
-                &task,
-                method.as_str(),
-                &path,
-                &endpoint,
-                None,
-                None,
-                quipu::request_usage::AuthOutcome::Pending,
-                None,
-            ),
-            declared_host.as_deref(),
-            declared_agent.as_deref()
-        )
+        attributed(quipu::request_usage::structured_request_log(
+            "request_start",
+            id,
+            &client,
+            &task,
+            method.as_str(),
+            &path,
+            &endpoint,
+            None,
+            None,
+            quipu::request_usage::AuthOutcome::Pending,
+            None,
+        ))
     );
-    let started = std::time::Instant::now();
-    let provenance = write_provenance_of(req.headers(), &client, &endpoint);
+    let completion_provenance = provenance.clone();
+    let mut completion = request_completion::Completion {
+        id,
+        client: client.clone(),
+        task,
+        method: method.to_string(),
+        path,
+        endpoint: endpoint.clone(),
+        declared_host,
+        declared_agent,
+        started: std::time::Instant::now(),
+        metrics: quipu::metrics::metrics(),
+        cancellations: request_completion::cancellations(),
+        emit: Box::new(move |log| {
+            eprintln!(
+                "{}",
+                quipu::request_usage::with_request_context(
+                    log,
+                    peer,
+                    completion_provenance.as_deref()
+                )
+            );
+        }),
+        finished: false,
+    };
     let resp = REQUEST_WRITE_KIND
         .scope(
             quipu::write_kind::WriteKind::for_route(&endpoint),
-            REQUEST_WRITE_PROVENANCE.scope(provenance, next.run(req)),
+            REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
         )
         .await;
     let status = resp.status().as_u16();
-    let elapsed = started.elapsed().as_secs_f64();
-    quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);
-    quipu::metrics::metrics().observe_client(&client, &task, &endpoint, elapsed);
-    quipu::metrics::metrics().observe_auth_result(&client, &endpoint, method.as_str(), status);
     let auth = resp
         .extensions()
         .get::<quipu::request_usage::AuthOutcome>()
@@ -153,26 +188,7 @@ async fn log_request_with_sequence(
         .extensions()
         .get::<quipu::request_usage::RequestUsage>()
         .copied();
-    eprintln!(
-        "{}",
-        quipu::request_usage::with_declared_attribution(
-            quipu::request_usage::structured_request_log(
-                "request_complete",
-                id,
-                &client,
-                &task,
-                method.as_str(),
-                &path,
-                &endpoint,
-                Some(status),
-                Some(started.elapsed().as_millis()),
-                auth,
-                usage,
-            ),
-            declared_host.as_deref(),
-            declared_agent.as_deref()
-        )
-    );
+    completion.finish(status, auth, usage, false);
     resp
 }
 
@@ -218,6 +234,15 @@ mod tests {
         pending.abort();
         assert!(pending.await.unwrap_err().is_cancelled());
         assert_eq!(sequence.load(Ordering::Relaxed), 1);
+        let mut cancelled = String::new();
+        request_completion::cancellations().render(&mut cancelled);
+        assert!(cancelled.contains(
+            "quipu_http_requests_cancelled_total{client=\"unattributed\",endpoint=\"/pending\"} 1"
+        ));
+        let metrics = quipu::metrics::metrics().render(0, 0, 0, None);
+        assert!(
+            metrics.contains("quipu_http_requests_total{endpoint=\"/pending\",status=\"499\"} 1")
+        );
         app.oneshot(
             axum::http::Request::builder()
                 .uri("/done")
@@ -227,6 +252,9 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(sequence.load(Ordering::Relaxed), 2);
+        let mut cancelled = String::new();
+        request_completion::cancellations().render(&mut cancelled);
+        assert!(!cancelled.contains("endpoint=\"/done\""));
     }
 
     /// aegis-7zp4rc: a write route's provenance headers are classified in the

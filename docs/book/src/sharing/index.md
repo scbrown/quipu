@@ -116,12 +116,12 @@ outward check and stamps the resulting artifact accordingly.
 
 Native releases can ship before the trusted repository-share producer is enabled.
 While the repository variable `TRUSTED_REPOSITORY_SHARE_ENABLED` is unset or not
-`true`, the release summary explicitly records that no new repository qpack was
+`true`, the release summary explicitly records that no new repository pendant was
 published. The release may therefore have no graph artifact for the explorer.
 
 Enable that variable only after the managed trusted producer is installed and
 its scheduled execution has been observed. Once enabled, the release job requires
-the qpack, checksum and source/binary provenance receipt; missing or invalid
+the pendant, checksum and source/binary provenance receipt; missing or invalid
 artifacts fail the job. The first enabled release must separately prove published
 artifact delivery. Hosted runners never receive the private policy catalogue.
 
@@ -147,6 +147,29 @@ base.
 Shares carry their shapes on purpose. A receiving store is never asked to guess
 what the sender meant by a predicate — it gets the constraints alongside the
 facts.
+
+### Pendants: what the artifact is called
+
+On a khipu, **pendant cords** hang from a **primary cord**, and each pendant
+carries a self-contained record. Quipu names its share artifact after them:
+
+| Khipu | Quipu |
+|---|---|
+| Primary cord | a store |
+| Pendant cord | a **pendant**: a shareable graph with its shapes and stored queries — the manifest, the payload (`export.nt`), `shapes.ttl`, and stored queries where the share carries them |
+| Subsidiary cord | a delta share, hanging off the pendant it amends |
+| Tying a pendant onto a primary cord | composing an imported pendant into a store |
+| Knots between cords | relationships — edges join cords; they are not pendants |
+
+"Share" still names the protocol — `quipu share`, `quipu import`, share deltas.
+"Pendant" names the thing that travels. Packed for release, a pendant is a
+deterministic tar archive named `*.pendant.tar.gz`.
+
+> **Renamed from "qpack".** Artifacts used to be called qpacks and carried a
+> `.qpack` extension. For one release, anything named `.qpack`,
+> `.qpack.tar.gz` or `.qpack.db` still loads unchanged, with a deprecation
+> warning; release pages publish the repository pendant under both asset names.
+> New artifacts are written only as `.pendant`.
 
 ## Receiving: verify, quarantine, promote
 
@@ -206,7 +229,7 @@ silent edit to someone else's identifiers.
 ## What travels: facts, graphs, whole repositories
 
 A share is the portable graph artifact. Its scope may be a slice of facts, a
-whole graph, or a repository graph; a release `.qpack.tar.gz` is a deterministic
+whole graph, or a repository graph; a release `.pendant.tar.gz` is a deterministic
 archive of the same text bundle, not a SQLite database. The bundle contains a
 canonical RDF payload, SHACL shapes, and JSON plus PROV-O/DCAT/SPDX RDF
 manifests (`src/share.rs`: `share_payload`, `manifest_turtle`).
@@ -371,7 +394,7 @@ bash scripts/publish-repository-share.sh --prepare "$TAG" \
   "$QUIPU_BIN" "$BOBBIN_BIN" "$SOURCE_REPO" "$NEW_OUTPUT"
 ```
 
-`--prepare` creates the text qpack archive, checksum and provenance receipt
+`--prepare` creates the text pendant archive, checksum and provenance receipt
 locally. `--publish` additionally uploads those three explicit files to the
 existing release. It refuses to replace existing assets. The receipt binds the
 archive to the release tag, source revision and native binary hash; it includes

@@ -692,7 +692,7 @@ async function downloadPack() {
   try {
     const bytes = await ask({ cmd: "exportPack" });
     const m = await ask({ cmd: "exportManifest" });
-    download(`quipu-edited-${m.share_id.slice(7, 19)}.qpack.tar.gz`,
+    download(`quipu-edited-${m.share_id.slice(7, 19)}.pendant.tar.gz`,
       new Blob([bytes], { type: "application/gzip" }));
     editNote(`Downloaded ${fmt(bytes.byteLength)} bytes. `
       + "Stage it locally: `quipu import <file> --db your.db` "
@@ -847,12 +847,12 @@ async function boot() {
   status("Fetching this repository's knowledge pack…");
   let bytes;
   try {
-    const r = await fetch("./repository.qpack.tar.gz");
+    const r = await fetch("./repository.pendant.tar.gz");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     bytes = await r.arrayBuffer();
   } catch (err) {
     fail("The repository pack is not staged on this site yet — it is attached by the docs build "
-      + "from the newest GitHub release. You can still load a .qpack.tar.gz from your own disk "
+      + "from the newest GitHub release. You can still load a .pendant.tar.gz from your own disk "
       + "with the file picker above.");
     return;
   }

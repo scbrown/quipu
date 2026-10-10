@@ -33,7 +33,13 @@ pre-Columbian knowledge graph encoded in textile. The metaphor is exact:
 - **Cords** = entities (each cord represents a thing)
 - **Knots** = facts (type, position, and grouping encode meaning)
 - **Colors** = types/classes (different cord colors = different categories)
-- **Pendant cords** = relationships (branching from main cord)
+- **Primary cord** = a store (the cord everything else hangs from)
+- **Pendant cords** = pendants: shareable, self-contained records — a graph
+  plus its shapes and stored queries, packaged as one artifact (`.pendant`)
+- **Subsidiary cords** = delta shares, hanging off the pendant they amend
+- **Tying a pendant on** = composing an imported pendant into a store
+- **Knots between cords** = relationships (edges join cords; they are not
+  pendants)
 - **Positional encoding** = temporal ordering (events recorded in sequence)
 - **Khipukamayuq** (readers) = agents that interpret the structure
 
@@ -208,9 +214,17 @@ RDFS/OWL for class hierarchy, SHACL for shape constraints.
 
 ### 2. Temporal-Native
 
-Every fact has `valid_from` and `valid_until`. No fact is permanent.
-History is queryable. RDF-star reification stores metadata on triples
-(who asserted it, when, from what episode, confidence).
+The SQLite fact log records `valid_from` and an optional `valid_to` for facts;
+history is queryable. Episodes are graph entities carrying source provenance.
+An episode edge with an explicit confidence qualifier also produces classic
+`rdf:Statement` reification (`rdf:subject`, `rdf:predicate`, `rdf:object`, and
+`quipu:confidence`); this is not a triple term.
+
+RDF-star / RDF 1.2 triple terms are **not supported** by the current build; see
+the [measured conformance boundary](../book/src/benchmarks/conformance.md#rdf-syntax).
+RDF 1.2 support is planned under `aegis-6l8hkk`; per-occurrence statement identity
+and bounded path queries are planned under `aegis-gbj62u`. Classic reification
+does not establish either capability.
 
 ### 3. Episode Provenance
 
@@ -271,11 +285,11 @@ Validation doesn't just say "rejected." It returns:
 │  │                 Quipu Internals                       │   │
 │  │                                                      │   │
 │  │  Triple Store ─── SQLite (SPO/POS/OSP indexes)      │   │
-│  │  RDF Model ────── oxrdf + oxttl (RDF-star support)  │   │
+│  │  RDF Model ────── oxrdf + oxttl (RDF 1.1)          │   │
 │  │  SPARQL ────────── spargebra parser + evaluator      │   │
 │  │  Validation ───── rudof (SHACL/ShEx)                │   │
 │  │  Ontology ──────── horned-owl (OWL parsing + RDFS)  │   │
-│  │  Temporal ──────── RDF-star reification on facts     │   │
+│  │  Temporal ──────── SQLite fact-log validity          │   │
 │  │  Provenance ───── Episode nodes in graph             │   │
 │  └──────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────┘
@@ -311,7 +325,7 @@ If built in Rust, significant infrastructure already exists:
 | Component | Crate | Maturity |
 |-----------|-------|----------|
 | RDF data model | `oxrdf` | Stable, well-maintained |
-| RDF parsing | `oxttl`, `oxrdfio` | Stable, RDF-star support |
+| RDF parsing | `oxttl`, `oxrdfio` | RDF 1.1 parsing in the current build |
 | SPARQL parsing | `spargebra` | Stable |
 | SPARQL evaluation | Custom (over SQLite fact log) | To build — spargebra AST → SQL |
 | OWL parsing | `horned-owl` | Active, 20-40x faster than Java OWL API |
@@ -319,7 +333,7 @@ If built in Rust, significant infrastructure already exists:
 | SHACL validation | `rudof` | Active, MIT, presented at ISWC 2024 |
 | Vector search | `lancedb` | Production-proven in Bobbin, Apache 2.0 |
 | Fact store | `rusqlite` (EAVT log) | Battle-tested, 40M+ downloads |
-| RDF-star | `oxrdf` + `oxttl` | Supported |
+| RDF-star / RDF 1.2 | Future opt-in (`aegis-6l8hkk`) | Not supported by the current build |
 | Embeddings | ONNX Runtime | all-MiniLM-L6-v2, 384-dim, proven in Bobbin |
 | Graph algorithms | `petgraph` | Mature, on-demand materialization |
 
@@ -581,7 +595,7 @@ in a single binary with MCP integration. Here's where Quipu diverges:
 | Dimension | open-ontologies | Quipu |
 |-----------|----------------|-------|
 | **Storage** | In-memory only (Oxigraph `Store::new()`). Reloads from files each session. | Persistent (SQLite/RocksDB). Knowledge survives restarts. |
-| **Temporal facts** | None. Whole-graph snapshots only. | Native. Every fact has `valid_from`/`valid_until`. RDF-star reification for provenance. |
+| **Temporal facts** | None. Whole-graph snapshots only. | SQLite fact log with `valid_from`/optional `valid_to`; episode provenance and optional classic statement reification for edge confidence. |
 | **Vector search** | Brute-force HashMap, won't scale past ~100K entities. | LanceDB ANN index with filtered search, scales to millions. |
 | **Episode provenance** | Lineage events in SQLite (operation audit trail). | First-class episode nodes in the graph. "Why do we believe X?" is a graph traversal. |
 | **Agent write path** | 43 MCP tools, but no structured feedback on validation failure. | Validation returns similarity scores, suggested corrections, schema evolution proposals. |
@@ -633,7 +647,7 @@ bobbin (context engine)
 │   ├── RDF triple store (Oxigraph or custom)
 │   ├── SHACL validation (rudof)
 │   ├── OWL reasoning (horned-owl)
-│   └── Temporal facts (RDF-star)
+│   └── Temporal facts (SQLite fact log)
 └── shared infrastructure
     ├── ONNX embeddings
     ├── MCP server

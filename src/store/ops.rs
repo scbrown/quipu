@@ -254,6 +254,9 @@ impl Store {
         graph: i64,
         retract_source: Option<&str>,
     ) -> Result<Staged> {
+        // The human trust-root registry as it stands BEFORE this write
+        // (aegis-kzt0ql.9.4). Compared with the post-state below.
+        let trust_before = crate::governance::trust_root::snapshot(self)?;
         let tx_id = crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?;
 
         // Domain/range axioms are not merely a one-time migration at ontology
@@ -318,7 +321,9 @@ impl Store {
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
-        self.enforce_write_policies(&staged_datums, graph)
+        // `datums.len()` marks where the caller's datums end and OWL inference
+        // begins: the quarantine hashes the attempt as the WRITER made it.
+        self.enforce_write_policies(&staged_datums, datums.len(), graph)
             .map_err(|e| self.stash_refusal("policy", e, staged_datums.len()))?;
 
         // OWL write-time constraints (aegis-bmqup): disjointWith and
@@ -329,6 +334,19 @@ impl Store {
         #[cfg(feature = "owl")]
         self.enforce_owl_constraints(&staged_datums)
             .map_err(|e| self.stash_refusal("owl", e, staged_datums.len()))?;
+
+        // Human trust-root gate (aegis-kzt0ql.9.4). ALWAYS ON: no config flag,
+        // and NOT skipped while recording verdicts. It compares the human-tier
+        // registry before and after, so it also sees changes no datum names
+        // (supersede closures). See `governance::trust_root` for why it has
+        // no switch.
+        crate::governance::trust_root::check(
+            self,
+            &trust_before,
+            &staged_datums,
+            self.trust_root_bootstrap.as_deref(),
+        )
+        .map_err(|e| self.stash_refusal("trust-root", e, staged_datums.len()))?;
 
         // Event log (event-log P1): append this tx's semantic events INSIDE the
         // savepoint, AFTER the policy guard — a denied write emits nothing, a

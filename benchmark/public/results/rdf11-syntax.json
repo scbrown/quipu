@@ -1,8 +1,8 @@
 {
   "benchmark": "W3C RDF 1.1 syntax suites (Turtle, N-Triples, N-Quads, TriG)",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4",
-  "quipu_version": "quipu 0.11.1\ngit_sha: 4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4\ngit_dirty: false",
+  "quipu_revision": "c8f9c320d66eda5df775331fdab55cc57a32fabe",
+  "quipu_version": "quipu 0.12.0\ngit_sha: c8f9c320d66eda5df775331fdab55cc57a32fabe\ngit_dirty: false",
   "scope": "every manifest case; loading through `quipu knot`, evaluation compared after `quipu export --format ntriples`; N-Quads and TriG unsupported",
   "departures": [
     "Turtle inputs get a leading @base line naming the suite's retrieval IRI",
@@ -10,21 +10,21 @@
   ],
   "totals": {
     "all": {
-      "passed": 376,
-      "failed": 451,
+      "passed": 383,
+      "failed": 444,
       "cases": 827,
       "unsupported": 444
     },
     "suites": {
       "rdf-turtle": {
-        "passed": 306,
-        "failed": 7,
+        "passed": 313,
+        "failed": 0,
         "cases": 313,
         "unsupported": 0,
         "by_approval": {
           "Approved": {
-            "passed": 296,
-            "failed": 7,
+            "passed": 303,
+            "failed": 0,
             "cases": 303,
             "unsupported": 0
           },
@@ -43,8 +43,8 @@
         },
         "by_kind": {
           "eval": {
-            "passed": 138,
-            "failed": 7,
+            "passed": 145,
+            "failed": 0,
             "cases": 145,
             "unsupported": 0
           },
@@ -1116,9 +1116,9 @@
       "test": "rdf-turtle/bareword_double",
       "kind": "eval",
       "approval": "Approved",
-      "observed": "different",
-      "passed": false,
-      "diagnostic": "graph differs; only in Quipu [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '1.0E0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]; only in expected [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '1E0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]"
+      "observed": "equal",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "class": "rdf11-syntax",
@@ -1127,9 +1127,9 @@
       "test": "rdf-turtle/double_lower_case_e",
       "kind": "eval",
       "approval": "Approved",
-      "observed": "different",
-      "passed": false,
-      "diagnostic": "graph differs; only in Quipu [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '1.0E0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]; only in expected [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '1e0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]"
+      "observed": "equal",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "class": "rdf11-syntax",
@@ -1149,9 +1149,9 @@
       "test": "rdf-turtle/positive_numeric",
       "kind": "eval",
       "approval": "Approved",
-      "observed": "different",
-      "passed": false,
-      "diagnostic": "graph differs; only in Quipu [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '1', 'http://www.w3.org/2001/XMLSchema#integer', ''))\"]; only in expected [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '+1', 'http://www.w3.org/2001/XMLSchema#integer', ''))\"]"
+      "observed": "equal",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "class": "rdf11-syntax",
@@ -1160,9 +1160,9 @@
       "test": "rdf-turtle/numeric_with_leading_0",
       "kind": "eval",
       "approval": "Approved",
-      "observed": "different",
-      "passed": false,
-      "diagnostic": "graph differs; only in Quipu [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '1', 'http://www.w3.org/2001/XMLSchema#integer', ''))\"]; only in expected [\"(('I', 'http://a.example/s'), ('I', 'http://a.example/p'), ('L', '01', 'http://www.w3.org/2001/XMLSchema#integer', ''))\"]"
+      "observed": "equal",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "class": "rdf11-syntax",
@@ -3173,9 +3173,9 @@
       "test": "rdf-turtle/turtle-subm-11",
       "kind": "eval",
       "approval": "Approved",
-      "observed": "different",
-      "passed": false,
-      "diagnostic": "graph differs; only in Quipu [\"(('I', 'http://example.org/res1'), ('I', 'http://example.org/prop1'), ('L', '0', 'http://www.w3.org/2001/XMLSchema#integer', ''))\", \"(('I', 'http://example.org/res3'), ('I', 'http://example.org/prop3'), ('L', '1', 'http://www.w3.org/2001/XMLSchema#integer', ''))\"]; only in expected [\"(('I', 'http://example.org/res1'), ('I', 'http://example.org/prop1'), ('L', '000000', 'http://www.w3.org/2001/XMLSchema#integer', ''))\", \"(('I', 'http://example.org/res3'), ('I', 'http://example.org/prop3'), ('L', '000001', 'http://www.w3.org/2001/XMLSchema#integer', ''))\"]"
+      "observed": "equal",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "class": "rdf11-syntax",
@@ -3261,9 +3261,9 @@
       "test": "rdf-turtle/turtle-subm-19",
       "kind": "eval",
       "approval": "Approved",
-      "observed": "different",
-      "passed": false,
-      "diagnostic": "graph differs; only in Quipu [\"(('I', 'http://example.org#e'), ('I', 'http://example.org#f'), ('L', '1.0E0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]; only in expected [\"(('I', 'http://example.org#e'), ('I', 'http://example.org#f'), ('L', '1.0e0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]"
+      "observed": "equal",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "class": "rdf11-syntax",
@@ -3272,9 +3272,9 @@
       "test": "rdf-turtle/turtle-subm-20",
       "kind": "eval",
       "approval": "Approved",
-      "observed": "different",
-      "passed": false,
-      "diagnostic": "graph differs; only in Quipu [\"(('I', 'http://example.org#e'), ('I', 'http://example.org#f'), ('L', '-1.0E0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]; only in expected [\"(('I', 'http://example.org#e'), ('I', 'http://example.org#f'), ('L', '-1.0e0', 'http://www.w3.org/2001/XMLSchema#double', ''))\"]"
+      "observed": "equal",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "class": "rdf11-syntax",
@@ -9283,6 +9283,6 @@
       "diagnostic": "Quipu has no TriG parser"
     }
   ],
-  "generated_at": "2026-10-08T20:21:00Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/37837741337"
+  "generated_at": "2026-10-10T20:55:06Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38085253283"
 }

@@ -78,7 +78,7 @@ const shareDir = join(work, "share");
 run(["share", "--output", shareDir, "--db", db]);
 
 execFileSync("tar", ["--sort=name", "--mtime=UTC 1970-01-01", "--owner=0", "--group=0",
-  "--numeric-owner", "-C", shareDir, "-czf", join(work, "smoke.qpack.tar.gz"), "."]);
+  "--numeric-owner", "-C", shareDir, "-czf", join(work, "smoke.pendant.tar.gz"), "."]);
 const producerManifest = JSON.parse(readFileSync(join(shareDir, "manifest.json"), "utf8"));
 
 // The receiver owns its policy; it is deliberately absent from the source pack.
@@ -115,12 +115,19 @@ check("it reports a quipu version", Boolean(version.version), JSON.stringify(ver
 
 // ---- 3. The read half: consume what the CLI produced ----------------------
 
-const bytes = readFileSync(join(work, "smoke.qpack.tar.gz"));
-const ex = mod.Explorer.loadQpack(new Uint8Array(bytes), "node-smoke", new Date().toISOString());
+const bytes = readFileSync(join(work, "smoke.pendant.tar.gz"));
+const ex = mod.Explorer.loadPendant(new Uint8Array(bytes), "node-smoke", new Date().toISOString());
 const report = JSON.parse(ex.loadReport());
 
 check("the pack it loaded is the pack the CLI wrote",
   report.manifest.share_id === producerManifest.share_id, report.manifest.share_id);
+
+// The pre-rename name stays callable for one release (aegis-fxpbys.3): a page
+// built against an older bundle must load the same share, not throw.
+const legacy = JSON.parse(mod.Explorer.loadQpack(new Uint8Array(bytes), "node-smoke-legacy",
+  new Date().toISOString()).loadReport());
+check("the deprecated loadQpack alias loads the same share",
+  legacy.manifest.share_id === producerManifest.share_id, legacy.manifest.share_id);
 check("the graph hash survives the round trip",
   report.manifest.graph_hash === producerManifest.graph_hash);
 check("the import staged", report.import.outcome === "staged", report.import.outcome);
@@ -242,7 +249,7 @@ if (importOk) {
   // promotion for any share that declares one.
   //
   // The bundle does NOT have this gap, and says so in its own source:
-  // Explorer::load_qpack calls load_shapes with the comment "skipping it is not
+  // Explorer::load_pendant calls load_shapes with the comment "skipping it is not
   // a silent no-op: import_share would find the pack's classes ungoverned and
   // quarantine every triple". So the SAME artifact validates clean here and
   // quarantines in the CLI. Reported upstream rather than encoded here.

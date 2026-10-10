@@ -292,11 +292,28 @@ fn routes_in_server_source() -> Vec<String> {
     let sources = [
         ("server.rs", include_str!("../server.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        // Handler-only today; scan it so a future route cannot escape classification.
+        (
+            "server/graph_store_compact.rs",
+            include_str!("../server/graph_store_compact.rs"),
+        ),
+        (
+            "server/feed_stream.rs",
+            include_str!("../server/feed_stream.rs"),
+        ),
         (
             "server/merge_decisions.rs",
             include_str!("../server/merge_decisions.rs"),
         ),
         ("server/assets.rs", include_str!("../server/assets.rs")),
+        (
+            "server/graph_backfill.rs",
+            include_str!("../server/graph_backfill.rs"),
+        ),
+        (
+            "server/owl_materialize.rs",
+            include_str!("../server/owl_materialize.rs"),
+        ),
         (
             "server/graph_store.rs",
             include_str!("../server/graph_store.rs"),
@@ -319,6 +336,8 @@ fn routes_in_server_source() -> Vec<String> {
         "server/base.rs",
         "server/entity.rs",
         "server/feed.rs",
+        "server/event_cursor.rs",
+        "server/feed_stream_tests.rs",
         "server/feed_read_pool_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",

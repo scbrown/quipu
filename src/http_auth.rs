@@ -55,6 +55,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/proposal/accept",
     "/proposal/reject",
     "/embed_backfill",
+    "/embed_backfill_graph",
     // aegis-5qmg3r: alignment. `apply` takes &mut Store, materialises
     // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
     // (a graphs-registry write, the same reason /overlay/create is here).
@@ -133,6 +134,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/validate",
     "/search",
     "/hybrid_search",
+    // Bounded retrieval plus read-only SPARQL; no index activation/backfill.
+    "/search_query",
     "/unified_search",
     "/ask",
     "/search_nodes",
@@ -153,7 +156,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/entity/{iri}/html",
     "/entity_history",
     "/transactions",
-    "/events",  // pull-batch event log read (event-log P1); the commit half is a write
+    "/events", // pull-batch event log read (event-log P1); the commit half is a write
+    "/events/stream", // read-only replay; delivery never commits a consumer ACK
+    "/changes/stream", // read-only transaction replay, including named graphs
     "/changes", // fact-level change feed (quipu-2ae): pull-only, cursor is a tx id
     "/spotlight",
     "/fragments",

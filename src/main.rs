@@ -24,6 +24,8 @@
 //!   quipu gate shadow ...                 Judge a candidate policy set over recorded history (never writes)
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu audit namespace                                   Report base-namespace drift
+//!   quipu audit replay <verdict> [--delta <file>]           Re-derive a gate decision as of its tx
+//!   quipu audit quarantine [list|purge]                     Refused-attempt evidence behind verdicts
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
 //!   quipu db attach --list                List the databases mounted alongside this store
 //!   quipu pack <graph-iri> --out <file> [--space N]  Export a graph as an attachable pack
@@ -61,8 +63,10 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_quarantine;
 mod cli_search;
 mod cli_share_diff;
+mod cli_trust_root;
 mod hook_session_capture;
 mod hooks_install;
 
@@ -128,9 +132,20 @@ fn main() {
     match cmd {
         "mcp" => cli_mcp::run(&args[2..]),
         "demotions" => cli_demotions::run(&args, db_path),
+        // `load <dir>` with a share manifest loads a project bundle into its own
+        // graph (aegis-w3k75d.11). A directory can never be knotted, so the
+        // file form keeps meaning exactly what it did.
+        "load"
+            if args
+                .get(2)
+                .is_some_and(|a| std::path::Path::new(a).join("manifest.json").is_file()) =>
+        {
+            cli_pack::cmd_load_bundle(&args, db_path);
+        }
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
+        "trust-root" => cli_trust_root::cmd_trust_root(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
@@ -357,29 +372,34 @@ COMMANDS:
     quipu search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
     quipu search-index status|backfill|drop [--batch-size 500] [--db <path>]
     quipu doctor labels [--db <path>]
-    quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
+    quipu pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --full --format text --destination internal --out <dir> [--db <path>]
                                                                      LOSSLESS whole-store pack as TEXT: a git-friendly
                                                                      directory that reconstructs the store exactly
-    quipu pack --verify <file.qpack.db>
+    quipu pack --verify <file.pendant.db>
     quipu db respace --into <space> --out <file> [--db <path>]
     quipu db attach --list [--db <path>]
     quipu events refusals [--db <path>]
     quipu changes [--since-tx N] [--db <path>]
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
-    quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
-    quipu restore <file.qpack | text-pack-dir> [--force] [--db <path>]
+    quipu unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
+    quipu restore <file.pendant | text-pack-dir> [--force] [--db <path>]
                                                                      REPLACES the store with a --full pack, binary or text
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
     quipu share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
+    quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]   commit this repo's project graph to .quipu/graph
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     quipu attest list [--db <path>]
+    quipu trust-root challenge --verifier NAME --public-key HEX [--db <path>]
+    quipu trust-root bootstrap --verifier NAME --public-key HEX --pop-signature HEX [--attests POLICY]... [--db <path>]
+    quipu trust-root status [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
     quipu import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
     quipu import delta <parent-share> <delta-share> [--actor <id>]
+    quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]   import a project bundle (.quipu/graph) into its own graph
     quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
     quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
@@ -389,14 +409,19 @@ COMMANDS:
     quipu merge <share-dir> [--actor <id>] [--db <path>]
     quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
     quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
-    quipu git-merge <ref>   merge qpacks from Git snapshots, stop before commit
+    quipu git-merge <ref>   merge pendants from Git snapshots, stop before commit
     quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
     quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
     quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
     quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
+    quipu share diff <old> <new> --report [--format markdown|json] [--old-shapes <ttl>] [--new-shapes <ttl>] [--decisions <json>] [--fail-on-introduced]   PR-review report
     quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
+    quipu audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--yupana <exe>] [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
+    quipu audit replay <verdict> [--delta <file>] [--json] [--db <path>]
+    quipu audit quarantine [list [--verdict <iri>]] [--json] [--db <path>]
+    quipu audit quarantine purge (--graph <iri>|--before <ts>|--older-than <days>|--all) [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
     quipu hook session-capture   Stop hook: solicit one knowledge episode per session (stdin JSON)
     quipu hooks bundle           print quipu's hook bundle (st.hook-bundle/1)

@@ -30,6 +30,16 @@ pub fn config() -> &'static QuipuConfig {
 /// schema cannot be composed — is a startup error, not a query that returns
 /// fewer rows.
 pub fn open_store(db_path: &str) -> Store {
+    // A fresh repository has no `.quipu/` yet, and SQLite will not create a
+    // parent directory: `quipu ingest --db .quipu/local.db` refused with
+    // "unable to open database file" (aegis-w3k75d.11 baseline). Only `quipu
+    // mcp` created it. The directory, never the database, is made here.
+    if let Some(parent) = std::path::Path::new(db_path)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty() && !db_path.starts_with(':'))
+    {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let mut store =
         quipu::open_with_configured_attachments(db_path, config()).unwrap_or_else(|e| {
             eprintln!("error opening store: {e}");

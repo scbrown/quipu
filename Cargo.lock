@@ -4660,16 +4660,18 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
  "axum",
  "base64 0.22.1",
+ "bigdecimal",
  "datafrog",
  "flate2",
  "futures",
  "getrandom 0.3.4",
+ "glob",
  "hex",
  "js-sys",
  "lancedb",
@@ -4680,6 +4682,7 @@ dependencies = [
  "oxigraph",
  "oxrdf",
  "oxrdfio",
+ "oxsdatatypes",
  "oxttl",
  "parking_lot",
  "petgraph 0.7.1",

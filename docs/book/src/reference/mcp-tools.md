@@ -1,8 +1,9 @@
 # MCP Tools
 
 Quipu exposes its API as MCP (Model Context Protocol) tools for agent
-integration. These tools are available when Quipu runs as a Bobbin subsystem
-or standalone MCP server.
+integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
+`quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
+`knowledge_*` tools, not these.)
 
 The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
 **50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
@@ -340,8 +341,8 @@ Two properties worth knowing before using it:
 
 - **`planned: 0` is a real answer.** It means the named source owns no live
   facts. `quipu_knot` reports `replaced: true, count: 0` both for a retraction
-  that removed nothing and for one that emptied a graph, so this question
-  previously had no answer.
+  that deletes nothing and for one that empties a graph. Read `planned`
+  to distinguish those cases.
 - **Re-keying order is retract FIRST, then re-promote.** The store dedups an
   identical triple to one row carrying one source, and the existence check
   ignores the transaction source — so asserting canonically first is skipped as
@@ -375,6 +376,9 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `limit` | No | Max results (default: 10) |
 | `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
+| `graph` | No | Registered graph IRI, or `all`; omitted scope searches ROOT |
+| `graphs` | No | Nonempty list of registered graph IRIs; search their union |
+| `all_graphs` | No | Search ROOT and all registered named graphs, excluding graph metadata |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
 Requires an embedding provider when called with `query` and no `embedding`;
@@ -386,6 +390,19 @@ so zero results are distinguishable from an unembedded store — see
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
 
 Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+
+Graph selectors are mutually exclusive; unknown graphs are refused. Explicit
+scope results carry `graph` and `graphs`. Semantic scope selects entity
+membership before the result limit on the built-in SQLite backend. Other
+vector backends use bounded best-effort oversampling. Embeddings remain per entity: ROOT text
+is retained for entities with ROOT facts; other entities combine their
+named-graph facts. This is membership scoping, not per-graph embedding text.
+Explicit graph scope supports semantic and keyword ranking; ROOT content and
+anchor reranking are refused with it.
+
+Explicit graph selection requires `[quipu.search] named_graphs = true`.
+The default is false. Prepare named-only vectors with bounded backfill before
+enabling it; the flag also gates automatic named-only embedding text.
 
 Keyword mode returns `score` (positive relevance, higher first), raw SQLite
 `bm25` (lower first), and `ranking_reason: "keyword"`. It indexes literal terms
@@ -428,6 +445,19 @@ without one it errors naming the missing `[quipu.embedding]` configuration.
 The response carries an `embeddings` block (`configured`, `embedded_entities`)
 so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
+
+For the built-in SQLite backend, an explicit SPARQL scope is scored before
+selecting the top results. Narrow scopes to at most 1,000 candidate rows,
+resolved entity IDs, and eligible embedding rows; larger scopes return an error.
+Historical ranking returns the text from the exact embedding version scored.
+Query and stored vectors must contain finite values with matching dimensions;
+the SQLite scoped path accepts up to 16,384 dimensions. An empty eligible scope
+returns no results. SPARQL candidates use the requested valid time and a bounded
+query budget. Unscoped ranking and delegated backend ranking retain their
+existing implementation; candidate-before-top-K is a SQLite guarantee.
+Scoring reads the local SQLite vector table, including rows keyed by composed
+alias IDs; it does not scan vector tables in attachments. The candidate, scoring,
+and text reads do not provide one snapshot across concurrent writes.
 
 ### `quipu_graph`
 
@@ -901,7 +931,7 @@ Accept a pending schema proposal. Shape proposals are validated before writing.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to accept |
-| `decided_by` | No | Identity of the approver |
+| `decided_by` | Yes | Identity of the approver |
 | `note` | No | Optional acceptance note |
 | `timestamp` | No | ISO-8601 timestamp |
 
@@ -913,7 +943,7 @@ Reject a pending schema proposal with a reason.
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to reject |
 | `note` | Yes | Reason for rejection |
-| `decided_by` | No | Identity of the rejector |
+| `decided_by` | Yes | Identity of the rejector |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_resolve_entity`
@@ -940,3 +970,9 @@ Manage OWL ontologies: `load` (parse + materialize entailments), `list`, or
 | `name` | For load/remove | Ontology name |
 | `turtle` | For load | OWL ontology in Turtle format |
 | `timestamp` | No | ISO-8601 timestamp |
+
+Hybrid fusion parameters on `quipu_search`: `mode: "hybrid"`, `alpha` (semantic
+weight, 0..1), `fusion` (`weighted` or `rrf`), positive `rrf_k`, and `explain`.
+Server activation and the ready lexical index are required for intermediate
+weights. Alpha endpoints retain exact pure responses. See the REST search
+reference for candidate bounds, scope compatibility, snippets and rollback.

@@ -21,6 +21,11 @@ setup:
 check:
     pre-commit run --all-files
 
+# Query performance gate controls (offline; no fixture or server required).
+test-query-perf:
+    python3 scripts/quipu-query-perf.py self-test
+    python3 scripts/ci/test-query-perf.py
+
 
 
 # === Rust ===
@@ -111,13 +116,19 @@ paper-merge cmd="build":
     else echo "unknown paper-merge command '{{ cmd }}' (available: build, clean)"; exit 1; fi
 
 # Run a paper benchmark (see benchmark/<name>/README.md): just bench census [--arm control] [--seed N]
+# just bench agents [--models fake,claude:<m>,codex:<m>] [--tasks ...] [--trials N] [--seed S]
+#   The default model is the scripted `fake` writer: zero spend. A real model
+#   spends budget; see benchmark/census/agent/README.md before running one.
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \
         cargo run --quiet --release --example census -- {{ args }}; \
     elif [ "{{ name }}" = "merge" ]; then \
         cargo run --quiet --release --example mergebench --features shacl -- {{ args }}; \
+    elif [ "{{ name }}" = "agents" ]; then \
+        cargo build --quiet --release --example census && \
+        python3 benchmark/census/agent/run_agents.py {{ args }}; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census, merge)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge, agents)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.
@@ -205,9 +216,12 @@ explorer mode="release":
             && tar -C "$TMP" -xzf "$TMP"/*-wasm.tar.gz \
             && find "$TMP" -name 'quipu_wasm_explorer*' -exec cp {} "$DEST/pkg/" \; \
             || echo "warning: $TAG has no wasm bundle yet"
-        gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
-            && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.qpack.tar.gz" \
-            || echo "warning: $TAG has no repository qpack"
+        # Releases cut before the pendant rename named it *-repository.qpack.tar.gz.
+        gh release download "$TAG" --pattern '*-repository.pendant.tar.gz' --dir "$TMP" \
+            && cp "$TMP"/*-repository.pendant.tar.gz "$DEST/repository.pendant.tar.gz" \
+            || { gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
+                && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.pendant.tar.gz"; } \
+            || echo "warning: $TAG has no repository pendant"
     fi
     ls -la "$DEST" "$DEST/pkg"
 

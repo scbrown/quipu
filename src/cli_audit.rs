@@ -17,21 +17,41 @@ use quipu::governance::namespace;
 use quipu::governance::replay;
 use quipu::governance::tree;
 
+mod git;
+
 /// Run a checker: `audit <trace.jsonl>` against a trace, `audit inventory`
 /// against the dispatch graph, `audit replay <trace.jsonl>` for promotion
-/// readiness, `audit namespace` for base-namespace drift.
+/// readiness, `audit replay <verdict>` to re-derive one gate decision as of its
+/// transaction, `audit quarantine` for the refused-attempt evidence behind it,
+/// `audit namespace` for base-namespace drift.
 pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
     let Some(subject) = args.get(2).filter(|a| !a.starts_with("--")) else {
         eprintln!(
             "usage: quipu audit <trace.jsonl>|inventory|namespace|replay <trace.jsonl>|\
+             replay <verdict> [--delta <file>]|quarantine [list|purge]|\
              tree <trace.jsonl>|inheritance <trace.jsonl> [--json] [--db <path>]"
         );
         std::process::exit(1);
     };
-    let store = crate::cli_open::open_store(db_path);
+    let git_window = git::options(args, subject).unwrap_or_else(|e| {
+        eprintln!("cannot verify Git coverage: {e}");
+        std::process::exit(2);
+    });
+    let mut store = crate::cli_open::open_store(db_path);
 
     if subject == "replay" {
-        cmd_replay(args, &store);
+        // A trace file replays a window (promotion readiness); anything else is
+        // a verdict, replayed against the store as of its transaction (GS6).
+        match args.get(3).filter(|a| !a.starts_with("--")) {
+            Some(arg) if !std::path::Path::new(arg).is_file() => {
+                crate::cli_quarantine::cmd_replay_verdict(args, &mut store, arg);
+            }
+            _ => cmd_replay(args, &store),
+        }
+        return;
+    }
+    if subject == "quarantine" {
+        crate::cli_quarantine::cmd_quarantine(args, &store);
         return;
     }
     if subject == "tree" {
@@ -63,7 +83,9 @@ pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
         return;
     }
 
-    let report = if subject == "inventory" {
+    let mut trace = Vec::new();
+    let mut unreadable = 0;
+    let mut report = if subject == "inventory" {
         inventory::check(&store).unwrap_or_else(|e| {
             eprintln!("error checking inventory: {e}");
             std::process::exit(1);
@@ -73,18 +95,25 @@ pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
             eprintln!("error reading {subject}: {e}");
             std::process::exit(1);
         });
-        audit::check_jsonl(&store, &jsonl).unwrap_or_else(|e| {
+        (trace, unreadable) = audit::parse_trace(&jsonl);
+        audit::check(&store, &trace, unreadable).unwrap_or_else(|e| {
             eprintln!("error checking trace: {e}");
             std::process::exit(1);
         })
     };
+
+    let scope =
+        git_window.map(|window| git::check(&trace, unreadable, &store, &window, &mut report));
 
     let headline = if subject == "inventory" {
         inventory::summary(&report)
     } else {
         report.summary()
     };
-    emit(args, &report, &headline);
+    git::emit(args, &report, &headline, scope.as_ref());
+    if scope.as_ref().is_some_and(|s| s.unresolved > 0) && report.conforms() {
+        std::process::exit(2);
+    }
     // Only a contradiction fails the gate. See the module doc.
     if !report.conforms() {
         std::process::exit(1);

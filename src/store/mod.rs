@@ -9,6 +9,8 @@ pub mod attestation;
 mod batches;
 pub mod changes;
 pub mod datasets;
+mod decision_nonces;
+pub use decision_nonces::DecisionNonceSpend;
 pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
@@ -22,6 +24,8 @@ pub mod import;
 pub mod inferred;
 pub mod labels;
 pub mod labels_advisory;
+mod literal_identity;
+mod literal_overlay;
 mod migrate;
 mod open;
 pub(crate) use open::open_file_immutable;
@@ -126,6 +130,18 @@ pub struct Store {
     /// inserted before the rollback would die with it, same reason as
     /// `pending_verdicts`. Taken (and thus cleared) on the write's error path.
     pub(crate) pending_refusal: Option<events::PendingRefusal>,
+    /// What a refused write leaves for replay, captured by the gate INSIDE the
+    /// savepoint (the post-state it judged exists only there) and recorded after
+    /// the rollback alongside the verdicts it backs — same ordering problem,
+    /// same answer. See `crate::governance::quarantine`.
+    pub(crate) pending_quarantine: Option<crate::governance::quarantine::Capture>,
+    /// Set only on the throwaway copy a verdict replay builds: the verdict flush
+    /// hands what the gate decided to the replayer instead of writing it.
+    pub(crate) replay_capture: Option<crate::governance::quarantine::ReplayCapture>,
+    /// The gate's clock, pinned for one evaluation. Escalation expiry reads it,
+    /// so a replay can re-run the gate at the instant the original ran rather
+    /// than at wall-clock now. `None` outside an evaluation.
+    pub(crate) gate_clock: Option<i64>,
     /// The principal-and-agent chain the current caller is acting under (SARC
     /// §9.6's `P`). Empty means unattributed, which is NOT the same as
     /// unconstrained — see `enforce_graph_authority`.
@@ -134,6 +150,9 @@ pub struct Store {
     /// skips: a policy targeting `aegis:Verdict` would otherwise deny the
     /// verdict recording its own denial.
     pub(crate) recording_verdicts: bool,
+    /// The one registration a console bootstrap may create, set only for the
+    /// duration of `transact_trust_root_bootstrap` (aegis-kzt0ql.9.4).
+    pub(crate) trust_root_bootstrap: Option<String>,
     /// Base namespace new IRIs are minted under on the episode write paths.
     /// Defaults to the built-in aegis namespace; the server sets it from
     /// `[quipu].base_ns` at startup so a non-aegis deployment does not silently

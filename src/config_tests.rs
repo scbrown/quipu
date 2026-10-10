@@ -399,7 +399,7 @@ store_path = "/data/quipu.db"
 
 [[quipu.attachments]]
 alias = "reference"
-path = "/data/reference.qpack.db"
+path = "/data/reference.pendant.db"
 
 [[quipu.attachments]]
 alias = "tenant_a"
@@ -411,7 +411,7 @@ path = "packs/tenant-a.db"
     assert_eq!(cfg.attachments[0].alias, "reference");
     assert_eq!(
         cfg.attachments[0].path,
-        PathBuf::from("/data/reference.qpack.db")
+        PathBuf::from("/data/reference.pendant.db")
     );
     assert_eq!(cfg.attachments[1].alias, "tenant_a");
     assert_eq!(cfg.attachments[1].path, PathBuf::from("packs/tenant-a.db"));
@@ -443,4 +443,13 @@ request_timeout_ms = 30000
     // feature ship inert on an auto-deploying store.
     let bare: ConfigFile = toml::from_str("[quipu]\nstore_path = \"/d\"\n").unwrap();
     assert_eq!(bare.quipu.search.request_timeout_ms, 0);
+}
+
+#[test]
+fn structured_search_config_defaults_off_and_loads_explicit_flag() {
+    let default: ConfigFile = toml::from_str("[quipu]\nstore_path='/d'\n").unwrap();
+    assert!(!default.quipu.search.structured);
+    let enabled: ConfigFile =
+        toml::from_str("[quipu]\nstore_path='/d'\n[quipu.search]\nstructured=true\n").unwrap();
+    assert!(enabled.quipu.search.structured);
 }

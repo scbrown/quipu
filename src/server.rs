@@ -30,14 +30,21 @@ mod base;
 mod entity;
 #[path = "server/feed.rs"]
 mod feed;
+#[path = "server/graph_backfill.rs"]
+mod graph_backfill;
 #[path = "server/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "server/graph_store.rs"]
 mod graph_store;
+#[path = "server/graph_store_compact.rs"]
+mod graph_store_compact;
 #[path = "server/handle.rs"]
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[cfg(feature = "owl")]
+#[path = "server/owl_materialize.rs"]
+mod owl_materialize;
 #[cfg(test)]
 #[path = "server/parse_guard_tests.rs"]
 mod parse_guard_tests;
@@ -68,12 +75,16 @@ mod update_slice;
 #[path = "server/wal_maintenance.rs"]
 mod wal_maintenance;
 
-use base::{health, metrics_handler, print_usage, stats, version};
+use base::{health, metrics_handler, stats, version};
 use entity::{
     entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
     entity_turtle_suffix, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
 };
 use feed::{changes_get, events_commit, events_get, transactions};
+#[path = "server/event_cursor.rs"]
+mod event_cursor;
+#[path = "server/feed_stream.rs"]
+mod feed_stream;
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use publication::{export, share_payload};
 #[cfg(test)]
@@ -87,14 +98,7 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     // Asking the binary who it is must NOT touch disk (aegis-j0nq). These are
     // pure reads of compiled-in constants and must stay above Store::open.
-    if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("quipu-server {}", env!("CARGO_PKG_VERSION"));
-        println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
-        println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
-        return;
-    }
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        print_usage();
+    if base::handle_identity_args(&args) {
         return;
     }
 
@@ -406,6 +410,7 @@ async fn main() {
         // not prevention.
         .route("/resolve", post(resolve_probe))
         .route("/hybrid_search", post(hybrid_search))
+        .route("/search_query", post(search_query))
         .route("/unified_search", post(unified_search))
         .route("/ask", post(ask))
         .route("/search_nodes", post(search_nodes))
@@ -450,6 +455,7 @@ async fn main() {
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
+        .route("/embed_backfill_graph", post(graph_backfill::embed_backfill_graph))
         // Entity + history
         .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
@@ -461,6 +467,8 @@ async fn main() {
         // Event log pull API (event-log P1)
         .route("/changes", get(changes_get))
         .route("/events", get(events_get))
+        .route("/events/stream", get(feed_stream::events_stream))
+        .route("/changes/stream", get(feed_stream::changes_stream))
         .route("/events/commit", post(events_commit))
         // Semantic web APIs (Phase 4)
         .route("/spotlight", post(spotlight_handler))

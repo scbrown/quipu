@@ -100,6 +100,7 @@ pub fn mint_attestation(
         issued_at_epoch: opts.issued_at_epoch,
         nonce: opts.nonce.clone(),
         signature: String::new(),
+        audience: None,
     };
     let payload = SignedBinding::Share(ShareBinding {
         share_id: &manifest.share_id,

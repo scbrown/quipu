@@ -364,7 +364,7 @@ pub(crate) fn decision_verifies(
     // holds two, and requiring "the first row" would make the ruling depend on
     // row order.
     Ok(
-        registered_keys(store, by, Some(policy_iri), &witness, Scope::Root)?
+        registered_keys(store, by, Some(policy_iri), &witness, Scope::HumanTier)?
             .iter()
             .any(|key| crate::signing::verify_hex(key, &message, signature)),
     )

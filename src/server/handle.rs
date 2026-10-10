@@ -28,6 +28,8 @@ pub(crate) type SharedStore = Arc<StoreHandle>;
 /// `FairMutex` — so every existing call site is unchanged and writes are still
 /// serialised. `read()` is the new path.
 pub(crate) struct StoreHandle {
+    /// Coalesced hints only; durable rows remain in the existing SQLite logs.
+    pub(crate) commit_wake: tokio::sync::watch::Sender<()>,
     pub(crate) graph_metrics: super::graph_metrics::GraphMetrics,
     pub(crate) writer: FairMutex<quipu::Store>,
     pub(crate) readers: ReadPool,
@@ -49,6 +51,9 @@ pub(crate) struct StoreHandle {
     /// text `/search` timed out while pooled `/query` answered in 8 ms
     /// (aegis-hzh9rz).
     pub(crate) embedding_provider: Option<Arc<dyn quipu::EmbeddingProvider>>,
+    /// Immutable startup search settings. Reading mode/alpha before embedding
+    /// must not queue on a busy WAL reader (or the writer fallback).
+    pub(crate) search_config: quipu::SearchConfig,
     /// The registered reactive reasoner, kept concrete (not as the
     /// `dyn TransactObserver` the store holds) so `POST /shapes` can hot-swap
     /// its ruleset — quipu-923, gap G6: without this handle, rules loaded at
@@ -103,6 +108,16 @@ impl ReadPool {
 }
 
 impl StoreHandle {
+    pub(crate) fn commit_wake_for(store: &quipu::Store) -> tokio::sync::watch::Sender<()> {
+        let (sender, _) = tokio::sync::watch::channel(());
+        let wake = sender.clone();
+        store
+            .set_commit_wake(move || {
+                wake.send_replace(());
+            })
+            .expect("installing the native feed commit hint hook");
+        sender
+    }
     /// The serving handle. Store-derived fields are read BEFORE the store moves
     /// into the writer mutex, so nothing a request needs later has to take the
     /// writer to get it (aegis-hzh9rz).
@@ -112,10 +127,13 @@ impl StoreHandle {
         db_path: &str,
         federation: quipu::config::FederationConfig,
     ) -> Self {
+        let commit_wake = Self::commit_wake_for(&store);
         Self {
+            commit_wake,
             graph_metrics: super::graph_metrics::GraphMetrics::new(db_path),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),
+            search_config: store.search_config().clone(),
             writer: FairMutex::new(store),
             readers,
             federation,
@@ -137,10 +155,13 @@ impl StoreHandle {
     /// its own empty database.
     #[cfg(test)]
     pub(crate) fn writer_only(store: quipu::Store) -> Self {
+        let commit_wake = Self::commit_wake_for(&store);
         Self {
+            commit_wake,
             graph_metrics: super::graph_metrics::GraphMetrics::new(":memory:"),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),
+            search_config: store.search_config().clone(),
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             federation: quipu::config::FederationConfig::default(),
@@ -163,6 +184,19 @@ impl StoreHandle {
             let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
         }
         guard
+    }
+
+    /// First writer acquisition for tool handlers. Budget rejection precedes
+    /// attestation settlement, so a refused unrun write does not spend its nonce.
+    pub(crate) fn write_lock(
+        &self,
+    ) -> Result<parking_lot::FairMutexGuard<'_, quipu::Store>, super::base::AppError> {
+        let guard = self.writer.lock();
+        super::admission::reject_expired_write()?;
+        if let Some(pending) = quipu::transaction_auth::current_attestation() {
+            let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
+        }
+        Ok(guard)
     }
 
     /// A READ connection from the pool, or the writer when the pool is empty.

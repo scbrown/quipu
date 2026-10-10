@@ -44,6 +44,43 @@ let feedback = validate_shapes(shapes, data).unwrap();
 assert!(feedback.conforms);  // true -- data is valid
 ```
 
+## Validation scope and pending post-state
+
+The gates have different scopes. Do not describe all write validation as a
+whole-graph pending-post-state check:
+
+- `quipu knot --shapes` and `validate_shapes` validate the submitted data.
+- Contextual write-time SHACL starts with that payload verdict. If it fails,
+  a bounded second pass adds referenced types and required properties already
+  stored in the destination graph and ROOT. It can remove payload violations;
+  it cannot introduce new violations found only in that context. A conforming
+  payload takes the fast path. This preserves incremental-write compatibility
+  and is **not** whole-graph conformance certification.
+- With `governance.enforce_on_write` enabled, an applicable action-boundary
+  policy evaluates its claim for touched targets against the transaction's
+  pending post-state. A parent can require evidence on its linked child in the
+  same transaction or already committed in the store. Evidence promised in a
+  later transaction does not satisfy the current write: refusal rolls back
+  the parent and link. This guarantee is for applicable touched targets,
+  not automatic revalidation of every incoming dependency of a changed node.
+
+`tests/pending_poststate.rs` pins the distinction with positive and negative
+controls. A linked child's missing required name fails SHACL when the child
+is typed in the submitted payload. If its incomplete type exists only in
+store context, the contextual repair may accept a parent reference: the
+new child violation is outside the original payload ceiling. Conversely, a
+policy requiring linked evidence accepts a complete same-transaction write
+and refuses the missing-evidence write before that evidence exists.
+
+```sh
+just test --locked --test pending_poststate
+```
+
+Use the policy guarantee for transactional cross-entity requirements. Use a
+separate full-store or explicitly scoped validation for stored SHACL
+conformance; incremental acceptance alone does not establish it. Neither
+this documentation nor the tests enable a gate or change its runtime policy.
+
 ## Agent-Friendly Feedback
 
 When validation fails, the `ValidationFeedback` struct provides structured

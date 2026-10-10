@@ -1,4 +1,4 @@
-//! Opt-in, derived FTS5 index of ROOT assertions. Fact rowids are document ids;
+//! Opt-in, derived FTS5 index of assertions with explicit graph scope. Fact rowids are document ids;
 //! triggers maintain it in the fact writer's transaction, including rollback.
 //! Valid-time metadata is read from facts, so closing a fact does not rewrite
 //! its text or destroy historical search. No search performs a backfill.
@@ -21,9 +21,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS lexical_fts USING fts5(
 CREATE TABLE IF NOT EXISTS lexical_progress (
     id INTEGER PRIMARY KEY CHECK(id=1), cursor INTEGER NOT NULL,
     highwater INTEGER NOT NULL, complete INTEGER NOT NULL,
-    documents INTEGER NOT NULL DEFAULT 0 CHECK(documents>=0)
+    documents INTEGER NOT NULL DEFAULT 0 CHECK(documents>=0),
+    scope_version INTEGER NOT NULL DEFAULT 2
 );
-INSERT OR IGNORE INTO lexical_progress
+INSERT OR IGNORE INTO lexical_progress(id,cursor,highwater,complete,documents)
     SELECT 1, 0, highwater, highwater=0, 0
     FROM (SELECT coalesce(max(rowid),0) AS highwater FROM facts);
 CREATE VIEW IF NOT EXISTS lexical_source AS
@@ -53,10 +54,10 @@ SELECT f.rowid AS fact_id,
     f.g AS graph_id
 FROM facts f NOT INDEXED JOIN terms e ON e.id=f.e JOIN terms p ON p.id=f.a
 LEFT JOIN terms o ON o.id=quipu_lexical_ref(f.v)
-WHERE f.op=1 AND f.g=0;
+WHERE f.op=1;
 CREATE TRIGGER IF NOT EXISTS lexical_insert AFTER INSERT ON facts BEGIN
     UPDATE lexical_progress SET documents=documents+1 WHERE id=1
-        AND NEW.op=1 AND NEW.g=0 AND NOT EXISTS(SELECT 1 FROM lexical_fts WHERE rowid=NEW.rowid);
+        AND NEW.op=1 AND NOT EXISTS(SELECT 1 FROM lexical_fts WHERE rowid=NEW.rowid);
     INSERT OR REPLACE INTO lexical_fts(rowid,label,alt_label,description,attributes,type_names,iri_tokens,entity_iri,type_iri,language,datatype,graph_id)
     SELECT fact_id,label,alt_label,description,attributes,type_names,iri_tokens,entity_iri,type_iri,language,datatype,graph_id
     FROM lexical_source WHERE fact_id=NEW.rowid;
@@ -70,7 +71,7 @@ CREATE TRIGGER IF NOT EXISTS lexical_update AFTER UPDATE OF e,a,v,g,op ON facts 
     UPDATE lexical_progress SET documents=documents-1 WHERE id=1
         AND EXISTS(SELECT 1 FROM lexical_fts WHERE rowid=OLD.rowid);
     DELETE FROM lexical_fts WHERE rowid=OLD.rowid;
-    UPDATE lexical_progress SET documents=documents+1 WHERE id=1 AND NEW.op=1 AND NEW.g=0;
+    UPDATE lexical_progress SET documents=documents+1 WHERE id=1 AND NEW.op=1;
     INSERT OR REPLACE INTO lexical_fts(rowid,label,alt_label,description,attributes,type_names,iri_tokens,entity_iri,type_iri,language,datatype,graph_id)
     SELECT fact_id,label,alt_label,description,attributes,type_names,iri_tokens,entity_iri,type_iri,language,datatype,graph_id
     FROM lexical_source WHERE fact_id=NEW.rowid;
@@ -84,6 +85,12 @@ pub(crate) fn register(conn: &Connection) -> rusqlite::Result<()> {
     let flags = FunctionFlags::SQLITE_UTF8
         | FunctionFlags::SQLITE_DETERMINISTIC
         | FunctionFlags::SQLITE_INNOCUOUS;
+    conn.create_scalar_function("quipu_term_key", 1, flags, |ctx| {
+        let bytes: Vec<u8> = ctx.get(0)?;
+        let value = Value::from_bytes(&bytes)
+            .map_err(|e| rusqlite::Error::UserFunctionError(Box::new(e)))?;
+        Ok(value.term_key())
+    })?;
     conn.create_scalar_function("quipu_lexical_language", 1, flags, |ctx| {
         let bytes: Vec<u8> = ctx.get(0)?;
         let value = Value::from_bytes(&bytes)
@@ -194,9 +201,14 @@ pub struct LexicalProgress {
 #[derive(Debug)]
 pub struct LexicalMatch {
     pub matched: VectorMatch,
+    /// Columns containing actual FTS token matches in the winning assertion.
+    pub matched_fields: Vec<String>,
+    /// Bounded FTS snippet with non-HTML match delimiters for safe rendering.
+    pub snippet: String,
     pub language: Option<String>,
     pub datatype: Option<String>,
     pub type_iri: Option<String>,
+    pub graph_id: i64,
 }
 
 impl Store {
@@ -205,12 +217,32 @@ impl Store {
     pub fn initialize_lexical_index(&self) -> Result<()> {
         // Do not re-run DDL or scan the corpus at the start of EVERY batch.
         // Successful setup is atomic, so its progress row proves it completed.
-        if self.conn.query_row(
+        let exists = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='lexical_progress')",
             [],
             |r| r.get::<_, bool>(0),
-        )? {
+        )?;
+        let current = exists && self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('lexical_progress') WHERE name='scope_version')", [], |r| r.get::<_,bool>(0))?;
+        if current {
             return Ok(());
+        }
+        if exists {
+            // Preserve ROOT documents; invalidate completeness and revisit fact
+            // ranges in bounded batches to add named-graph assertions.
+            self.conn.execute_batch("SAVEPOINT lexical_scope_upgrade")?;
+            let outcome = (|| -> Result<()> {
+                self.conn.execute_batch("ALTER TABLE lexical_progress ADD COLUMN scope_version INTEGER NOT NULL DEFAULT 2; DROP TRIGGER lexical_insert; DROP TRIGGER lexical_update; DROP TRIGGER lexical_delete; DROP VIEW lexical_source;")?;
+                self.conn.execute_batch(SCHEMA)?;
+                self.conn.execute_batch("UPDATE lexical_progress SET cursor=0,highwater=(SELECT coalesce(max(rowid),0) FROM facts),complete=0 WHERE id=1;")?;
+                Ok(())
+            })();
+            if outcome.is_err() {
+                self.conn
+                    .execute_batch("ROLLBACK TO lexical_scope_upgrade")?;
+            }
+            self.conn.execute_batch("RELEASE lexical_scope_upgrade")?;
+            return outcome;
         }
         register(&self.conn)?;
         self.conn.execute_batch("SAVEPOINT lexical_setup")?;
@@ -330,6 +362,17 @@ impl Store {
         valid_at: Option<&str>,
         allowed: Option<&std::collections::HashSet<String>>,
     ) -> Result<Vec<LexicalMatch>> {
+        self.keyword_search_hits_in_graphs(query, limit, valid_at, allowed, &[0])
+    }
+
+    pub fn keyword_search_hits_in_graphs(
+        &self,
+        query: &str,
+        limit: usize,
+        valid_at: Option<&str>,
+        allowed: Option<&std::collections::HashSet<String>>,
+        graphs: &[i64],
+    ) -> Result<Vec<LexicalMatch>> {
         let started = crate::time::Stopwatch::start();
         let deadline = crate::time::request_deadline().or_else(|| {
             let ms = self.search_config().query_timeout_ms;
@@ -338,7 +381,7 @@ impl Store {
         let _guard = deadline
             .map(|d| crate::sparql::ProgressGuard::install(&self.conn, d))
             .transpose()?;
-        let result = self.keyword_search_inner(query, limit, valid_at, allowed);
+        let result = self.keyword_search_inner(query, limit, valid_at, allowed, graphs);
         match result {
             Err(_) if deadline.is_some_and(|d| d.passed()) => Err(Error::QueryTimeout {
                 elapsed_ms: started.elapsed_ms(),
@@ -356,6 +399,7 @@ impl Store {
         limit: usize,
         valid_at: Option<&str>,
         allowed: Option<&std::collections::HashSet<String>>,
+        graphs: &[i64],
     ) -> Result<Vec<LexicalMatch>> {
         if !self.search_config().keyword {
             return Err(Error::InvalidValue(
@@ -383,14 +427,22 @@ impl Store {
                 "keyword index is not ready; run bounded lexical backfill batches".into(),
             ));
         }
+        if graphs.iter().any(|g| *g != 0) && !self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('lexical_progress') WHERE name='scope_version')", [], |r| r.get::<_, bool>(0))? {
+            return Err(Error::InvalidValue("named-graph keyword index needs an explicit bounded backfill upgrade".into()));
+        }
         let expr = match_expression(query)?;
-        let sql = "SELECT f.e, coalesce(nullif(label,''),nullif(alt_label,''),nullif(description,''),nullif(attributes,''),nullif(type_names,''),iri_tokens), -bm25(lexical_fts), f.valid_from, f.valid_to, language, datatype, type_iri
+        let sql = "SELECT f.e, coalesce(nullif(label,''),nullif(alt_label,''),nullif(description,''),nullif(attributes,''),nullif(type_names,''),iri_tokens), -bm25(lexical_fts), f.valid_from, f.valid_to, language, datatype, type_iri, f.g, CASE WHEN highlight(lexical_fts,0,char(30),char(31)) != label THEN 'label,' ELSE '' END || CASE WHEN highlight(lexical_fts,1,char(30),char(31)) != alt_label THEN 'alt_label,' ELSE '' END || CASE WHEN highlight(lexical_fts,2,char(30),char(31)) != description THEN 'description,' ELSE '' END || CASE WHEN highlight(lexical_fts,3,char(30),char(31)) != attributes THEN 'attributes,' ELSE '' END || CASE WHEN highlight(lexical_fts,4,char(30),char(31)) != type_names THEN 'type_names,' ELSE '' END || CASE WHEN highlight(lexical_fts,5,char(30),char(31)) != iri_tokens THEN 'iri_tokens,' ELSE '' END, snippet(lexical_fts,-1,char(30),char(31),'…',32)
             FROM lexical_fts JOIN facts f ON f.rowid=lexical_fts.rowid
-            WHERE lexical_fts MATCH ?1 AND f.g=0 AND f.op=1
+            WHERE lexical_fts MATCH ?1 AND f.g IN (SELECT value FROM json_each(?3)) AND f.op=1
             AND ((?2 IS NULL AND f.valid_to IS NULL) OR (?2 IS NOT NULL AND f.valid_from<=?2 AND (f.valid_to IS NULL OR f.valid_to>?2)))
             ORDER BY bm25(lexical_fts), f.e, f.rowid";
         let mut stmt = self.conn.prepare(sql)?;
-        let mut rows = stmt.query(params![expr, valid_at])?;
+        let mut rows = stmt.query(params![
+            expr,
+            valid_at,
+            serde_json::to_string(graphs).map_err(|e| Error::InvalidValue(e.to_string()))?
+        ])?;
         let mut seen = std::collections::HashSet::new();
         let mut out = Vec::new();
         while let Some(r) = rows.next()? {
@@ -404,6 +456,13 @@ impl Store {
                 continue;
             }
             out.push(LexicalMatch {
+                snippet: r.get(10)?,
+                matched_fields: r
+                    .get::<_, String>(9)?
+                    .split(',')
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_string)
+                    .collect(),
                 matched: VectorMatch {
                     entity_id,
                     text: r.get(1)?,
@@ -414,6 +473,7 @@ impl Store {
                 language: r.get(5)?,
                 datatype: r.get(6)?,
                 type_iri: r.get(7)?,
+                graph_id: r.get(8)?,
             });
             if out.len() >= limit {
                 break;

@@ -43,7 +43,7 @@ bind = "127.0.0.1:3030"
 # without changing what any existing query returns.
 # [[quipu.attachments]]
 # alias = "reference"
-# path = "/srv/quipu/reference.qpack.db"
+# path = "/srv/quipu/reference.pendant.db"
 ```
 
 ## Config Fields
@@ -72,6 +72,12 @@ stops being read.
 | `labels.deny_data_kinds` | `[]` | Refuse queries composing graphs of these `dataKind` tokens (a blocklist — undeclared kinds pass) |
 | `search.default_limit` | `10` | Result limit when the caller passes none |
 | `search.keyword` | `false` | Opt-in SQLite FTS5 keyword search; activation installs schema/triggers without a bulk startup migration. Existing facts require explicit bounded backfill; reads refuse until complete. |
+| `search.hybrid` | `false` | Enable lexical/vector fusion after offline evaluation; no startup backfill. |
+| `search.mode` | `"semantic"` | Default mode for requests omitting it: semantic, keyword or hybrid. |
+| `search.alpha` | `0.5` | Semantic contribution in hybrid mode; 0 and 1 use exact pure endpoints. |
+| `search.fusion` | `"rrf"` | Weighted reciprocal ranks or `"weighted"` min-max scores. |
+| `search.rrf_k` | `60.0` | Positive RRF denominator offset. |
+| `search.named_graphs` | `false` | Explicit graph search and automatic named-only embedding text. Prepare existing named-only vectors with bounded backfill before enabling. Disabling retains the ROOT exclusion for prepared vectors. |
 | `search.max_limit` | `1000` | Hard cap on requested result limits |
 | `search.max_sparql_rows` | `10000` | Cap on SPARQL result rows |
 | `search.query_timeout_ms` | `30000` | SPARQL evaluation deadline |
@@ -84,6 +90,8 @@ stops being read.
 | `governance.verify_transitions` | `false` | Refuse a write landing an `aegis:TransitionEvent` whose signature is missing or does not verify under a registered key |
 | `governance.enforce_authority` | `false` | Make a supplied principal chain binding for graph writes |
 | `governance.hardware_verdict_schemes` | `false` | Accept WebAuthn and SSHSIG `sk-ssh-ed25519` verdict signatures beside ed25519; while off, those verdicts and registrations declaring them are refused |
+| `governance.quarantine.enabled` | `true` | Record a sealed, digest-only quarantine entry for each verdict of a refused write, outside the governed graph, so `quipu audit replay <verdict>` can re-derive the refusal |
+| `governance.quarantine.retain_full` | `[]` | Graph IRIs (or `"*"`) whose refused attempts are also kept in full, sealed; purge with `quipu audit quarantine purge` |
 | `resolution.enabled` | `false` | Entity resolution (dedup) on the episode write path |
 | `resolution.threshold` / `top_k` / `strict_mode` | `0.85` / `3` / `false` | Match threshold, candidate count, refuse-on-ambiguity |
 | `embedding.auto_embed` | `false` | Auto-embed entities on write (needs model/tokenizer paths) |
@@ -120,7 +128,7 @@ honour it at open — every `quipu` subcommand and `quipu-server` alike.
 ```toml
 [[quipu.attachments]]
 alias = "reference"
-path = "/srv/quipu/reference.qpack.db"
+path = "/srv/quipu/reference.pendant.db"
 
 [[quipu.attachments]]
 alias = "tenant_a"
@@ -181,17 +189,11 @@ Move existing embeddings across with
 `quipu migrate-vectors --from sqlite --to lancedb`. See
 [LanceDB Vector Backend](../architecture/lancedb.md).
 
-## Not wired into the `quipu` CLI / `quipu-server`
+## Configuration coverage
 
-Nothing, currently — every documented key above is read by the shipped
-binaries. The mechanism is kept rather than deleted: `unwired_warnings()` still
-exists, and any future key that parses but is not acted on must be listed there
-so setting it prints a `warning:` instead of being silently inert.
-
-(Two keys used to sit here. `federation.remotes` was wired in quipu #47 —
-health-checked at startup and queried per-request via `federated: true` on
-`POST /query`, see [Federation](../architecture/federation.md). `vector.backend`
-was wired in quipu-lv7, described just above.)
+Every documented key above is read by the shipped binaries. `unwired_warnings()`
+reports any configured key that parses but is not acted on, so an inert setting
+produces a warning.
 
 ## Priority Order
 

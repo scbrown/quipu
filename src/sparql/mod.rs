@@ -6,6 +6,7 @@
 //! EXTEND, RDFS subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
+mod casts;
 pub mod exists;
 pub mod filter;
 pub mod filter_pushdown;
@@ -22,6 +23,9 @@ pub mod rdfs;
 pub mod rdfs_closure;
 #[cfg(test)]
 mod rdfs_closure_tests;
+pub mod status_pushdown;
+#[cfg(test)]
+mod status_pushdown_tests;
 pub mod string_pushdown;
 #[cfg(test)]
 mod string_pushdown_tests;
@@ -32,11 +36,17 @@ mod bind_join;
 #[cfg(test)]
 mod bind_join_tests;
 mod construct;
+mod count_cover;
+mod count_mmap;
+mod count_optional;
+mod count_state;
+mod count_stream;
 mod group;
 mod join;
 mod progress;
 mod sql_in;
 pub mod triple;
+mod triple_bind;
 pub mod values;
 
 use std::collections::HashMap;

@@ -9,6 +9,22 @@
 //! and a boundary that exists only in prose is one a later contributor
 //! "completes".
 
+/// Forward-compatible receiver review schema contract.
+///
+/// This release recognizes upgraded stores without creating review state on
+/// startup. The lifecycle writer can execute this contract when activated.
+pub const IMPORT_REVIEW_SCHEMA_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS import_reviews (
+    share_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    notice_policy TEXT,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_import_reviews_pending ON import_reviews(state, first_seen);
+"#;
+
 /// What a reconstruction does with one store table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Disposition {
@@ -51,11 +67,19 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("term_spaces", Disposition::Content),
     ("schema_terms", Disposition::Content),
     ("store_identity", Disposition::Content),
+    // Digests of refused attempts, keyed by the verdicts they back (GS6). Hashes
+    // and ids only — no refused content — and they are what lets a restored
+    // copy still re-derive a denial from a presented delta, so they travel with
+    // the verdict facts they belong to. A hash of low-entropy content can be
+    // confirmed by guessing; that is the same exposure the verdict's own
+    // evidence hash already has, not a new one.
+    ("denial_quarantine", Disposition::Content),
     // -- regenerated --------------------------------------------------------
     // ~2.2 GB of floats at homelab scale, which rules out text. The pinned
     // embedding model and config are part of the declared set precisely because
     // regeneration is only reconstruction if the recipe travels.
     ("vectors", Disposition::Regenerated),
+    ("named_search_entities", Disposition::Regenerated),
     // Derived ROOT fact text. Rebuild with the pinned FTS5 projection and
     // bounded search-index backfill, never carry SQLite physical rowids.
     ("lexical_fts", Disposition::Regenerated),
@@ -82,8 +106,16 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // replay the origin had already spent is accepted on the copy. Excluding it
     // visibly is the only honest option.
     ("attestation_nonces", Disposition::Excluded),
+    // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
+    // attestation_nonces: carried, a legitimate re-attestation on the copy is
+    // refused; omitted silently, a spent one is accepted again.
+    ("decision_nonces", Disposition::Excluded),
+    ("registry_amendment_nonces", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
+    // Receiver-local review decisions and notice routes. A foreign pack must
+    // not install its producer's review position or silence local notices.
+    ("import_reviews", Disposition::Excluded),
     // Local derived-index cursor/highwater. A reconstructed store has its
     // own fact rowids and must start a new bounded backfill.
     ("lexical_progress", Disposition::Excluded),
@@ -108,6 +140,12 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // any store that has ever loaded a pack has 25. Measured: fresh store 24 /
     // no pack_loads; after one `quipu unpack`, 25 / present.
     ("pack_loads", Disposition::Excluded),
+    // THE REFUSED CONTENT ITSELF. GS2 keeps a denied write out of the governed
+    // graph; a pack carrying this table would hand that content to whoever
+    // restores it, in a store that never refused anything. Sealed deltas stay
+    // on the store that refused them — a restored copy can still re-derive a
+    // denial, but only from a delta someone presents against the digest.
+    ("quarantine_deltas", Disposition::Excluded),
 ];
 
 /// What a reconstruction does with `table`, or `None` if it is undeclared.

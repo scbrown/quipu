@@ -67,6 +67,7 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
     let requests = references
         .into_iter()
         .map(|reference| {
+            crate::cli_pack::warn_deprecated_extension(reference);
             let mut request = quipu::share_transport::read_local(reference)?;
             request.destination = destination;
             Ok(request)

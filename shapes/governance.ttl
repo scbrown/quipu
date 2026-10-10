@@ -573,6 +573,17 @@ aegis:PredicateShape a sh:NodeShape ;
 aegis:VerdictShape a sh:NodeShape ;
     sh:targetClass aegis:Verdict ;
     sh:property [
+        # Optional link to the COMMITTED transaction whose delta was judged,
+        # never the verdict's own persistence transaction. Refused/rolled-back
+        # attempts and historical verdicts omit it; never predict or backfill
+        # a transaction id from timestamps. The producer must bind this value
+        # into signed evidence and verdict identity; SHACL checks only its kind.
+        sh:path aegis:gatedTx ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+        sh:minInclusive 1 ;
+    ] ;
+    sh:property [
         sh:path aegis:predicateId ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
@@ -687,6 +698,13 @@ aegis:VerdictShape a sh:NodeShape ;
 aegis:VerifierRegistrationShape a sh:NodeShape ;
     sh:targetClass aegis:VerifierRegistration ;
     sh:property [
+        # Human trust-root tier (aegis-kzt0ql.9.4). Absent = agent tier.
+        sh:path aegis:trustTier ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "human" ) ;
+    ] ;
+    sh:property [
         sh:path aegis:verifier ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
@@ -738,6 +756,49 @@ aegis:DecisionShape a sh:NodeShape ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Sealed decisions (aegis-kzt0ql.9.3). A presentation freezes a decision's
+# content (an RDFC-1.0 digest) with a single-use nonce; a verdict answers it
+# with a signature over the whole decision. Neither class is a Verdict or a
+# DecisionRequest, and neither shares a domain-bearing predicate with them.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:DecisionPresentationShape a sh:NodeShape ;
+    sh:targetClass aegis:DecisionPresentation ;
+    sh:property [ sh:path aegis:forDecision ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:sealedDigest ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^sha256:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path aegis:nonce ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:purpose ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "quipu-verdict" ) ] ;
+    sh:property [ sh:path aegis:presentationExpiresAt ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+aegis:DecisionVerdictShape a sh:NodeShape ;
+    sh:targetClass aegis:DecisionVerdict ;
+    sh:property [ sh:path aegis:forPresentation ; sh:class aegis:DecisionPresentation ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:outcome ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:verifier ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:sealSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# The human trust root (aegis-kzt0ql.9.4). A registration carrying
+# aegis:trustTier "human" in ROOT is a human trust-root key; changing the set
+# of them takes an aegis:RegistryAmendment signed by an already-enrolled human
+# key (enforced by the write gate, not by these shapes). The first key is
+# enrolled once, at the console, and leaves an aegis:TrustRootBootstrap record.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:RegistryAmendmentShape a sh:NodeShape ;
+    sh:targetClass aegis:RegistryAmendment ;
+    sh:property [ sh:path aegis:amends ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:amendedDigest ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^(sha256:[0-9a-f]{64}|revoked)$" ] ;
+    sh:property [ sh:path aegis:amendmentSigner ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:amendmentNonce ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^[0-9a-fA-F]{32,}$" ] ;
+    sh:property [ sh:path aegis:amendmentSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+aegis:TrustRootBootstrapShape a sh:NodeShape ;
+    sh:targetClass aegis:TrustRootBootstrap ;
+    sh:property [ sh:path aegis:enrolled ; sh:class aegis:VerifierRegistration ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:keyFingerprint ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^SHA256:[A-Za-z0-9+/]{43}$" ] .
 
 # ═══════════════════════════════════════════════════════════════════
 # Escalation Router (Q-SARC-ER) — bounded human oversight.
@@ -1066,7 +1127,7 @@ aegis:ExternalTruthMappingShape a sh:NodeShape ;
     ] ;
     sh:property [ sh:path aegis:verified_by ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
 
-# A .qpack.db is Quipu's SQLite archive encoding of this bundle, not a second
+# A .pendant.db is Quipu's SQLite archive encoding of this bundle, not a second
 # semantic format. canonicalGraphHash is the pack_manifest content_hash:
 # sha256 over lexically sorted N-Triples for graph + shapes + queries + labels.
 aegis:CertifiedShareBundleShape a sh:NodeShape ;
@@ -1099,7 +1160,7 @@ aegis:KnowledgeCertificationSealShape a sh:NodeShape ;
     sh:property [ sh:path aegis:signingKey ; sh:class aegis:VerifierRegistration ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:attestationSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
     # A Camayoc bundle cut from an operational shuttle window names it here.
-    # Static packs such as core.qpack.db have no window, so this is optional
+    # Static packs such as core.pendant.db have no window, so this is optional
     # on the generic certified-bundle envelope.
     sh:property [ sh:path aegis:frozenWindow ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 

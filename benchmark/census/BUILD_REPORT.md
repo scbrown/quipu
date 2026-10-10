@@ -49,6 +49,17 @@ change — an out-of-date honesty record is worse than none.
   replay for denials verifies the rules-in-force instead. Full denial
   re-derivation would require the trace to carry the attempted delta —
   which hank-style traces do, and the store deliberately does not.
+
+  **Superseded 2026-09-26 (aegis-xfuch4), kept here as it was written.**
+  The store now keeps the attempt — outside the governed graph, in the
+  denial quarantine (`src/governance/quarantine.rs`), so GS2 is
+  unchanged. The gated arm opts every graph into full retention, and
+  CEN-M2 re-derives each denial with `denial_replay::replay_verdict`:
+  the store rebuilt as of the refusal, the sealed attempt applied, the
+  gate re-run. It reports **6/6 denials re-derived** (refused again,
+  same outcome, same rule-set digest, same post-state digest) beside
+  the original 6/6 rules-in-force, which still describes what the
+  governed graph alone supports.
 - **A latest-only replay would misreport every pre-amendment decision.**
   All 50 phase-2 satisfied tally verdicts re-derive faithfully under
   the claim in force at their instant, and all 50 evaluate *unsatisfied*

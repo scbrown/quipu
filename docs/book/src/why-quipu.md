@@ -1,9 +1,7 @@
 # Why Quipu
 
-This page holds the long form that used to open the README: sharing, a tour,
-the comparison, the full feature list, the architecture and the feature matrix.
-The README now leads with installing it and a three-command first success
-([the caboodle-stack README standard](https://github.com/scbrown/caboodle/blob/main/docs/stack/README-STANDARD.md)).
+Quipu stores structured knowledge, validates writes against your rules, and
+lets agents query and share that knowledge through its CLI, REST API and MCP server.
 
 ## Sharing & Federation
 
@@ -44,7 +42,7 @@ itself compiled to WebAssembly**. GitHub cannot run scripts in a README, so here
 picture; the page is one click away.
 
 <p align="center">
-  <a href="https://scbrown.github.io/quipu/explore/"><img src="assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
+  <a href="https://scbrown.github.io/quipu/explore/"><img src="https://raw.githubusercontent.com/scbrown/quipu/main/assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
 </p>
 
 <p align="center">
@@ -63,7 +61,7 @@ queries the page will show you. It takes any Quipu pack, not just this one.
 `tool_set` / `tool_retract` / `tool_episode`, the same functions the REST API exposes,
 with the closed-vocabulary gate still enforcing what the sender's shapes allow. The views
 update as you go, and you can take the result with you: the edited store exports as a
-genuine `.qpack.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
+genuine `.pendant.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
 pack it came from as its parent. Import it directly with
 `quipu import <archive> --db your.db` to stage it against your database's loaded shapes;
 promotion is a separate step. Without `--db`, archive verification stays in memory. Or download
@@ -76,12 +74,12 @@ and the Pages build needs no Rust.
 ## See It In Action
 
 <p align="center">
-  <img src="assets/graph-explorer.png" width="900" alt="Quipu's graph explorer: a force-directed node-link view of an infrastructure knowledge graph, with a type filter sidebar, an entity list, and a legend pairing each entity type with a colour and a shape"/>
+  <img src="https://raw.githubusercontent.com/scbrown/quipu/main/assets/graph-explorer.png" width="900" alt="Quipu's graph explorer: a force-directed node-link view of an infrastructure knowledge graph, with a type filter sidebar, an entity list, and a legend pairing each entity type with a colour and a shape"/>
 </p>
 
 <p align="center">
   <em>The built-in explorer at <code>/ui</code> — the whole graph in one request, drawn on canvas.<br/>
-  Run it yourself with <code>just demo</code> (<a href="examples/demo-graph/">examples/demo-graph</a>).</em>
+  Run it yourself with <code>just demo</code> (<a href="https://github.com/scbrown/quipu/tree/main/examples/demo-graph">examples/demo-graph</a>).</em>
 </p>
 
 ```text
@@ -330,8 +328,8 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
 Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
-When running as a Bobbin subsystem, agents get 48 MCP tools (50 with the
-`owl` feature). The two most
+Through Quipu's own MCP server (`quipu mcp`, or `quipu-server` at `/mcp`),
+agents get 48 MCP tools (50 with the `owl` feature). The two most
 commonly used for knowledge-aware context:
 
 **`quipu_context`** — unified knowledge discovery. Bobbin merges the result

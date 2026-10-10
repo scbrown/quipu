@@ -24,7 +24,7 @@ trap 'rm -rf "$PRIVATE"' EXIT
 bash "$SOURCE/scripts/build-repository-share.sh" \
     "$QUIPU_BIN" "$BOBBIN_BIN" "$SOURCE" "$PRIVATE/share" "$REVISION"
 mkdir "$PRIVATE/artifacts"
-PACK="quipu-${TAG}-repository.qpack.tar.gz"
+PACK="quipu-${TAG}-repository.pendant.tar.gz"
 tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
     --numeric-owner -C "$PRIVATE/share" -czf "$PRIVATE/artifacts/$PACK" .
 (cd "$PRIVATE/artifacts" && sha256sum "$PACK" > "$PACK.sha256")
@@ -48,10 +48,19 @@ proof = {
 }
 pack.with_name(pack.name + ".provenance.json").write_text(json.dumps(proof, indent=2) + "\n")
 PY
+# DEPRECATED ALIAS, ONE RELEASE (aegis-fxpbys.3). Every release cut before the
+# pendant rename published this asset as *-repository.qpack.tar.gz, and older
+# docs builds and scripts download it by that name. Publish byte-identical
+# copies under the old name for one release, then drop this block.
+LEGACY="quipu-${TAG}-repository.qpack.tar.gz"
+cp "$PRIVATE/artifacts/$PACK" "$PRIVATE/artifacts/$LEGACY"
+(cd "$PRIVATE/artifacts" && sha256sum "$LEGACY" > "$LEGACY.sha256")
+cp "$PRIVATE/artifacts/$PACK.provenance.json" "$PRIVATE/artifacts/$LEGACY.provenance.json"
 mv -T "$PRIVATE/artifacts" "$OUTPUT"
 if [[ "$MODE" == --publish ]]; then
     # Explicit filenames only: neither source/index nor catalogue nor private
     # diagnostics can enter the release upload. Never replace an existing pack.
     gh release upload "$TAG" --repo scbrown/quipu \
-        "$OUTPUT/$PACK" "$OUTPUT/$PACK.sha256" "$OUTPUT/$PACK.provenance.json"
+        "$OUTPUT/$PACK" "$OUTPUT/$PACK.sha256" "$OUTPUT/$PACK.provenance.json" \
+        "$OUTPUT/$LEGACY" "$OUTPUT/$LEGACY.sha256" "$OUTPUT/$LEGACY.provenance.json"
 fi

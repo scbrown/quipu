@@ -98,3 +98,20 @@ async fn control_the_same_signed_graph_create_lands_when_not_refused() {
     assert_eq!(pending.state(), AttestState::Spent);
     assert!(graph_exists(&store));
 }
+
+#[test]
+fn expired_first_writer_lock_does_not_spend_signed_nonce() {
+    let (store, pending, identity) = signed_request(false);
+    quipu::transaction_auth::with_identity(Some(identity), || {
+        {
+            let _deadline =
+                quipu::time::set_request_deadline(Some(quipu::time::Deadline::after_millis(0)));
+            assert!(store.write_lock().is_err());
+            assert_eq!(pending.state(), AttestState::Unspent);
+        }
+        // Positive control: the same request can settle after the expired scope.
+        let _guard = store.write_lock().unwrap();
+        assert_eq!(pending.state(), AttestState::Spent);
+    });
+    assert!(!graph_exists(&store));
+}

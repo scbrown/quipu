@@ -310,7 +310,7 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
         </p>
         <dl id="export-manifest"></dl>
         <div class="row">
-          <button class="go" id="download-pack">Download .qpack.tar.gz</button>
+          <button class="go" id="download-pack">Download .pendant.tar.gz</button>
           <button id="download-nt">Download export.nt</button>
         </div>
 
@@ -374,16 +374,16 @@ browser_evaluate  await (await fetch("./query", {method:"POST",
       <div class="body">
         <p class="muted" style="font-size:12.5px;margin-bottom:10px">
           Any Quipu share works here, not just this one — that is the point of a portable pack.
-          Point it at a URL, or open a <code class="mono">.qpack.tar.gz</code> from your disk.
+          Point it at a URL, or open a <code class="mono">.pendant.tar.gz</code> from your disk.
           <strong>GitHub release assets will not load from a URL:</strong> GitHub serves them with
           no <code class="mono">Access-Control-Allow-Origin</code> header, so the browser refuses
           them — which is exactly why this site stages its own copy at build time.
         </p>
         <div class="row">
-          <input id="url-input" type="url" placeholder="https://example.org/some.qpack.tar.gz">
+          <input id="url-input" type="url" placeholder="https://example.org/some.pendant.tar.gz">
           <button id="url-load">Load URL</button>
         </div>
-        <div class="row"><input id="file-input" type="file" accept=".gz,.tar.gz,.qpack"></div>
+        <div class="row"><input id="file-input" type="file" accept=".gz,.tar.gz,.pendant,.qpack"></div>
       </div>
     </section>
 

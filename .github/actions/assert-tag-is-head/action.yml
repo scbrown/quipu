@@ -16,7 +16,7 @@ description: >-
 #      DISPATCH BRANCH. The tag input only picks the upload target and the
 #      artifact FILENAME.
 #   2. BOTH asset jobs run on a dispatch, not just the one the operator has in
-#      mind — the binary tarball, its .sha256, and the repository qpack go too.
+#      mind — the binary tarball, its .sha256, and the repository pendant go too.
 #   3. Every upload passes `--clobber`.
 #
 # So dispatching against an older tag replaces that release's assets with
