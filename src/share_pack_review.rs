@@ -1,4 +1,4 @@
-//! PR-review report for a qpack change (aegis-fxpbys.1, milestone M2).
+//! PR-review report for a pendant change (aegis-fxpbys.1, milestone M2).
 //!
 //! `quipu share diff --report` turns two versions of a pack into the markdown a
 //! reviewer reads on a pull request, in this order:
@@ -420,7 +420,7 @@ fn summary(r: &Review) -> String {
         None => "no merge decisions".to_string(),
     };
     format!(
-        "qpack review: {facts}; {shacl}; {decisions}; {} alias candidates",
+        "pendant review: {facts}; {shacl}; {decisions}; {} alias candidates",
         r.alias_candidates.len()
     )
 }

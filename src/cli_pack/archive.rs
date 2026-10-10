@@ -14,6 +14,7 @@ const PACK_FORMATS: &[&str] = &["turtle", "text"];
 
 pub fn cmd_pack(args: &[String], db_path: &str) {
     if let Some(path) = flag_value(args, "--verify") {
+        super::warn_deprecated_extension(path);
         // Dispatch on the FORMAT, because the two artifacts hash differently
         // and `pack::verify` cannot recompute a full pack's hash at all: it
         // hashes canonical CURRENT-FACTS content for `manifest.source_graph`,
@@ -51,7 +52,7 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         .filter(|a| !a.starts_with("--"))
         .map_or(quipu::schema::ROOT_GRAPH_IRI, String::as_str);
     let out = flag_value(args, "--out").unwrap_or_else(|| {
-        eprintln!("quipu pack requires --out <file.qpack.db>");
+        eprintln!("quipu pack requires --out <file.pendant.db>");
         std::process::exit(1);
     });
 
@@ -183,9 +184,10 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
 /// `quipu unpack <pack> [--into <graph-iri>]` (quipu #82).
 pub fn cmd_unpack(args: &[String], db_path: &str) {
     let Some(pack) = args.get(2).filter(|s| !s.starts_with("--")) else {
-        eprintln!("usage: quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]");
+        eprintln!("usage: quipu unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]");
         std::process::exit(1);
     };
+    super::warn_deprecated_extension(pack);
     let opts = quipu::pack::LoadOptions {
         into: flag_value(args, "--into"),
         expect_repository: flag_value(args, "--expect-repo"),
@@ -219,12 +221,13 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
 pub fn cmd_restore(args: &[String], db_path: &str) {
     let Some(pack) = args.get(2).filter(|s| !s.starts_with("--")) else {
         eprintln!(
-            "usage: quipu restore <file.qpack> [--force] [--db <path>]\n       \
+            "usage: quipu restore <file.pendant> [--force] [--db <path>]\n       \
              REPLACES the store at --db with the pack's whole contents. To MERGE a \
              published pack into an existing store, use `quipu unpack` instead."
         );
         std::process::exit(1);
     };
+    super::warn_deprecated_extension(pack);
     let force = args.iter().any(|a| a == "--force");
     match quipu::pack_restore::restore(pack, db_path, force) {
         Ok(r) => {

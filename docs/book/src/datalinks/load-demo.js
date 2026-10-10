@@ -22,7 +22,7 @@ export async function loadDemo() {
     worker.postMessage({ id, ...msg }, msg.bytes ? [msg.bytes] : []);
   });
   try {
-    const source = new URL('./demo.qpack.tar.gz', import.meta.url).href;
+    const source = new URL('./demo.pendant.tar.gz', import.meta.url).href;
     const response = await fetch(source);
     if (!response.ok) throw new Error(`Demo pack: HTTP ${response.status}`);
     const report = await ask({ cmd: 'load', source, bytes: await response.arrayBuffer() });

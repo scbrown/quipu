@@ -189,7 +189,7 @@ fn cen_c6(ctx: &mut Ctx, iris: &CensusIris) {
 fn cen_c7(ctx: &mut Ctx, out_dir: &str) {
     let ts = ctx.tick();
     let province_db = format!("{out_dir}/province-{}.db", ctx.arm.as_str());
-    let pack_path = format!("{out_dir}/province-{}.qpack.db", ctx.arm.as_str());
+    let pack_path = format!("{out_dir}/province-{}.pendant.db", ctx.arm.as_str());
     let _ = std::fs::remove_file(&province_db);
     let _ = std::fs::remove_file(&pack_path);
 

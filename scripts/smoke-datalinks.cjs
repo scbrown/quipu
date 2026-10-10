@@ -38,7 +38,7 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('#loading').count(), 0, 'demo must finish loading');
     assert.equal(await page.locator('#counts').textContent(), '374 nodes · 362 edges · 17 ranks');
     assert.equal(await page.locator('canvas').count(), 1);
-    assert(requests.some(r => r.endsWith('/demo.qpack.tar.gz')), 'pack fetched');
+    assert(requests.some(r => r.endsWith('/demo.pendant.tar.gz')), 'pack fetched');
     assert(requests.some(r => r.endsWith('/quipu_wasm_explorer_bg.wasm')), 'real Quipu wasm loaded');
     assert(!requests.some(r => r.endsWith('/graph.json')), 'no JSON fallback');
     assert.deepEqual(errors, []);
@@ -56,16 +56,16 @@ const assert = require('node:assert/strict');
     assert.equal(createHash('sha256').update(result.facts).digest('hex'),
       '05d2a16fff06816b30a506e8cf103aabbb780abae38cfaab58338a0bc4f084e0');
     assert(result.report.promotion, 'canonical import was promoted');
-    console.log('PASS canonical qpack: exact demo data, 374 nodes / 362 edges / 17 ranks');
+    console.log('PASS canonical pendant: exact demo data, 374 nodes / 362 edges / 17 ranks');
     if (process.env.SCREENSHOT) await page.screenshot({ path: process.env.SCREENSHOT });
 
     // A damaged artifact must produce a visible error, never the old JSON view.
-    await page.route('**/demo.qpack.tar.gz', route => route.fulfill({ body: 'damaged pack' }));
+    await page.route('**/demo.pendant.tar.gz', route => route.fulfill({ body: 'damaged pack' }));
     await page.reload();
     await page.waitForFunction(() => document.querySelector('#loading')?.textContent.startsWith('Could not load:'), null, { timeout: 60000 });
     assert.equal(await page.locator('canvas').count(), 0);
     assert.equal(await page.locator('#counts').textContent(), '');
-    console.log('PASS damaged qpack: visible refusal, no rendered fallback');
+    console.log('PASS damaged pendant: visible refusal, no rendered fallback');
   } finally {
     await browser?.close();
     if (server) await new Promise(resolve => server.close(resolve));

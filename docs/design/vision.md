@@ -33,7 +33,13 @@ pre-Columbian knowledge graph encoded in textile. The metaphor is exact:
 - **Cords** = entities (each cord represents a thing)
 - **Knots** = facts (type, position, and grouping encode meaning)
 - **Colors** = types/classes (different cord colors = different categories)
-- **Pendant cords** = relationships (branching from main cord)
+- **Primary cord** = a store (the cord everything else hangs from)
+- **Pendant cords** = pendants: shareable, self-contained records — a graph
+  plus its shapes and stored queries, packaged as one artifact (`.pendant`)
+- **Subsidiary cords** = delta shares, hanging off the pendant they amend
+- **Tying a pendant on** = composing an imported pendant into a store
+- **Knots between cords** = relationships (edges join cords; they are not
+  pendants)
 - **Positional encoding** = temporal ordering (events recorded in sequence)
 - **Khipukamayuq** (readers) = agents that interpret the structure
 

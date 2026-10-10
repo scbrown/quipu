@@ -55,7 +55,7 @@ The producer includes this projection in its ordinary CONSTRUCT share scope,
 then adopts shapes, imports and promotes into a fresh receiver. The contributor
 proof requires all six knowledge classes, four source-backed episodes, and
 vision → decision → typed code paths. A code-only pack cannot pass that proof.
-The release workflow ships that same output as its repository qpack asset.
+The release workflow ships that same output as its repository pendant asset.
 
 Use `just contributor generate` to inspect the deterministic projection.
 `QUIPU_BIN=/path/to/quipu just contributor pack /tmp/repository-share` runs the

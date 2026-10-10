@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Review every qpack a pull request changes (aegis-fxpbys.1, M2).
+"""Review every pendant a pull request changes (aegis-fxpbys.1, M2).
 
 For each pack directory touched between the merge base and the PR head, the
 two versions are materialized from Git and passed to
@@ -126,12 +126,12 @@ def main():
         if is_pack(names(repo, base, d)) or is_pack(names(repo, args.head, d))
     ]
 
-    parts = [MARKER, "# qpack review", ""]
+    parts = [MARKER, "# pendant review", ""]
     failed = []
     deleted = 0
     if not packs:
         parts.append(
-            "No qpack changed in this pull request. A pack is a directory holding "
+            "No pendant changed in this pull request. A pack is a directory holding "
             "`export.nt` or `payload.nq` and `manifest.json` or `manifest.ttl`."
         )
         if candidates:
@@ -158,12 +158,12 @@ def main():
         if code in (0, 3):
             parts.append(report.rstrip())
             title = report.rstrip().splitlines()[-1] if report.strip() else "no report"
-            annotation("error" if code == 3 else "notice", f"qpack {directory}", title)
+            annotation("error" if code == 3 else "notice", f"pendant {directory}", title)
             if code == 3:
                 failed.append(directory)
         else:
             parts.append(f"**Report could not be computed** (exit {code}):\n\n```text\n{err.strip()}\n```")
-            annotation("error", f"qpack {directory}", f"report could not be computed: {err.strip()}")
+            annotation("error", f"pendant {directory}", f"report could not be computed: {err.strip()}")
             failed.append(directory)
         parts.append("")
     verdict = (

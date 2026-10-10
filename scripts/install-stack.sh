@@ -10,20 +10,21 @@
 #
 # Usage:
 #   scripts/install-stack.sh [--profile kg] [--yes] [--dry-run]
-#                            [--qpack PATH]... [--db PATH] [--plan PATH]
+#                            [--pendant PATH]... [--db PATH] [--plan PATH]
 #
 #   --profile P   caboodle profile to plan (default: kg)
-#   --yes         proceed past the plan to apply + verify + qpack load
-#   --qpack PATH  a .qpack.db knowledge pack to verify and unpack
-#                 into the target store (repeatable)
-#   --db PATH     target quipu store for --qpack (default: quipu's own
+#   --yes         proceed past the plan to apply + verify + pendant load
+#   --pendant PATH  a .pendant.db knowledge pack to verify and unpack
+#                 into the target store (repeatable). --qpack PATH is a
+#                 deprecated alias kept for one release.
+#   --db PATH     target quipu store for --pendant (default: quipu's own
 #                 default store path)
 #   --plan PATH   where caboodle writes/reads the plan
 #                 (default: caboodle-plan.toml)
 #   --dry-run     print every command that would run; execute nothing
 #
 # Syntax stays POSIX-parseable (sh -n clean): no arrays — the repeatable
-# --qpack list is a newline-separated string walked by `read`.
+# --pendant list is a newline-separated string walked by `read`.
 
 set -euo pipefail
 
@@ -32,11 +33,11 @@ PLAN="caboodle-plan.toml"
 DB=""
 YES=0
 DRY_RUN=0
-QPACKS=""        # newline-separated; POSIX sh has no arrays
-QPACK_COUNT=0
+PENDANTS=""        # newline-separated; POSIX sh has no arrays
+PENDANT_COUNT=0
 
 usage() {
-    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -44,10 +45,13 @@ while [ $# -gt 0 ]; do
         --profile) PROFILE="${2:?--profile needs a value}"; shift 2 ;;
         --plan)    PLAN="${2:?--plan needs a value}"; shift 2 ;;
         --db)      DB="${2:?--db needs a value}"; shift 2 ;;
-        --qpack)
-            QPACKS="${QPACKS}${2:?--qpack needs a path}
+        --pendant|--qpack)
+            if [ "$1" = "--qpack" ]; then
+                echo "install-stack: --qpack is deprecated; use --pendant" >&2
+            fi
+            PENDANTS="${PENDANTS}${2:?$1 needs a path}
 "
-            QPACK_COUNT=$((QPACK_COUNT + 1))
+            PENDANT_COUNT=$((PENDANT_COUNT + 1))
             shift 2 ;;
         --yes)     YES=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
@@ -101,14 +105,14 @@ if [ "$YES" -eq 0 ]; then
     echo "install-stack: nothing has been installed. Review the plan, then re-run"
     echo "install-stack: with --yes to apply, verify, and load packs:"
     echo ""
-    QPACK_ARGS=""
+    PENDANT_ARGS=""
     while IFS= read -r pack; do
         [ -n "$pack" ] || continue
-        QPACK_ARGS="$QPACK_ARGS --qpack $pack"
+        PENDANT_ARGS="$PENDANT_ARGS --pendant $pack"
     done <<EOF
-$QPACKS
+$PENDANTS
 EOF
-    echo "  $0 --profile $PROFILE --plan $PLAN --yes$QPACK_ARGS"
+    echo "  $0 --profile $PROFILE --plan $PLAN --yes$PENDANT_ARGS"
     exit 0
 fi
 
@@ -117,9 +121,9 @@ fi
 run caboodle apply --plan "$PLAN"
 run caboodle verify --plan "$PLAN"
 
-# ------------------------------------------------------------ qpack load
+# ------------------------------------------------------------ pendant load
 
-if [ "$QPACK_COUNT" -gt 0 ]; then
+if [ "$PENDANT_COUNT" -gt 0 ]; then
     if [ "$DRY_RUN" -eq 0 ] && ! command -v quipu >/dev/null 2>&1; then
         echo "install-stack: 'quipu' is not on PATH after apply+verify; cannot load packs" >&2
         exit 1
@@ -129,7 +133,7 @@ if [ "$QPACK_COUNT" -gt 0 ]; then
     while IFS= read -r pack; do
         [ -n "$pack" ] || continue
         if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$pack" ]; then
-            echo "install-stack: qpack not found: $pack" >&2
+            echo "install-stack: pendant not found: $pack" >&2
             exit 1
         fi
         # Content-hash verification FIRST, and a failure is a refusal:
@@ -145,8 +149,8 @@ if [ "$QPACK_COUNT" -gt 0 ]; then
             run quipu unpack "$pack"
         fi
     done <<EOF
-$QPACKS
+$PENDANTS
 EOF
 fi
 
-echo "install-stack: done (profile=$PROFILE, plan=$PLAN, qpacks=$QPACK_COUNT)"
+echo "install-stack: done (profile=$PROFILE, plan=$PLAN, pendants=$PENDANT_COUNT)"

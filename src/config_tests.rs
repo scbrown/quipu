@@ -399,7 +399,7 @@ store_path = "/data/quipu.db"
 
 [[quipu.attachments]]
 alias = "reference"
-path = "/data/reference.qpack.db"
+path = "/data/reference.pendant.db"
 
 [[quipu.attachments]]
 alias = "tenant_a"
@@ -411,7 +411,7 @@ path = "packs/tenant-a.db"
     assert_eq!(cfg.attachments[0].alias, "reference");
     assert_eq!(
         cfg.attachments[0].path,
-        PathBuf::from("/data/reference.qpack.db")
+        PathBuf::from("/data/reference.pendant.db")
     );
     assert_eq!(cfg.attachments[1].alias, "tenant_a");
     assert_eq!(cfg.attachments[1].path, PathBuf::from("packs/tenant-a.db"));
