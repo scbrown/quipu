@@ -183,9 +183,129 @@ pub fn structured_request_log(
     record.to_string()
 }
 
+/// Add bounded caller-declared host/agent metadata, never authenticated identity.
+/// These values belong in logs, not high-cardinality metric labels.
+#[must_use]
+pub fn with_declared_attribution(log: String, host: Option<&str>, agent: Option<&str>) -> String {
+    let clean = |value: Option<&str>| {
+        value
+            .map(|s| {
+                s.chars()
+                    .filter(|c| c.is_ascii_alphanumeric() || "._-".contains(*c))
+                    .take(64)
+                    .collect::<String>()
+            })
+            .filter(|s| !s.is_empty())
+    };
+    let (host, agent) = (clean(host), clean(agent));
+    if host.is_none() && agent.is_none() {
+        return log;
+    }
+    let Ok(mut record) = serde_json::from_str::<Value>(&log) else {
+        return log;
+    };
+    if !record.is_object() {
+        return log;
+    }
+    if let Some(host) = host {
+        record["client_host"] = json!(host);
+    }
+    if let Some(agent) = agent {
+        record["agent"] = json!(agent);
+    }
+    record["attribution_source"] = json!("declared_headers");
+    record.to_string()
+}
+
+/// Add the receiver-observed network hop without treating it as writer identity.
+/// Forwarded headers are deliberately not inputs. Internal/stdio dispatch has
+/// no socket peer; a reverse proxy's peer identifies the proxy, not its client.
+#[must_use]
+pub fn with_request_context(
+    log: String,
+    peer: Option<std::net::SocketAddr>,
+    provenance: Option<&crate::write_provenance::RequestProvenance>,
+) -> String {
+    let Ok(mut record) = serde_json::from_str::<Value>(&log) else {
+        return log;
+    };
+    if !record.is_object() {
+        return log;
+    }
+    record["transport_peer"] = json!(peer.map(|p| p.to_string()));
+    record["transport_peer_source"] = json!(if peer.is_some() {
+        "socket"
+    } else {
+        "unavailable"
+    });
+    if let Some(provenance) = provenance {
+        // Request declarations include refusals; this is not commit coverage.
+        record["request_provenance"] = json!(provenance.completeness.as_str());
+        record["request_provenance_missing"] = json!(provenance.missing);
+    }
+    record.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn socket_observation_does_not_authenticate_declared_identity() {
+        let log =
+            with_declared_attribution("{}".into(), Some("claimed-host"), Some("claimed-agent"));
+        let peer = "127.0.0.1:12345".parse().unwrap();
+        let record: Value =
+            serde_json::from_str(&with_request_context(log, Some(peer), None)).unwrap();
+        assert_eq!(record["client_host"], "claimed-host");
+        assert_eq!(record["agent"], "claimed-agent");
+        assert_eq!(record["attribution_source"], "declared_headers");
+        assert_eq!(record["transport_peer"], "127.0.0.1:12345");
+        assert_eq!(record["transport_peer_source"], "socket");
+        assert!(record.get("authorization").is_none());
+    }
+
+    #[test]
+    fn missing_transport_context_is_explicit_without_guessing_a_peer() {
+        let record: Value =
+            serde_json::from_str(&with_request_context("{}".into(), None, None)).unwrap();
+        assert!(record["transport_peer"].is_null());
+        assert_eq!(record["transport_peer_source"], "unavailable");
+        assert!(record.get("agent").is_none());
+        assert_eq!(with_request_context("[]".into(), None, None), "[]");
+    }
+
+    #[test]
+    fn missing_field_names_do_not_expose_values_or_claim_a_commit() {
+        let provenance = crate::write_provenance::RequestProvenance::classify(
+            "seeds",
+            "/update",
+            [Some("a"), Some("codex"), Some("h"), Some("s"), None],
+        );
+        let record: Value =
+            serde_json::from_str(&with_request_context("{}".into(), None, Some(&provenance)))
+                .unwrap();
+        assert_eq!(record["request_provenance"], "partial");
+        assert_eq!(record["request_provenance_missing"], json!(["model"]));
+        assert!(record.get("model").is_none());
+        assert!(record.get("session").is_none());
+        assert!(record.get("tx_id").is_none());
+    }
+
+    #[test]
+    fn declared_attribution_is_bounded_optional_and_distinguished_from_identity() {
+        assert_eq!(with_declared_attribution("{}".into(), None, None), "{}");
+        let log = with_declared_attribution("{}".into(), Some("runner-a"), Some(&"x".repeat(200)));
+        let record: Value = serde_json::from_str(&log).unwrap();
+        assert_eq!(record["client_host"], "runner-a");
+        assert_eq!(record["agent"].as_str().unwrap().len(), 64);
+        assert_eq!(record["attribution_source"], "declared_headers");
+        assert!(record.get("authorization").is_none());
+        assert_eq!(
+            with_declared_attribution("[]".into(), Some("runner-a"), None),
+            "[]"
+        );
+    }
 
     #[test]
     fn query_shape_skips_prefix_declarations() {

@@ -19,14 +19,17 @@
 # CI's smoke build links whatever ubuntu-latest has (2.39). trixie's 2.41 runs
 # both, so the image CI tests and the image we ship share one base. slim already
 # carries the only non-libc dependency (libstdc++6).
-FROM debian:trixie-slim
+# Docker publishes the same official image on ECR Public. Shared CI runners
+# exhausted Docker Hub's anonymous pull quota before the image smoke could run.
+# Keep CI and release on this shared reference; no credentials are required.
+FROM public.ecr.aws/docker/library/debian:trixie-slim
 
 # The registry refuses to list the image unless this equals server.json `name`.
 # scripts/ci/mcp-registry.py check keeps the two in step.
 LABEL io.modelcontextprotocol.server.name="io.github.scbrown/quipu"
 LABEL org.opencontainers.image.source="https://github.com/scbrown/quipu"
 LABEL org.opencontainers.image.description="Quipu knowledge graph as a local MCP server over stdio"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 COPY --chmod=755 quipu quipu-server /usr/local/bin/
 

@@ -3,6 +3,9 @@
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "request_completion.rs"]
+mod request_completion;
+
 static REQUEST_STARTS: AtomicU64 = AtomicU64::new(0);
 
 /// Arrivals include pending/cancelled requests and the metrics scrape itself.
@@ -17,6 +20,7 @@ pub(crate) fn render_request_starts(out: &mut String) {
         "quipu_http_requests_started_total {}",
         REQUEST_STARTS.load(Ordering::Relaxed)
     );
+    request_completion::cancellations().render(out);
 }
 
 tokio::task_local! {
@@ -27,6 +31,44 @@ tokio::task_local! {
 /// The request's write kind, to carry across a `spawn_blocking` hop.
 pub(crate) fn request_write_kind() -> Option<quipu::write_kind::WriteKind> {
     REQUEST_WRITE_KIND.try_with(|k| *k).ok().flatten()
+}
+
+tokio::task_local! {
+    /// The declared write provenance of this request (aegis-7zp4rc), set on
+    /// write routes only.
+    static REQUEST_WRITE_PROVENANCE: Option<std::sync::Arc<quipu::write_provenance::RequestProvenance>>;
+}
+
+/// The request's write provenance, to carry across a `spawn_blocking` hop.
+pub(crate) fn request_write_provenance(
+) -> Option<std::sync::Arc<quipu::write_provenance::RequestProvenance>> {
+    REQUEST_WRITE_PROVENANCE
+        .try_with(Clone::clone)
+        .ok()
+        .flatten()
+}
+
+/// Classify the request's provenance headers, for a write route only.
+fn write_provenance_of(
+    headers: &axum::http::HeaderMap,
+    client: &str,
+    endpoint: &str,
+) -> Option<std::sync::Arc<quipu::write_provenance::RequestProvenance>> {
+    quipu::write_kind::WriteKind::for_route(endpoint)?;
+    let value = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    Some(std::sync::Arc::new(
+        quipu::write_provenance::RequestProvenance::classify(
+            client,
+            endpoint,
+            [
+                value("x-quipu-agent"),
+                value("x-quipu-harness"),
+                value("x-quipu-host"),
+                value("x-quipu-session"),
+                value("x-quipu-model"),
+            ],
+        ),
+    ))
 }
 
 pub(crate) async fn log_request(
@@ -63,9 +105,35 @@ async fn log_request_with_sequence(
     );
     // Log before dispatch so a request that never completes is still visible.
     let id = sequence.fetch_add(1, Ordering::Relaxed);
+    let declared_host = req
+        .headers()
+        .get("x-quipu-host")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let declared_agent = req
+        .headers()
+        .get("x-quipu-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let peer = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|info| info.0);
+    let provenance = write_provenance_of(req.headers(), &client, &endpoint);
+    let attributed = |log| {
+        quipu::request_usage::with_request_context(
+            quipu::request_usage::with_declared_attribution(
+                log,
+                declared_host.as_deref(),
+                declared_agent.as_deref(),
+            ),
+            peer,
+            provenance.as_deref(),
+        )
+    };
     eprintln!(
         "{}",
-        quipu::request_usage::structured_request_log(
+        attributed(quipu::request_usage::structured_request_log(
             "request_start",
             id,
             &client,
@@ -77,19 +145,40 @@ async fn log_request_with_sequence(
             None,
             quipu::request_usage::AuthOutcome::Pending,
             None,
-        )
+        ))
     );
-    let started = std::time::Instant::now();
+    let completion_provenance = provenance.clone();
+    let mut completion = request_completion::Completion {
+        id,
+        client: client.clone(),
+        task,
+        method: method.to_string(),
+        path,
+        endpoint: endpoint.clone(),
+        declared_host,
+        declared_agent,
+        started: std::time::Instant::now(),
+        metrics: quipu::metrics::metrics(),
+        cancellations: request_completion::cancellations(),
+        emit: Box::new(move |log| {
+            eprintln!(
+                "{}",
+                quipu::request_usage::with_request_context(
+                    log,
+                    peer,
+                    completion_provenance.as_deref()
+                )
+            );
+        }),
+        finished: false,
+    };
     let resp = REQUEST_WRITE_KIND
         .scope(
             quipu::write_kind::WriteKind::for_route(&endpoint),
-            next.run(req),
+            REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
         )
         .await;
     let status = resp.status().as_u16();
-    let elapsed = started.elapsed().as_secs_f64();
-    quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);
-    quipu::metrics::metrics().observe_client(&client, &task, &endpoint, elapsed);
     let auth = resp
         .extensions()
         .get::<quipu::request_usage::AuthOutcome>()
@@ -99,22 +188,7 @@ async fn log_request_with_sequence(
         .extensions()
         .get::<quipu::request_usage::RequestUsage>()
         .copied();
-    eprintln!(
-        "{}",
-        quipu::request_usage::structured_request_log(
-            "request_complete",
-            id,
-            &client,
-            &task,
-            method.as_str(),
-            &path,
-            &endpoint,
-            Some(status),
-            Some(started.elapsed().as_millis()),
-            auth,
-            usage,
-        )
-    );
+    completion.finish(status, auth, usage, false);
     resp
 }
 
@@ -160,6 +234,15 @@ mod tests {
         pending.abort();
         assert!(pending.await.unwrap_err().is_cancelled());
         assert_eq!(sequence.load(Ordering::Relaxed), 1);
+        let mut cancelled = String::new();
+        request_completion::cancellations().render(&mut cancelled);
+        assert!(cancelled.contains(
+            "quipu_http_requests_cancelled_total{client=\"unattributed\",endpoint=\"/pending\"} 1"
+        ));
+        let metrics = quipu::metrics::metrics().render(0, 0, 0, None);
+        assert!(
+            metrics.contains("quipu_http_requests_total{endpoint=\"/pending\",status=\"499\"} 1")
+        );
         app.oneshot(
             axum::http::Request::builder()
                 .uri("/done")
@@ -169,5 +252,67 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(sequence.load(Ordering::Relaxed), 2);
+        let mut cancelled = String::new();
+        request_completion::cancellations().render(&mut cancelled);
+        assert!(!cancelled.contains("endpoint=\"/done\""));
+    }
+
+    /// aegis-7zp4rc: a write route's provenance headers are classified in the
+    /// middleware and survive the `blocking` hop to the thread that commits; a
+    /// read route carries none.
+    #[tokio::test]
+    async fn write_provenance_reaches_the_blocking_thread_on_write_routes_only() {
+        async fn seen() -> String {
+            super::super::base::blocking(|| {
+                Ok(quipu::write_provenance::current().map_or_else(
+                    || "none".to_string(),
+                    |p| format!("{}|{}|{}", p.client, p.endpoint, p.completeness.as_str()),
+                ))
+            })
+            .await
+            .map_err(|_| ())
+            .unwrap()
+        }
+        let app = axum::Router::new()
+            .route("/knot", axum::routing::post(seen))
+            .route("/query", axum::routing::post(seen))
+            .layer(axum::middleware::from_fn(log_request));
+        let call = |uri: &'static str, headers: &[(&'static str, &'static str)]| {
+            let mut req = axum::http::Request::builder().method("POST").uri(uri);
+            for (k, v) in headers {
+                req = req.header(*k, *v);
+            }
+            app.clone()
+                .oneshot(req.body(axum::body::Body::empty()).unwrap())
+        };
+        let body = |r: axum::response::Response| async move {
+            String::from_utf8(
+                axum::body::to_bytes(r.into_body(), 1 << 16)
+                    .await
+                    .unwrap()
+                    .to_vec(),
+            )
+            .unwrap()
+        };
+        let named = [
+            ("x-quipu-client", "camayoc-ingress"),
+            ("x-quipu-agent", "camayoc"),
+            ("x-quipu-harness", "cron"),
+            ("x-quipu-host", "host-a"),
+        ];
+        assert_eq!(
+            body(call("/knot", &named).await.unwrap()).await,
+            "camayoc-ingress|/knot|complete"
+        );
+        assert_eq!(
+            body(
+                call("/knot", &[("x-quipu-client", "camayoc-ingress")])
+                    .await
+                    .unwrap()
+            )
+            .await,
+            "camayoc-ingress|/knot|absent"
+        );
+        assert_eq!(body(call("/query", &named).await.unwrap()).await, "none");
     }
 }

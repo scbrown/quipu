@@ -6,8 +6,14 @@ pub mod attach;
 /// verifier. Native only: `session_attestation` is itself `cfg(not(wasm32))`.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod attestation;
+mod batches;
 pub mod changes;
 pub mod datasets;
+mod decision_nonces;
+pub use decision_nonces::DecisionNonceSpend;
+pub mod demotions;
+#[cfg(test)]
+mod demotions_tests;
 pub mod events;
 pub mod forks;
 pub mod freeze;

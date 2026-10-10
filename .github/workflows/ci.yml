@@ -481,6 +481,75 @@ jobs:
             load-test-report.json
             server.log
 
+  # String-FILTER pushdown (aegis-tl2q4j) took agent-written CONTAINS / REGEX /
+  # STRSTARTS / LCASE filters from timeouts to milliseconds on the production
+  # store, and nothing else in CI exercises those shapes (aegis-66ny04). At toy
+  # scale a full scan is fast and a gate proves nothing, so this loads a
+  # generated 2.1M-triple store and runs every class twice: as written, and as
+  # FILTER((X) || false), which no pushdown touches. Rows must match, and the
+  # defeated/pushed ratio must stay above the budget: an in-run positive
+  # control, so runner speed cancels out. Release build, as served.
+  query-perf:
+    name: String filter query performance gate
+    if: github.event_name != 'push'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-query-perf-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-query-perf-
+            ${{ runner.os }}-cargo-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Harness self-test
+        run: scripts/quipu-query-perf.py self-test
+      - name: Reject failed and malformed defeated queries
+        run: python3 scripts/ci/test-query-perf.py
+      - name: Build release binaries
+        run: cargo build --release --locked --features full --bin quipu --bin quipu-server
+      - name: Restore generated query fixture
+        id: query-fixture
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/fixture
+          key: query-fixture-v1-${{ hashFiles('scripts/quipu-query-perf.py') }}
+      - name: Generate query fixture on cache miss
+        if: steps.query-fixture.outputs.cache-hit != 'true'
+        run: scripts/quipu-query-perf.py generate --out "$RUNNER_TEMP/fixture"
+      - name: Load the fixture
+        run: |
+          scripts/quipu-query-perf.py load --fixture "$RUNNER_TEMP/fixture" \
+            --db /dev/shm/query-perf.db --quipu target/release/quipu
+      - name: Run the query performance gate
+        run: |
+          target/release/quipu-server --db /dev/shm/query-perf.db --bind 127.0.0.1:3030 >server.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 120); do
+            curl --fail --silent http://127.0.0.1:3030/health >/dev/null && break
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3030/health >/dev/null
+          scripts/quipu-query-perf.py gate --url http://127.0.0.1:3030 \
+            --budget benchmark/query-perf-budget.json \
+            --output query-perf-report.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quipu-query-perf-report
+          path: |
+            query-perf-report.json
+            server.log
+
   shapes:
     name: Shape invariants
     runs-on: ubuntu-latest
@@ -576,7 +645,7 @@ jobs:
   extended-correctness:
     name: Extended correctness
     if: always() && github.event_name != 'push'
-    needs: [extended-features, build-full, wasm, source-size, load-test, shapes, lint-markdown]
+    needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, shapes, lint-markdown]
     runs-on: ubuntu-latest
     steps:
       - name: Require every extended surface to pass

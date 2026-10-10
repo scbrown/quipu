@@ -1,11 +1,12 @@
 # MCP Tools
 
 Quipu exposes its API as MCP (Model Context Protocol) tools for agent
-integration. These tools are available when Quipu runs as a Bobbin subsystem
-or standalone MCP server.
+integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
+`quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
+`knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **46 tools** in a default build, or
-**48** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
+**50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -121,6 +122,34 @@ a tool by its annotation. A moded tool would carry a single, necessarily destruc
 annotation, and every read-only call — including `propose`, the entry point — would be
 refused under a no-approval policy.
 
+### `quipu_merge_decisions`
+
+**READ.** Lists the conflicts of merging an incoming share into ROOT: one row per slot
+with the `base` / `ours` / `theirs` values, the slot's `max_count`, and each side's
+provenance. The rows are bound to ROOT's graph hash and the incoming share id. With
+`propose: true`, each row also gets a mechanical `proposal` (`choose` plus `evidence`).
+It never sets a `decision` and writes nothing.
+
+`incoming` and `base` are shares **inline**, in the shape `/import` takes (`manifest`,
+`export_ntriples`, `shapes_turtle`). Both are verified by hash, and `base` must be the
+incoming share's `parent_share`. A server path is never accepted. REST:
+`POST /merge/decisions`. CLI: `quipu merge <share-dir> --emit-decisions <file> [--propose]`.
+
+### `quipu_merge_apply`
+
+**WRITE.** Finishes the merge from the decisions file with each row's `decision` set
+(`{"choose": "ours"|"theirs"|"base"}` or `{"values": [<N-Triples terms>]}`). It commits
+the clean part of the merge plus every decided slot in one transaction. The
+transaction's source records both parents, the `reviewer`, and the SHA-256 of the
+decisions.
+
+It refuses, and writes nothing, on an undecided row, stale decisions (ROOT or the share
+moved since they were emitted), more values than the slot's `sh:maxCount`, or a value
+that is not an RDF term. It also refuses a field merge-decisions/v1 does not
+define. `dry_run: true` runs every check and returns the counts it would write,
+without writing. REST: `POST /merge/apply`. CLI: `quipu merge <share-dir>
+--decisions <file> --reviewer <who> [--dry-run]`.
+
 ### `quipu_knot`
 
 Assert facts from Turtle data, with optional SHACL validation.
@@ -128,6 +157,7 @@ Assert facts from Turtle data, with optional SHACL validation.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `turtle` | Yes | RDF Turtle data |
+| `blank_node_scope` | No | Explicit document identity for blank nodes; same ID shares only byte-identical input across graphs, distinct IDs separate repeat loads |
 | `timestamp` | No | Transaction-time: when this store came to believe the facts (defaults to now) |
 | `valid_from` | No | Valid-time: when the facts became true of the world. RFC 3339, normalised to UTC `Z`. Omit to reuse `timestamp` |
 | `actor` | No | Who is asserting |
@@ -311,8 +341,8 @@ Two properties worth knowing before using it:
 
 - **`planned: 0` is a real answer.** It means the named source owns no live
   facts. `quipu_knot` reports `replaced: true, count: 0` both for a retraction
-  that removed nothing and for one that emptied a graph, so this question
-  previously had no answer.
+  that deletes nothing and for one that empties a graph. Read `planned`
+  to distinguish those cases.
 - **Re-keying order is retract FIRST, then re-promote.** The store dedups an
   identical triple to one row carrying one source, and the existence check
   ignores the transaction source — so asserting canonically first is skipped as
@@ -341,10 +371,14 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
+| `mode` | No | `semantic` (default) or opt-in `keyword` (SQLite FTS5 BM25; requires query text, enabled and backfilled index; no embedding provider) |
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
 | `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
+| `graph` | No | Registered graph IRI, or `all`; omitted scope searches ROOT |
+| `graphs` | No | Nonempty list of registered graph IRIs; search their union |
+| `all_graphs` | No | Search ROOT and all registered named graphs, excluding graph metadata |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
 Requires an embedding provider when called with `query` and no `embedding`;
@@ -356,8 +390,41 @@ so zero results are distinguishable from an unembedded store — see
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
 
 Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+
+Graph selectors are mutually exclusive; unknown graphs are refused. Explicit
+scope results carry `graph` and `graphs`. Semantic scope selects entity
+membership before the result limit on the built-in SQLite backend. Other
+vector backends use bounded best-effort oversampling. Embeddings remain per entity: ROOT text
+is retained for entities with ROOT facts; other entities combine their
+named-graph facts. This is membership scoping, not per-graph embedding text.
+Explicit graph scope supports semantic and keyword ranking; ROOT content and
+anchor reranking are refused with it.
+
+Explicit graph selection requires `[quipu.search] named_graphs = true`.
+The default is false. Prepare named-only vectors with bounded backfill before
+enabling it; the flag also gates automatic named-only embedding text.
+
+Keyword mode returns `score` (positive relevance, higher first), raw SQLite
+`bm25` (lower first), and `ranking_reason: "keyword"`. It indexes literal terms
+and quoted phrases from labels, alternate labels, descriptions including full
+episode bodies, other literal attributes, type names, and entity IRI local-name
+tokens. Phrase/term conjunctions currently match one fact document; structured
+cross-attribute expressions belong to the structured-query stage. The default
+semantic response and scores are unchanged. Keyword mode rejects embeddings,
+anchors and content ranking rather than silently ignoring them.
+
+Activate `[quipu.search] keyword = true`, then run explicit bounded
+`quipu search-index backfill --batch-size 500 --db <path>` calls until status
+reports `complete: true`. Search refuses an incomplete index. Each call commits
+one batch and releases the writer; the CLI refuses UTC minutes 10 through 20
+to protect scheduled ingestion. See [keyword index](./rest-api.md#keyword-index).
 See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
 exceptions, temporal behavior, and bounded candidate recall.
+
+**Anchored search** (`anchor`, `max_hops`, `anchor_mode`, `decay`, `via`,
+`direction`, `explain`) roots the search on one entity and ranks by hop
+distance. It is off unless the server sets `[quipu.search] anchored = true`. See
+[anchored search](./rest-api.md#anchored-search).
 
 ### `quipu_hybrid_search`
 
@@ -851,7 +918,7 @@ Accept a pending schema proposal. Shape proposals are validated before writing.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to accept |
-| `decided_by` | No | Identity of the approver |
+| `decided_by` | Yes | Identity of the approver |
 | `note` | No | Optional acceptance note |
 | `timestamp` | No | ISO-8601 timestamp |
 
@@ -863,7 +930,7 @@ Reject a pending schema proposal with a reason.
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to reject |
 | `note` | Yes | Reason for rejection |
-| `decided_by` | No | Identity of the rejector |
+| `decided_by` | Yes | Identity of the rejector |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_resolve_entity`
@@ -890,3 +957,9 @@ Manage OWL ontologies: `load` (parse + materialize entailments), `list`, or
 | `name` | For load/remove | Ontology name |
 | `turtle` | For load | OWL ontology in Turtle format |
 | `timestamp` | No | ISO-8601 timestamp |
+
+Hybrid fusion parameters on `quipu_search`: `mode: "hybrid"`, `alpha` (semantic
+weight, 0..1), `fusion` (`weighted` or `rrf`), positive `rrf_k`, and `explain`.
+Server activation and the ready lexical index are required for intermediate
+weights. Alpha endpoints retain exact pure responses. See the REST search
+reference for candidate bounds, scope compatibility, snippets and rollback.

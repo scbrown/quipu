@@ -12,15 +12,22 @@ use serde_json::{Value as JsonValue, json};
 
 use super::SharedStore;
 
+// The process allocator, reported by /version below as `jemalloc` (aegis-67p0lj).
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
+#[path = "allocator.rs"]
+mod allocator;
+
 pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
     let flag = |name| {
         args.windows(2)
             .find(|window| window[0] == name)
             .map(|window| window[1].as_str())
     };
-    quipu::QuipuConfig::load(std::path::Path::new("."))
+    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
         .with_db_override(flag("--db"))
-        .with_bind_override(flag("--bind"))
+        .with_bind_override(flag("--bind"));
+    super::update::update_full::set_max_facts(config.server.update_full_copy_max_facts);
+    config
 }
 
 /// quipu #47: report the configured federation remotes at startup, and prove
@@ -52,6 +59,17 @@ pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::Qui
             eprintln!("error: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+pub(crate) fn apply_search(store: &mut quipu::Store, config: &quipu::SearchConfig) {
+    store.search_config_mut().clone_from(config);
+    if config.keyword {
+        store.initialize_lexical_index().unwrap_or_else(|e| {
+            eprintln!("error initializing keyword index: {e}");
+            std::process::exit(1);
+        });
+        eprintln!("keyword index activated; historical backfill is explicit and bounded");
     }
 }
 
@@ -176,12 +194,24 @@ where
 {
     let identity = super::auth::request_identity();
     let kind = super::request_middleware::request_write_kind();
+    let provenance = super::request_middleware::request_write_provenance();
+    // On a deep stack: request work parses and walks caller-supplied SPARQL,
+    // whose recursion follows its structure, and the pool's default stack
+    // aborted the process on a few kilobytes of nesting (aegis-xcvb5z). The
+    // structural bound in `sparql_structure` keeps requests inside this stack;
+    // the stack keeps the bound's margin. Identity, write kind and write
+    // provenance are thread-scoped, so they are re-established on the new thread.
     match tokio::task::spawn_blocking(move || {
-        quipu::transaction_auth::with_identity(identity, || quipu::write_kind::scoped(kind, f))
+        quipu::sparql_structure::on_deep_stack(move || {
+            quipu::transaction_auth::with_identity(identity, || {
+                quipu::write_provenance::scoped(provenance, || quipu::write_kind::scoped(kind, f))
+            })
+        })
     })
     .await
     {
-        Ok(result) => result,
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(AppError(e)),
         // Only reachable if the handler panicked; the mutex is then poisoned and
         // the process is not going to recover on its own either way.
         Err(e) => Err(AppError(quipu::Error::InvalidValue(format!(
@@ -210,11 +240,16 @@ pub(crate) async fn stats(
     State(store): State<SharedStore>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let value = {
+        let (store_id, value) = {
             let store = store.lock();
+            // Which store answered (aegis-72cpbx). It is the audience a
+            // quipu-write-v2 client signs for, and a caller that resolved a
+            // server by default port can tell its own store from a stranger.
+            // Lineage, not identity: a file-level copy of a store shares it.
+            let store_id = store.store_id()?;
             let generation = store.latest_tx_id()?;
             let mut cache = STATS_CACHE.lock().unwrap();
-            match cache.as_ref() {
+            let value = match cache.as_ref() {
                 Some(c) if c.generation == generation => c.value.clone(),
                 _ => {
                     let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
@@ -239,9 +274,12 @@ pub(crate) async fn stats(
                     });
                     fresh
                 }
-            }
+            };
+            (store_id, value)
         };
-        Ok(axum::Json((*value).clone()))
+        let mut value = (*value).clone();
+        value["store_id"] = json!(store_id);
+        Ok(axum::Json(value))
     })
     .await
 }
@@ -300,6 +338,7 @@ impl IntoResponse for AppError {
             // fault — 408 lets a caller distinguish "narrow your query" from
             // both.
             quipu::Error::QueryTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            quipu::Error::WriteAdmissionTimeout { .. } => StatusCode::SERVICE_UNAVAILABLE,
             // A join explosion is a property of the QUERY (its error names the
             // limit and how to fix the query) — 422: well-formed, unprocessable
             // as written. Distinct from 408 so dashboards can tell "slow" from
@@ -307,6 +346,17 @@ impl IntoResponse for AppError {
             quipu::Error::QueryComplexity { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::BAD_REQUEST,
         };
+        if let quipu::Error::WriteAdmissionTimeout { waited_ms } = &self.0 {
+            return (
+                status,
+                [(axum::http::header::RETRY_AFTER, "1")],
+                axum::Json(json!({
+                    "error": self.0.to_string(), "code": "write_not_started",
+                    "write_started": false, "waited_ms": waited_ms,
+                })),
+            )
+                .into_response();
+        }
         let body = json!({ "error": self.0.to_string() });
         (status, axum::Json(body)).into_response()
     }
@@ -373,5 +423,25 @@ pub(crate) fn apply_owl(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
                 "warning: [quipu.owl] flags are set but this build lacks the owl feature — ignored"
             );
         }
+    }
+}
+
+/// Pure compiled identity; called before any Store or model is opened.
+pub(crate) fn print_compiled_version() {
+    println!("quipu-server {}", env!("CARGO_PKG_VERSION"));
+    println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
+    println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
+}
+
+/// Handle pure identity/help flags before configuration or disk access.
+pub(crate) fn handle_identity_args(args: &[String]) -> bool {
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        print_compiled_version();
+        true
+    } else if args.iter().any(|a| a == "--help" || a == "-h") {
+        print_usage();
+        true
+    } else {
+        false
     }
 }

@@ -1,6 +1,6 @@
 # CLI: sharing, import and legacy packs
 
-Reference for the commands behind [Sharing & Federation](../sharing/README.md).
+Reference for the commands behind [Sharing & Federation](../sharing/index.md).
 Every flag here is checked against `quipu --help` by `tests/cli_doc_drift.rs`, so
 this page cannot quietly fall behind the binary.
 
@@ -14,7 +14,7 @@ interchange format.
 
 ## `quipu share` — produce a share
 
-Prerequisite: [load the identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+Prerequisite: [load the identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share)
 and the shapes governing your data. The default destination is outward.
 An empty block-tier catalogue exits 2 (cannot verify); a matching identifier
 exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this check.
@@ -201,6 +201,15 @@ share graph hash mismatch: manifest=… actual=…
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
 result, then sends that result through the same verified in-memory import path.
 
+Loaded local shapes determine admission. Their explicit
+`quipu:onViolation "emit"` diagnostics are advisory; reject-policy Violations
+quarantine the share. Missing policies mean reject, and unknown or conflicting
+policy values refuse. Carried shapes cannot downgrade a local reject policy.
+The report keeps strict `conforms` separate from `blocking`, with complete
+diagnostics and `advisory_results`. An emit-only Violation can therefore produce
+`conforms: false` with `blocking: false`. Vocabulary, integrity, trust and explicit
+promotion requirements still apply.
+
 ## `quipu import promote` — admit a staged share into ROOT
 
 ```text
@@ -209,7 +218,45 @@ quipu import promote <share-id> [--actor <id>] [--db <path>]
 
 The second, separate verb. Nothing reaches ROOT because a file arrived; it
 reaches ROOT because someone ran this. Keeping admission in its own command is
-the point rather than an inconvenience — see the [primitive](../sharing/README.md).
+the point rather than an inconvenience — see the [primitive](../sharing/index.md).
+
+## The project graph: `quipu share --project` and `quipu load`
+
+```text
+quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]
+quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]
+```
+
+A repository commits its project's graph under `.quipu/`, tool-neutral:
+
+| path | committed | what |
+|---|---|---|
+| `.quipu/project` | yes | one line, the project id; the graph is `urn:quipu:project:<id>` |
+| `.quipu/graph/` | yes | the share bundle for that graph (`manifest.json`, `export.nt`, …) |
+| `.quipu/.gitignore` | yes | written by quipu: an allow-list for the two above |
+| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and the host's PRIVATE signing key |
+
+`share --project <id>` names the project once (it is then committed) and
+re-shares the graph into `.quipu/graph/`. Re-running it replaces the bundle;
+it never re-points a repository at a different id. The outward scrub applies
+exactly as for any share, because the repository may be public; use
+`--destination internal` only for a private one.
+
+`load <dir>`, on a directory holding a share manifest, is the one command a
+fresh clone needs:
+
+```bash
+git clone <repo> && cd <repo>
+quipu load .quipu/graph --db .quipu/local.db
+```
+
+It runs the ordinary [`import`](#quipu-import--receive-a-share-into-quarantine),
+with every gate import has, and then promotes into the bundle's own graph
+instead of ROOT, as a diff. A re-load after `git pull` changes only what
+changed; an unchanged bundle opens no transaction. A quarantined import loads
+nothing. `load <file.ttl>` still means `knot`.
+
+The server equivalent is `POST /import` of the same bundle, which stages it.
 
 ## `quipu status` — has this share diverged?
 
@@ -238,6 +285,57 @@ and records a decision** rather than guessing.
 
 Exit `2` is a distinct code precisely so a script can tell "needs a decision"
 from "went wrong".
+
+### Resolving conflicts: emit, propose, decide, apply
+
+```text
+quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
+```
+
+The same split as `quipu align`: a merge that cannot auto-merge is finished by a
+person, with the evidence in front of them.
+
+1. **Emit.** `--emit-decisions` writes one row per conflict to a JSON file and
+   changes nothing. Each row has the slot (`subject`, `predicate`,
+   `max_count`), the `base` / `ours` / `theirs` values, and each side's
+   provenance: ROOT's current facts with their `valid_from`, transaction, actor
+   and source; the incoming and base shares' id, `created_at`, producer store
+   and whether they are attested. For a person reading it, each row also has a
+   `kind` (`max_count_exceeded` or `delete_replace`) and a `rule` in words
+   ("sh:maxCount 1 on status: ours and theirs together hold 2 values"), and the
+   file carries `labels`: one `rdfs:label` per IRI it mentions. The file is bound
+   to ROOT's graph hash and the incoming share id.
+2. **Propose (agent).** `--propose` also fills each row's `proposal` (`choose`
+   plus `evidence`) from mechanical evidence: a side unchanged from base, the
+   newer side, an attested share. It never sets `decision`.
+3. **Decide (operator, or any tool that edits the file).** A tool may also set
+   `decided_by` and `decided_at` per row; apply echoes them back. They are a
+   claim made by that tool. The attested record is the transaction's reviewer
+   and the decisions file's hash. Set each row's `decision` to
+   `{"choose": "ours"}`, `{"choose": "theirs"}`, `{"choose": "base"}`, or
+   `{"values": ["\"an edited value\""]}` (N-Triples terms).
+4. **Apply.** `--decisions` commits the clean part of the merge plus every
+   decided slot in **one** transaction. Its source records both parents, the
+   reviewer and the SHA-256 of the decisions file, and the output lists each
+   applied row.
+
+Apply refuses, and writes nothing, when:
+
+| Refusal | Why |
+|---|---|
+| a row has no `decision` | nothing is guessed |
+| ROOT or the incoming share changed since the emit | the decisions were made against other data; emit again |
+| the conflicts differ from the file's rows | same reason |
+| a decision has more values than the slot's `sh:maxCount` | it would re-create the conflict |
+| a value is not an RDF term | it cannot be stored |
+| the file has a field merge-decisions/v1 does not define | apply would drop it while the file's hash still covered it |
+
+`--dry-run` runs every check above and reports the counts that apply would
+assert and retract, without writing anything. A CI check uses it to validate a
+decided file before merge.
+
+Plain `quipu merge` without these flags behaves as before.
 
 ## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 

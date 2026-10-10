@@ -18,6 +18,7 @@ This asymmetry surprises people, so it is worth stating plainly:
 | `quipu knot` / `POST /knot` (Turtle ingest) | **No** |
 | `quipu-server --embed-backfill` | Yes, all entities, once at startup |
 | `POST /embed_backfill` | Yes, all entities, on demand |
+| `POST /embed_backfill_graph` | One named graph, bounded per call |
 
 A graph loaded from Turtle therefore holds **no** embeddings. Semantic
 retrieval over it returns nothing at all — successfully, with a `200` and an

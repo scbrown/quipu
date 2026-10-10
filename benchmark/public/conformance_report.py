@@ -483,6 +483,25 @@ def render_rdf_syntax(data: dict) -> list[str]:
         "negative-syntax case, and those passes would read as partial support. No RDF 1.2",
         "case is scored as a pass until the support exists.",
         "",
+        "### Known deviation: literal lexical identity",
+        "",
+        "The current loader canonicalizes integer and double literals: for example,",
+        "`\"01\"^^xsd:integer` is stored and exported as `\"1\"^^xsd:integer`.",
+        "It also converts an ill-typed boolean such as `\"z\"^^xsd:boolean` to `false`,",
+        "and rejects some ill-typed numeric literals during loading. These are known",
+        "deviations, not the intended storage contract; affected cases remain failures.",
+        "",
+        "The chosen contract is to preserve lexical form and datatype as RDF term",
+        "identity, including ill-typed literals, and derive numeric values separately.",
+        "Distinct terms such as `\"01\"` and `\"1\"` with the same integer datatype must",
+        "coexist even though their numeric values compare equal. This follows",
+        "[RDF 1.1 literal term equality](https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal).",
+        "An expression's effective boolean value must not replace the stored term.",
+        "",
+        "The preservation fix is not implemented yet. Existing data cannot recover",
+        "discarded spellings; a future compatibility plan must preserve legacy term",
+        "identity, exact retraction and history without inventing missing lexical forms.",
+        "",
         "Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)",
         "and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).",
         "",
@@ -526,6 +545,14 @@ def render_sparql10(data: dict) -> list[str]:
         "[`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).",
         "",
     ]
+    deviations = [row for row in rows if row["status"] != "passed"]
+    out += ["### Named SPARQL 1.0 deviations", "",
+            "These are the current ledger's non-passing cases, including loader errors and",
+            "runner limitations. Listing a case does not claim its engine defect is fixed.", ""]
+    out += _table(["W3C test", "Status", "Diagnostic"],
+                  [[f"`{row['id']}`", row["status"], row.get("diagnostic", "")]
+                   for row in deviations])
+    out += [""]
     return out
 
 
@@ -577,7 +604,7 @@ def render_markdown(data: dict) -> str:
         "",
         "For what Quipu does with a graph once it is correct — handing it to another",
         "store, and composing another store's without trusting it — see",
-        "[Sharing & Federation](../sharing/README.md). That page states its own claim",
+        "[Sharing & Federation](../sharing/index.md). That page states its own claim",
         "boundary for `SERVICE`, including the configured-endpoint policy deviation scored below.",
         "",
         "## What was measured",
@@ -951,7 +978,7 @@ def artifacts(data: dict, docs_dir: Path) -> dict[Path, str]:
 # committing a freshly re-derived ledger would itself count as a code change
 # and the check could never be satisfied. Measured while writing it — a guard
 # that can never go green is not a guard.
-CODE_PATHS = ("src", "benchmark/public/*.py")
+CODE_PATHS = ("src", "benchmark/public/*.py", "Cargo.toml", "Cargo.lock")
 
 
 def _git(*args: str) -> tuple[int, str]:

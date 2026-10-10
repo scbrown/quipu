@@ -389,17 +389,39 @@ def live_kinds(url):
     req = urllib.request.Request(
         url.rstrip("/") + "/query",
         data=json.dumps({"query": query}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "X-Quipu-Client": "agent-adhoc"},
     )
-    rows = json.load(urllib.request.urlopen(req, timeout=120)).get("rows", [])
+    with urllib.request.urlopen(req, timeout=30) as response:
+        body = json.load(response)
+    if (not isinstance(body, dict) or "error" in body
+            or not isinstance(body.get("rows"), list)
+            or body.get("truncated", False) is not False):
+        raise ValueError("live census response is missing, invalid or truncated")
     out = {}
-    for r in rows:
-        c = r.get("c", "")
-        # aegis-namespace, but never the machine-generated code plane: those
-        # kinds are declared in code-entities.ttl and their IRIs are opaque.
-        m = re.match(r"http://aegis\.gastown\.local/ontology/([A-Za-z_]+)$", c)
-        if m:
-            out[m.group(1)] = int(r.get("n", 0))
+    for row in body["rows"]:
+        if not isinstance(row, dict) or not isinstance(row.get("c"), str):
+            raise ValueError("live census row lacks a type")
+        count = row.get("n")
+        if isinstance(count, bool) or not (
+                isinstance(count, int) or isinstance(count, str) and count.isdecimal()):
+            raise ValueError("live census row lacks an integer count")
+        count = int(count)
+        if count < 0:
+            raise ValueError("live census row has a negative count")
+        term = row["c"]
+        if term.startswith(AEGIS_NS):
+            local = term[len(AEGIS_NS):]
+        elif term.startswith("aegis:"):
+            local = term[len("aegis:"):]
+        else:
+            continue
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", local):
+            raise ValueError("live census type has an invalid local name")
+        if local in out:
+            raise ValueError("live census contains duplicate type rows")
+        out[local] = count
+    if not out:
+        raise ValueError("live census has no domain types; no coverage claim possible")
     return out
 
 
@@ -687,6 +709,29 @@ def selftest():
     if got != {"CodeSymbol", "Bead", "Metric"}:
         fails.append(f"targetclasses prefix resolution wrong: {sorted(got)}")
 
+    # Exercise the wire response, not only the already-parsed dictionary.
+    from io import BytesIO
+    from unittest.mock import patch
+
+    def census(body):
+        with patch("urllib.request.urlopen", return_value=BytesIO(json.dumps(body).encode())):
+            return live_kinds("http://example.invalid")
+
+    for term in ("aegis:Service", AEGIS_NS + "Service"):
+        if census({"rows": [{"c": term, "n": 7}], "truncated": False}) != {"Service": 7}:
+            fails.append("I7-wire: populated type was discarded: " + term)
+    for body in ({}, {"error": "query failed"}, {"rows": None},
+                 {"rows": [], "truncated": True}, {"rows": []}, {"rows": [{}]},
+                 {"rows": [{"c": "aegis:Service", "n": -1}]},
+                 {"rows": [{"c": "aegis:Service", "n": True}]},
+                 {"rows": [{"c": "aegis:Service", "n": "bad"}]}):
+        try:
+            census(body)
+        except (ValueError, TypeError):
+            pass
+        else:
+            fails.append("I7-wire: invalid response accepted: " + repr(body))
+
     # I7 negative: an in-use kind absent from every declared set must surface.
     declared = {"LXCContainer"}
     in_use = {"LXCContainer": 30, "GhostKind": 3}
@@ -849,4 +894,8 @@ def selftest():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"UNKNOWN: invariant check could not complete ({type(exc).__name__})", file=sys.stderr)
+        sys.exit(2)

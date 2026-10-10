@@ -1,9 +1,7 @@
 # Why Quipu
 
-This page holds the long form that used to open the README: sharing, a tour,
-the comparison, the full feature list, the architecture and the feature matrix.
-The README now leads with installing it and a three-command first success
-([the caboodle-stack README standard](https://github.com/scbrown/caboodle/blob/main/docs/stack/README-STANDARD.md)).
+Quipu stores structured knowledge, validates writes against your rules, and
+lets agents query and share that knowledge through its CLI, REST API and MCP server.
 
 ## Sharing & Federation
 
@@ -44,7 +42,7 @@ itself compiled to WebAssembly**. GitHub cannot run scripts in a README, so here
 picture; the page is one click away.
 
 <p align="center">
-  <a href="https://scbrown.github.io/quipu/explore/"><img src="assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
+  <a href="https://scbrown.github.io/quipu/explore/"><img src="https://raw.githubusercontent.com/scbrown/quipu/main/assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
 </p>
 
 <p align="center">
@@ -76,12 +74,12 @@ and the Pages build needs no Rust.
 ## See It In Action
 
 <p align="center">
-  <img src="assets/graph-explorer.png" width="900" alt="Quipu's graph explorer: a force-directed node-link view of an infrastructure knowledge graph, with a type filter sidebar, an entity list, and a legend pairing each entity type with a colour and a shape"/>
+  <img src="https://raw.githubusercontent.com/scbrown/quipu/main/assets/graph-explorer.png" width="900" alt="Quipu's graph explorer: a force-directed node-link view of an infrastructure knowledge graph, with a type filter sidebar, an entity list, and a legend pairing each entity type with a colour and a shape"/>
 </p>
 
 <p align="center">
   <em>The built-in explorer at <code>/ui</code> — the whole graph in one request, drawn on canvas.<br/>
-  Run it yourself with <code>just demo</code> (<a href="examples/demo-graph/">examples/demo-graph</a>).</em>
+  Run it yourself with <code>just demo</code> (<a href="https://github.com/scbrown/quipu/tree/main/examples/demo-graph">examples/demo-graph</a>).</em>
 </p>
 
 ```text
@@ -139,7 +137,7 @@ Facts: 853 | Entities: 127 | Predicates: 34
 | Built-in web UI             | ❌ | ❌ | ✅ |
 | Embeddable (no server)      | ❌ | ❌ | ✅ |
 | SQLite-backed               | ❌ | ❌ | ✅ |
-| Rust / zero dependencies    | ❌ | ❌ | ✅ |
+| Rust, no JVM or Python      | ❌ | ❌ | ✅ |
 
 Traditional RDF stores demand too much ceremony. AI-native stores have no structure.
 Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
@@ -179,7 +177,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup, and `POST /query` with `"federated": true` fans out through the federated provider, reporting which members answered. Remotes carry declared trust labels at the federation edge, so a federated answer composes the labels of every member that contributed rather than silently inheriting the caller's. Federation config is read-side only: adding a remote never turns it into an outbound replication target or bypasses the share scrub/import boundary.
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
-- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 46 MCP tools for agent integration (48 with the `owl` feature).
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 48 MCP tools for agent integration (50 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. Version discovery is `git_only = true`: the baseline comes from this repository's tags, never the unrelated `quipu` crate on crates.io. CI runs fmt, clippy, tests, and markdown lint on every push. `/version` also reports the deployed git SHA, which matters because a deployment can legitimately sit AHEAD of the newest tag — the SHA, not the version string, identifies what is actually running.
 
@@ -302,7 +300,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
               │                │                │
         ┌─────┴─────┐   ┌─────┴─────┐   ┌──────┴──────┐
         │ MCP Tools  │   │ REST API  │   │  Rust API   │
-        │ (46 tools) │   │ + Web UI  │   │  (crate)    │
+        │ (48 tools) │   │ + Web UI  │   │  (crate)    │
         └─────┬─────┘   └─────┬─────┘   └──────┬──────┘
               └────────────────┼────────────────┘
                                │
@@ -330,8 +328,8 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
 Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
-When running as a Bobbin subsystem, agents get 46 MCP tools (48 with the
-`owl` feature). The two most
+Through Quipu's own MCP server (`quipu mcp`, or `quipu-server` at `/mcp`),
+agents get 48 MCP tools (50 with the `owl` feature). The two most
 commonly used for knowledge-aware context:
 
 **`quipu_context`** — unified knowledge discovery. Bobbin merges the result
@@ -454,7 +452,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Graph explorer | ✅ | Canvas + Barnes-Hut layout, one `POST /graph` payload, no CDN |
 | Web components | ✅ | Embeddable `<quipu-*>` elements |
 | Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
-| MCP tools (46; 48 with `owl`) | ✅ | Agent integration |
+| MCP tools (48; 50 with `owl`) | ✅ | Agent integration |
 | Python bindings | ✅ | `quipu-client` under `python/` — REST client, stdlib-only |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |

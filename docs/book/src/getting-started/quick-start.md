@@ -108,7 +108,7 @@ curl -s localhost:3030/episode -X POST \
 
 ## MCP (Agent Integration)
 
-When running as a Bobbin subsystem, Quipu tools are available to agents:
+Run `quipu mcp --db <path>` (stdio) or `quipu-server` (`/mcp` over HTTP), and agents get Quipu's tools:
 
 ```json
 {

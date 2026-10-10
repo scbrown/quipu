@@ -47,6 +47,11 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
+    # Preserve receiver-diagnostics commits without rewriting published history.
+    { pattern = '(?m)^Log observed transport peer and request provenance gaps$', replace = "fix(server): log observed transport peer and request provenance gaps" },
+    { pattern = '(?m)^Bind conformance ledgers to receiver diagnostics source$', replace = "docs(conformance): bind conformance ledgers to receiver diagnostics source" },
+    # Retain the queued-write diagnostics entry without rewriting published history.
+    { pattern = '(?m)^Distinguish queued unrun writes from query timeouts$', replace = "fix(server): distinguish queued unrun writes from query timeouts" },
     # Preserve the FILTER integration evidence entry without rewriting history.
     { pattern = '(?m)^Refresh conformance evidence for FILTER error integration$', replace = "docs(conformance): refresh conformance evidence for FILTER error integration" },
     # Repair the merged #282 subject without rewriting history. Keep this exact
@@ -86,6 +91,9 @@ tag_pattern = "v[0-9].*"
 sort_commits = "oldest"
 
 commit_parsers = [
+    # Patent filing work is private (kept out of the public tree since #272);
+    # never publish its commits, application numbers or dates in the changelog.
+    { message = "^[a-z]+\\(patents\\)", skip = true },
     { message = "^feat", group = "Added" },
     { message = "^fix", group = "Fixed" },
     { message = "^refactor", group = "Changed" },

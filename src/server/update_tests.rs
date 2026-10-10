@@ -187,6 +187,21 @@ const SLICED_CORPUS: &[&str] = &[
     // A one-or-more path and EXISTS inside BIND.
     "INSERT { ?a p:reaches ?b } WHERE { ?a p:dependsOn+ ?b }",
     "INSERT { ?s p:hasPrio ?h } WHERE { ?s p:status ?x BIND(EXISTS { ?s p:priority ?p } AS ?h) }",
+    // A variable predicate on a CONSTANT subject reads that subject's facts
+    // (aegis-w3k75d.15). seeds writes are these shapes.
+    r#"INSERT { e:x p:y "z" } WHERE { e:s1 ?p ?o }"#,
+    r#"DELETE { e:s1 ?p ?o } INSERT { e:s1 p:status "closed" }
+       WHERE { e:s1 p:status "open" . e:s1 ?p ?o }"#,
+    r#"INSERT { e:new p:status "open" } WHERE { FILTER NOT EXISTS { e:new ?x ?y } }"#,
+    r#"INSERT { e:s1 p:status "dup" } WHERE { FILTER NOT EXISTS { e:s1 ?x ?y } }"#,
+    r#"DELETE { GRAPH <http://ex.org/g/1> { e:s1 ?p ?o } }
+       INSERT { GRAPH <http://ex.org/g/1> { e:s1 p:claimedBy "agentZ" } }
+       WHERE { GRAPH <http://ex.org/g/1> { e:s1 ?p ?o } }"#,
+    r#"DELETE { e:s1 ?p ?o . e:s2 ?q ?r } INSERT { e:s1 p:status "moved" }
+       WHERE { e:s1 p:status "open" { e:s1 ?p ?o } UNION { e:s2 ?q ?r } }"#,
+    // The object side is not read: a constant OBJECT with a variable predicate
+    // and open subject is still an open subject.
+    r#"DELETE { e:s3 ?p e:s1 } WHERE { e:s3 ?p e:s1 }"#,
 ];
 
 #[test]
@@ -201,7 +216,7 @@ fn sliced_path_matches_full_path() {
 const FALLBACK_CORPUS: &[(&str, &str)] = &[
     (
         "variable-predicate",
-        r#"INSERT { e:x p:y "z" } WHERE { e:s1 ?p ?o }"#,
+        r#"INSERT { e:x p:y "z" } WHERE { ?s ?p ?o }"#,
     ),
     (
         "variable-predicate",
@@ -246,7 +261,7 @@ fn fallback_triggers_take_the_full_path() {
 
 #[test]
 fn cas_slices_to_one_subject() {
-    let Plan::Sliced(touched) = plan(&format!("{PREFIXES}{}", SLICED_CORPUS[0])) else {
+    let Plan::Sliced(touched, _) = plan(&format!("{PREFIXES}{}", SLICED_CORPUS[0])) else {
         panic!("CAS must slice");
     };
     assert_eq!(touched.len(), 1);
@@ -402,5 +417,61 @@ mod generated {
             let paths = super::differential(&refs);
             prop_assert!(paths.iter().all(|p| *p == super::UpdatePath::Sliced), "{paths:?}");
         }
+    }
+}
+
+#[test]
+fn a_variable_predicate_on_a_constant_subject_slices_to_that_subject() {
+    let Plan::Sliced(touched, whole) = plan(&format!(
+        "{PREFIXES}DELETE {{ e:s1 ?p ?o }} INSERT {{ e:s1 p:status \"closed\" }} \
+         WHERE {{ e:s1 p:status \"open\" . e:s1 ?p ?o FILTER NOT EXISTS {{ e:new ?x ?y }} }}"
+    )) else {
+        panic!("a constant-subject variable predicate must slice (aegis-w3k75d.15)");
+    };
+    assert_eq!(
+        whole,
+        [
+            "http://ex.org/e/new".to_string(),
+            "http://ex.org/e/s1".to_string()
+        ]
+        .into()
+    );
+    assert_eq!(touched.len(), 1, "{touched:?}");
+}
+
+/// aegis-odm5yt: the CI counterexample, verbatim.
+#[test]
+fn odm5yt_delete_and_insert_of_the_same_quad_across_solutions() {
+    differential(&[
+        "DELETE { GRAPH <http://ex.org/g/1> { e:s1 p:dependsOn 2 } } INSERT { GRAPH <http://ex.org/g/1> { e:s1 p:dependsOn ?o } . GRAPH <http://ex.org/g/1> { ?s p:dependsOn \"agentA\" } } WHERE { ?s p:priority ?o OPTIONAL { GRAPH <http://ex.org/g/1> { e:s1 p:dependsOn 2 } } }",
+        "DELETE { GRAPH <http://ex.org/g/1> { e:s3 p:claimedBy \"agentA\" } . GRAPH <http://ex.org/g/1> { e:s1 p:priority \"closed\" } } INSERT { GRAPH <http://ex.org/g/1> { e:s1 p:claimedBy 2 } } WHERE { { e:s3 p:status \"closed\" } UNION { GRAPH <http://ex.org/g/1> { ?s p:status \"closed\" } } }",
+    ]);
+}
+
+/// aegis-odm5yt, deterministic: an INSERT that varies by solution and a
+/// DELETE that hits another solution's insert. SPARQL 1.1 §3.1.3 keeps BOTH
+/// tags; Oxigraph's per-solution order kept exactly one, in either order.
+/// (A GROUND insert template, e.g. seeds' CAS rewrite, is re-emitted by every
+/// solution and was never affected; this shape is the one that lost data.)
+#[test]
+fn odm5yt_swap_keeps_both_inserted_values() {
+    let swap = "DELETE { e:s1 p:tag ?a } INSERT { e:s1 p:tag ?b } \
+        WHERE { VALUES (?a ?b) { (\"x\" \"y\") (\"y\" \"x\") } }";
+    let text = format!("{PREFIXES}{swap}");
+    for force_full in [true, false] {
+        let shared = seeded();
+        apply_update_as(&shared, &text, force_full).unwrap();
+        let tags: Vec<String> = state(&shared)
+            .into_iter()
+            .filter(|f| f.contains("/p/tag "))
+            .collect();
+        assert_eq!(
+            tags,
+            [
+                "default http://ex.org/e/s1 http://ex.org/p/tag \"x\"",
+                "default http://ex.org/e/s1 http://ex.org/p/tag \"y\"",
+            ],
+            "force_full={force_full}"
+        );
     }
 }

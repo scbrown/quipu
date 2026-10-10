@@ -1,0 +1,1601 @@
+{
+  "schema": "arm-d-blocking-recall-v1",
+  "anchor": "left endpoint",
+  "score": "max(normalized label score, MiniLM cosine); ties count against the partner",
+  "ks": [
+    1,
+    5,
+    10,
+    20,
+    50
+  ],
+  "encoder": {
+    "max_tokens": 256,
+    "special_tokens": true,
+    "pooling": "attention-mask mean",
+    "normalization": "L2",
+    "padding": "batch longest",
+    "onnxruntime": "1.23.0",
+    "numpy": "2.3.3",
+    "text": "labels, description, sorted type IRIs",
+    "file_hashes": "PROVENANCE.md, verified equal at run time"
+  },
+  "summary": {
+    "id-form": {
+      "total": 46,
+      "status": {
+        "ranked": 41,
+        "partner_not_in_typed_pool": 3,
+        "partner_without_usable_evidence": 2
+      },
+      "recall_strict_max": {
+        "1": 23,
+        "5": 32,
+        "10": 34,
+        "20": 34,
+        "50": 35
+      },
+      "recall_strict_label": {
+        "1": 0,
+        "5": 4,
+        "10": 4,
+        "20": 4,
+        "50": 7
+      },
+      "recall_strict_cosine": {
+        "1": 24,
+        "5": 32,
+        "10": 34,
+        "20": 34,
+        "50": 35
+      },
+      "recall_lenient_max": {
+        "1": 24,
+        "5": 32,
+        "10": 34,
+        "20": 34,
+        "50": 35
+      },
+      "recall_lenient_label": {
+        "1": 0,
+        "5": 4,
+        "10": 4,
+        "20": 4,
+        "50": 7
+      },
+      "recall_lenient_cosine": {
+        "1": 24,
+        "5": 32,
+        "10": 34,
+        "20": 34,
+        "50": 35
+      },
+      "pool_usable": {
+        "min": 1283,
+        "median": 2068.0,
+        "max": 2068
+      }
+    },
+    "semantic": {
+      "total": 47,
+      "status": {
+        "ranked": 22,
+        "partner_not_in_typed_pool": 23,
+        "no_anchor_evidence": 1,
+        "partner_without_usable_evidence": 1
+      },
+      "recall_strict_max": {
+        "1": 15,
+        "5": 22,
+        "10": 22,
+        "20": 22,
+        "50": 22
+      },
+      "recall_strict_label": {
+        "1": 13,
+        "5": 16,
+        "10": 19,
+        "20": 20,
+        "50": 22
+      },
+      "recall_strict_cosine": {
+        "1": 19,
+        "5": 22,
+        "10": 22,
+        "20": 22,
+        "50": 22
+      },
+      "recall_lenient_max": {
+        "1": 17,
+        "5": 22,
+        "10": 22,
+        "20": 22,
+        "50": 22
+      },
+      "recall_lenient_label": {
+        "1": 15,
+        "5": 16,
+        "10": 19,
+        "20": 20,
+        "50": 22
+      },
+      "recall_lenient_cosine": {
+        "1": 19,
+        "5": 22,
+        "10": 22,
+        "20": 22,
+        "50": 22
+      },
+      "pool_usable": {
+        "min": 1,
+        "median": 60.0,
+        "max": 8351
+      }
+    },
+    "all": {
+      "total": 93,
+      "status": {
+        "ranked": 63,
+        "partner_not_in_typed_pool": 26,
+        "partner_without_usable_evidence": 3,
+        "no_anchor_evidence": 1
+      },
+      "recall_strict_max": {
+        "1": 38,
+        "5": 54,
+        "10": 56,
+        "20": 56,
+        "50": 57
+      },
+      "recall_strict_label": {
+        "1": 13,
+        "5": 20,
+        "10": 23,
+        "20": 24,
+        "50": 29
+      },
+      "recall_strict_cosine": {
+        "1": 43,
+        "5": 54,
+        "10": 56,
+        "20": 56,
+        "50": 57
+      },
+      "recall_lenient_max": {
+        "1": 41,
+        "5": 54,
+        "10": 56,
+        "20": 56,
+        "50": 57
+      },
+      "recall_lenient_label": {
+        "1": 15,
+        "5": 20,
+        "10": 23,
+        "20": 24,
+        "50": 29
+      },
+      "recall_lenient_cosine": {
+        "1": 43,
+        "5": 54,
+        "10": 56,
+        "20": 56,
+        "50": 57
+      },
+      "pool_usable": {
+        "min": 1,
+        "median": 1283.0,
+        "max": 8351
+      }
+    }
+  },
+  "rows": [
+    {
+      "index": 7,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 87,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 87,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 8,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 104,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 104,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 9,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 149,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 2,
+          "label": 149,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 27,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 121,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 121,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 37,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 98,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 98,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 39,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 8,
+          "label": 128,
+          "cosine": 8
+        },
+        "lenient": {
+          "max": 8,
+          "label": 128,
+          "cosine": 8
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 40,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 132,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 132,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 41,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 59,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 2,
+          "label": 59,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 42,
+      "class": "id-form",
+      "pool_usable": 1310,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 60,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 2,
+          "label": 60,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 43,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 58,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 57,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 1,
+      "status": "ranked"
+    },
+    {
+      "index": 45,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 92,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 92,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 46,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 405,
+          "label": 5,
+          "cosine": 405
+        },
+        "lenient": {
+          "max": 405,
+          "label": 5,
+          "cosine": 405
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 48,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 107,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 107,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 49,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 6,
+          "label": 2026,
+          "cosine": 6
+        },
+        "lenient": {
+          "max": 6,
+          "label": 2026,
+          "cosine": 6
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 50,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 3,
+          "label": 2030,
+          "cosine": 3
+        },
+        "lenient": {
+          "max": 3,
+          "label": 2030,
+          "cosine": 3
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 52,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 114,
+          "label": 2003,
+          "cosine": 114
+        },
+        "lenient": {
+          "max": 114,
+          "label": 2003,
+          "cosine": 114
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 54,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 2004,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 2,
+          "label": 2004,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 55,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 204,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 204,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 56,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1933,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1933,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 1,
+      "status": "ranked"
+    },
+    {
+      "index": 58,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 163,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 163,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 60,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 403,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 2,
+          "label": 403,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 62,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 194,
+          "label": 108,
+          "cosine": 194
+        },
+        "lenient": {
+          "max": 194,
+          "label": 108,
+          "cosine": 194
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 64,
+      "class": "id-form",
+      "pool_usable": 1365,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 4,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 4,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 1,
+      "status": "ranked"
+    },
+    {
+      "index": 68,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1082,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1082,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 70,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1943,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1943,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 71,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 64,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 64,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 75,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1652,
+          "label": 99,
+          "cosine": 1652
+        },
+        "lenient": {
+          "max": 1652,
+          "label": 99,
+          "cosine": 1652
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 76,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 914,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 914,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 77,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 624,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 624,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 80,
+      "class": "id-form",
+      "pool_usable": 2068,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 305,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 305,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 82,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 4,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 4,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 88,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 29,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 29,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 89,
+      "class": "id-form",
+      "pool_usable": 1283,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 90,
+      "class": "id-form",
+      "pool_usable": 1283,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 91,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 87,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 87,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 92,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 624,
+          "label": 51,
+          "cosine": 617
+        },
+        "lenient": {
+          "max": 624,
+          "label": 51,
+          "cosine": 617
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 93,
+      "class": "id-form",
+      "pool_usable": 1283,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 94,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 4,
+          "label": 56,
+          "cosine": 3
+        },
+        "lenient": {
+          "max": 4,
+          "label": 56,
+          "cosine": 3
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 95,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 44,
+          "label": 106,
+          "cosine": 36
+        },
+        "lenient": {
+          "max": 44,
+          "label": 106,
+          "cosine": 36
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 96,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 74,
+          "label": 1885,
+          "cosine": 74
+        },
+        "lenient": {
+          "max": 74,
+          "label": 1885,
+          "cosine": 74
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 97,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 48,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 48,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 98,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1003,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1002,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 1,
+      "status": "ranked"
+    },
+    {
+      "index": 100,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": null,
+      "status": "partner_without_usable_evidence"
+    },
+    {
+      "index": 101,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 49,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 49,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 102,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": null,
+      "status": "partner_without_usable_evidence"
+    },
+    {
+      "index": 103,
+      "class": "id-form",
+      "pool_usable": 2047,
+      "rank": {
+        "strict": {
+          "max": 4,
+          "label": 3,
+          "cosine": 4
+        },
+        "lenient": {
+          "max": 4,
+          "label": 3,
+          "cosine": 4
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 0,
+      "class": "semantic",
+      "pool_usable": 15,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 1,
+      "class": "semantic",
+      "pool_usable": 25,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 2,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 2,
+      "status": "ranked"
+    },
+    {
+      "index": 2,
+      "class": "semantic",
+      "pool_usable": 322,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 7,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 2,
+          "label": 7,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 1,
+      "status": "ranked"
+    },
+    {
+      "index": 3,
+      "class": "semantic",
+      "pool_usable": 105,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 23,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 23,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 1,
+      "status": "ranked"
+    },
+    {
+      "index": 4,
+      "class": "semantic",
+      "pool_usable": 123,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 2,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 1,
+      "status": "ranked"
+    },
+    {
+      "index": 5,
+      "class": "semantic",
+      "pool_usable": 59,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 6,
+      "class": "semantic",
+      "pool_usable": 21,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 1,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 2,
+          "label": 1,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 11,
+      "class": "semantic",
+      "pool_usable": 106,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 15,
+      "class": "semantic",
+      "pool_usable": 45,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 16,
+      "class": "semantic",
+      "pool_usable": 120,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 17,
+      "class": "semantic",
+      "pool_usable": 26,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 4,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 4,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 18,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 19,
+      "class": "semantic",
+      "pool_usable": 59,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 21,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 22,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 23,
+      "class": "semantic",
+      "pool_usable": 174,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 24,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 25,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 26,
+      "class": "semantic",
+      "pool_usable": 21,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 13,
+          "cosine": 2
+        },
+        "lenient": {
+          "max": 2,
+          "label": 13,
+          "cosine": 2
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 28,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 29,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 30,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 31,
+      "class": "semantic",
+      "pool_usable": 166,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 8,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 2,
+          "label": 8,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 32,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 33,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 34,
+      "class": "semantic",
+      "pool_usable": 21,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 35,
+      "class": "semantic",
+      "pool_usable": null,
+      "rank": null,
+      "status": "no_anchor_evidence"
+    },
+    {
+      "index": 38,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 47,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 51,
+      "class": "semantic",
+      "pool_usable": 60,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 53,
+      "class": "semantic",
+      "pool_usable": 3,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 59,
+      "class": "semantic",
+      "pool_usable": 141,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 61,
+      "class": "semantic",
+      "pool_usable": 216,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 9,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 9,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 63,
+      "class": "semantic",
+      "pool_usable": 8351,
+      "rank": {
+        "strict": {
+          "max": 2,
+          "label": 23,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 2,
+          "label": 23,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 69,
+      "class": "semantic",
+      "pool_usable": 21,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 72,
+      "class": "semantic",
+      "pool_usable": 95,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 73,
+      "class": "semantic",
+      "pool_usable": 95,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 74,
+      "class": "semantic",
+      "pool_usable": 26,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 78,
+      "class": "semantic",
+      "pool_usable": 4,
+      "rank": null,
+      "status": "partner_without_usable_evidence"
+    },
+    {
+      "index": 79,
+      "class": "semantic",
+      "pool_usable": 59,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 81,
+      "class": "semantic",
+      "pool_usable": 9,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 83,
+      "class": "semantic",
+      "pool_usable": 146,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 84,
+      "class": "semantic",
+      "pool_usable": 281,
+      "rank": {
+        "strict": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        },
+        "lenient": {
+          "max": 1,
+          "label": 1,
+          "cosine": 1
+        }
+      },
+      "known_alias_competitors": 0,
+      "status": "ranked"
+    },
+    {
+      "index": 85,
+      "class": "semantic",
+      "pool_usable": 140,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 86,
+      "class": "semantic",
+      "pool_usable": 1,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 87,
+      "class": "semantic",
+      "pool_usable": 1,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    },
+    {
+      "index": 104,
+      "class": "semantic",
+      "pool_usable": 26,
+      "rank": null,
+      "status": "partner_not_in_typed_pool"
+    }
+  ]
+}

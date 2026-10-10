@@ -390,31 +390,22 @@ signal. The subclasses are named because "inference happened" is not actionable
 on its own — the reader needs to know that `Service` swallowed `WebApp`. A leaf
 type is never reported: with no subclasses there is nothing to fold in.
 
-> **History, so an older reading does not mislead.** For a period this page
-> documented the opposite — an `asserted-only` constant form announcing
-> `"applied": false` with a `withheldTypes` list. That flip was reverted when
-> formal reasoning defaults were enabled, and **that marker shape no longer
-> exists**. If you are looking for `withheldTypes`, you are reading a build that
-> is gone; branch on `inference.applied` instead.
-
 #### Every result shape carries it — including ASK
 
 The marker is not a SELECT feature. `ASK` is the shape most in need of it:
 
 ```sparql
-ASK { hw:postgres a hw:Service }     # -> {"result": false, "inference": {...}}
+ASK { hw:postgres a hw:Service }     # -> {"result": true, "inference": {...}}
 ```
 
-`hw:postgres` may be asserted **only** as `hw:DatabaseService` — nothing in the
-graph says it is a `hw:Service`, so this now answers `false`. A boolean gives you
-no number to look at twice, so the marker makes the semantic change visible.
-`CONSTRUCT`/`DESCRIBE` carry it too: their formerly inferred triples are likewise
-withheld unless the query uses the explicit path.
+If `hw:postgres` is typed as `hw:DatabaseService` and that class is a subclass
+of `hw:Service`, the constant-type ASK includes it through subclass expansion.
+The inference marker identifies that expansion. `CONSTRUCT` and `DESCRIBE`
+results also carry the marker when their query patterns expand.
 
-**What the marker claims.** It says the old implicit expansion was withheld from
-this query. It does not say the resulting answer necessarily changed: a marked
-`ASK` can still be `true` about a directly asserted fact. To ask the inferred
-question, use the explicit path; to inspect asserted types, ask:
+**What the marker claims.** It reports the type expansion applied to this query.
+A marked ASK can also match a directly asserted fact; the marker alone cannot
+prove how a particular row matched. To inspect asserted types, ask:
 
 ```sparql
 SELECT ?t WHERE { hw:postgres a ?t }    # what is it ACTUALLY typed as?
@@ -428,14 +419,14 @@ If you request a W3C shape with `Accept`
 It travels as a response header instead, naming the affected type constants:
 
 ```http
-x-quipu-inference: withheld: http://example.org/homelab/Service
+x-quipu-inference: applied: http://example.org/homelab/Service
 ```
 
-Same rule: the header is **absent** when the flip did not affect the query. The body is
+The header is **absent** when no type expansion was applied. The body is
 untouched and stays conformant, so a standard parser is unaffected — but a
 client that ignores headers gets no signal, which is a reason to prefer the
-default JSON shape when the distinction matters. Full `withheldTypes` detail is
-one `Accept`-free request away.
+default JSON shape when the distinction matters. Full `expandedTypes` detail is
+available in the default JSON response.
 
 ## 10. Property Paths
 

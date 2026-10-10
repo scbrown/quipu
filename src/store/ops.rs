@@ -74,31 +74,6 @@ pub(crate) const SOURCE_RETRACTION_SQL: &str = "SELECT f.e, f.a, f.v, f.tx, f.va
 impl Store {
     // -- Write path --
 
-    /// Atomically apply already-planned changes to multiple RDF graphs.
-    ///
-    /// Each graph still passes through the normal authority, SHACL, OWL, and
-    /// governed-policy gates. The outer savepoint makes a multi-operation
-    /// SPARQL Update all-or-nothing across those graph-scoped transactions.
-    pub fn transact_graph_batches(
-        &mut self,
-        batches: &[(i64, Vec<Datum>)],
-        timestamp: &str,
-        actor: Option<&str>,
-        source: Option<&str>,
-    ) -> Result<()> {
-        self.conn.execute_batch("SAVEPOINT quipu_multi_graph")?;
-        for (graph, datums) in batches {
-            if let Err(error) = self.transact_to_graph(datums, timestamp, actor, source, *graph) {
-                self.conn
-                    .execute_batch("ROLLBACK TO quipu_multi_graph; RELEASE quipu_multi_graph")?;
-                self.read_model.borrow_mut().clear();
-                return Err(error);
-            }
-        }
-        self.conn.execute_batch("RELEASE quipu_multi_graph")?;
-        Ok(())
-    }
-
     /// Atomically write a batch of datums in a single transaction.
     /// Returns the transaction id.
     pub fn transact(
@@ -204,6 +179,7 @@ impl Store {
                 self.maintain_read_model(graph, effective.as_deref(), tx_id);
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
+                let kind = crate::write_kind::classify(actor, source);
                 crate::metrics::metrics().observe_write(&crate::metrics::writes::WriteCounts {
                     submitted: datums.len() as u64,
                     inferred: counts.inferred as u64,
@@ -211,8 +187,20 @@ impl Store {
                     retracted: counts.retracted as u64,
                     superseded: counts.superseded as u64,
                     root: graph == crate::schema::ROOT_GRAPH,
-                    kind: crate::write_kind::classify(actor, source),
+                    kind,
                 });
+                // Count the commit under the requesting client's declared
+                // provenance (aegis-7zp4rc). The engine's own writers that a
+                // request merely triggers are not that client's writes.
+                if !matches!(
+                    kind,
+                    crate::write_kind::WriteKind::Verdict
+                        | crate::write_kind::WriteKind::Reasoner
+                        | crate::write_kind::WriteKind::Migration
+                ) && let Some(p) = crate::write_provenance::current()
+                {
+                    crate::metrics::metrics().observe_write_provenance(&p);
+                }
                 // Q-VERDICT-PERSIST: outside the savepoint, so the accept case
                 // and the denial case below record identically.
                 self.flush_pending_verdicts(timestamp, actor);

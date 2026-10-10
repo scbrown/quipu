@@ -1946,15 +1946,18 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_graph_list"));
     assert!(names.contains(&"quipu_graph_freeze"));
     assert!(names.contains(&"quipu_graph_thaw"));
+    // Share-merge conflict resolution (aegis-yavo9c): a read and its writer.
+    assert!(names.contains(&"quipu_merge_decisions"));
+    assert!(names.contains(&"quipu_merge_apply"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 48);
+        assert_eq!(defs.len(), 50);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 46);
+        assert_eq!(defs.len(), 48);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }
@@ -5108,3 +5111,6 @@ mod knot_on_violation {
         }
     }
 }
+
+#[path = "search_graph_tests.rs"]
+mod search_graph_tests;

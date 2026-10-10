@@ -53,6 +53,7 @@ fn envelope(
         issued_at_epoch: NOW,
         nonce: "b".repeat(32),
         signature: String::new(),
+        audience: None,
     };
     envelope.signature = hex::encode(
         key.sign(&quipu::session_attestation::canonical_message(
@@ -219,6 +220,7 @@ fn real_imports_and_verifier_failures_increment_exactly_once() {
         path: "/episode",
         content_type: "application/json",
         body_sha256: "sha256:fixture",
+        audience: None,
     });
     let env = envelope(&key, &binding, &payload);
     assert!(registry.verify(&env, &payload, NOW, 30).is_err());

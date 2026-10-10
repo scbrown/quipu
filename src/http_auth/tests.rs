@@ -292,7 +292,19 @@ fn routes_in_server_source() -> Vec<String> {
     let sources = [
         ("server.rs", include_str!("../server.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        (
+            "server/merge_decisions.rs",
+            include_str!("../server/merge_decisions.rs"),
+        ),
         ("server/assets.rs", include_str!("../server/assets.rs")),
+        (
+            "server/graph_backfill.rs",
+            include_str!("../server/graph_backfill.rs"),
+        ),
+        (
+            "server/owl_materialize.rs",
+            include_str!("../server/owl_materialize.rs"),
+        ),
         (
             "server/graph_store.rs",
             include_str!("../server/graph_store.rs"),
@@ -311,8 +323,11 @@ fn routes_in_server_source() -> Vec<String> {
     const NO_ROUTES: &[&str] = &[
         "server/admission.rs",
         "server/auth.rs",
+        "server/auth_response.rs",
         "server/base.rs",
         "server/entity.rs",
+        "server/feed.rs",
+        "server/feed_read_pool_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",
         "server/input_fields.rs",
@@ -324,6 +339,13 @@ fn routes_in_server_source() -> Vec<String> {
         "server/tests.rs",
         "server/tools.rs",
         "server/update.rs",
+        // SPARQL Update evaluator with spec DELETE/INSERT order
+        // (aegis-odm5yt), called from update.rs, no routes.
+        "server/update_eval.rs",
+        // Parse-guard regression tests (aegis-xcvb5z): test-only, no routes.
+        "server/parse_guard_tests.rs",
+        // Write gates for /update (aegis-1hfyk5): called from update.rs, no routes.
+        "server/update_gates.rs",
         // Slice planner for /update (aegis-jm1lcl): pure analysis of the parsed
         // update, called from update.rs, no routes.
         "server/update_slice.rs",
@@ -554,7 +576,9 @@ fn auth_refusals_carry_a_json_body_not_a_bare_status() {
     // And the replacement must actually be there — a file that stopped
     // refusing at all would pass the checks above vacuously.
     assert!(
-        src.contains("missing_or_invalid_bearer_token"),
+        src.contains("auth_response::unauthorized(&path, why)")
+            && include_str!("../server/auth_response.rs")
+                .contains("missing_or_invalid_bearer_token"),
         "the 401 arm no longer emits its JSON reason code"
     );
     assert!(
