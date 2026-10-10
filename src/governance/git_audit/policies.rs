@@ -17,11 +17,11 @@ pub(super) struct Policy {
     pub has_selector: bool,
 }
 
-pub(super) fn load(store: &Store) -> Result<Vec<Policy>> {
+pub(super) fn load(store: &Store, include_structural: bool) -> Result<Vec<Policy>> {
     let query = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
          SELECT ?p ?path ?label ?effect ?selector ?predicate WHERE {{ \
-         ?p a a:Policy ; a:boundary \"action\" ; a:appliesTo ?path . \
+         ?p a a:Policy ; a:boundary \"action\" . OPTIONAL {{ ?p a:appliesTo ?path }} \
          OPTIONAL {{ ?p rdfs:label ?label }} OPTIONAL {{ ?p a:effect ?effect }} \
          OPTIONAL {{ ?p a:selector ?selector }} OPTIONAL {{ ?p a:predicate ?predicate }} }}"
     );
@@ -32,24 +32,35 @@ pub(super) fn load(store: &Store) -> Result<Vec<Policy>> {
     let mut seen = BTreeSet::new();
     for row in rows {
         let iri = text(store, row.get("p")).ok_or_else(|| invalid("policy IRI missing"))?;
+        let has_selector = row.contains_key("selector") || row.contains_key("predicate");
+        if !row.contains_key("path") && !(include_structural && has_selector) {
+            continue;
+        }
         let path = match row.get("path") {
-            Some(Value::Str(s)) => s.clone(),
+            Some(Value::Str(s)) => Some(s.clone()),
+            None => None,
             _ => {
                 return Err(invalid(format!(
                     "{iri}: appliesTo must be a literal path glob"
                 )));
             }
         };
-        if path.is_empty()
-            || path.starts_with('/')
-            || path.split('/').any(|p| p == ".." || p == ".")
+        if let Some(path) = &path
+            && (path.is_empty()
+                || path.starts_with('/')
+                || path.split('/').any(|p| p == ".." || p == "."))
         {
             return Err(invalid(format!(
                 "{iri}: appliesTo must be repository-relative: {path:?}"
             )));
         }
-        let pattern = glob::Pattern::new(&path)
-            .map_err(|e| invalid(format!("{iri}: invalid glob {path:?}: {e}")))?;
+        let pattern = path
+            .as_ref()
+            .map(|path| {
+                glob::Pattern::new(path)
+                    .map_err(|e| invalid(format!("{iri}: invalid glob {path:?}: {e}")))
+            })
+            .transpose()?;
         let id = text(store, row.get("label")).unwrap_or_else(|| {
             iri.rsplit(['#', '/', ':'])
                 .next()
@@ -67,7 +78,9 @@ pub(super) fn load(store: &Store) -> Result<Vec<Policy>> {
         if p.id != id || p.effect != effect {
             return Err(invalid(format!("{iri}: ambiguous policy label/effect")));
         }
-        if seen.insert((iri, path)) {
+        if seen.insert((iri, path))
+            && let Some(pattern) = pattern
+        {
             p.globs.push(pattern);
         }
         p.has_selector |= row.contains_key("selector") || row.contains_key("predicate");

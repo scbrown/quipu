@@ -8,10 +8,11 @@ pub(super) struct Window {
     repo: String,
     from: String,
     to: String,
+    yupana: Option<String>,
 }
 
 pub(super) fn options(args: &[String], subject: &str) -> Result<Option<Window>, String> {
-    let flags = ["--repo", "--from", "--to"];
+    let flags = ["--repo", "--from", "--to", "--yupana"];
     if !args.iter().any(|a| flags.contains(&a.as_str())) {
         return Ok(None);
     }
@@ -37,6 +38,11 @@ pub(super) fn options(args: &[String], subject: &str) -> Result<Option<Window>, 
         repo: value("--repo")?,
         from: value("--from")?,
         to: value("--to")?,
+        yupana: if args.iter().any(|a| a == "--yupana") {
+            Some(value("--yupana")?)
+        } else {
+            None
+        },
     }))
 }
 
@@ -53,12 +59,13 @@ pub(super) fn check(
                 "{unreadable} unreadable trace lines"
             )));
         }
-        git_audit::reconcile(
+        git_audit::reconcile_with_yupana(
             store,
             trace,
             std::path::Path::new(&window.repo),
             &window.from,
             &window.to,
+            window.yupana.as_deref().map(std::path::Path::new),
             report,
         )
     };
@@ -81,12 +88,13 @@ pub(super) fn emit(args: &[String], report: &Report, headline: &str, scope: Opti
     } else {
         super::print_report(report, headline);
         println!(
-            "Git {}..{}: {} commits, {} changed paths, {} path policies; {} unresolved",
+            "Git {}..{}: {} commits, {} changed paths, {} policies, {} selector evaluations; {} unresolved",
             scope.from,
             scope.to,
             scope.commits_checked,
             scope.paths_checked,
             scope.policies_checked,
+            scope.selectors_checked,
             scope.unresolved
         );
     }
