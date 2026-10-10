@@ -19,3 +19,9 @@ branch-protection review: skipping a required check must not strand the PR or
 turn unknown coverage into green. This prototype deliberately does not remove a
 required check. No public push: publication waits for PR189 landing and the
 candidate's turn in the designated serial order.
+
+The installed CD manifest was also checked: its four required names (`Build`,
+`Test (shacl)`, `Test (default)`, `Pre-commit checks`) remain unchanged. The shape
+and size checks are combined, never path-skipped; a failing component keeps the
+combined job red. This remains a private candidate awaiting review and observed
+hosted fanout after adoption.
