@@ -21,6 +21,7 @@ pub mod impact;
 pub mod lattice;
 pub mod lattice_fold;
 pub mod lattice_kind;
+pub mod lexical;
 pub mod mcp;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
@@ -30,6 +31,7 @@ pub mod namespace;
 pub mod onnx_embedder;
 pub mod transaction_auth;
 pub mod write_kind;
+pub mod write_provenance;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
 #[cfg(feature = "owl")]
@@ -93,6 +95,9 @@ pub mod share_diff;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
+pub mod share_merge_decisions;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share_merge_decisions_view;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_mint;
 mod share_promotion;
@@ -160,6 +165,8 @@ pub use mcp::align::{tool_align_apply, tool_align_decide, tool_align_propose};
 pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;
+#[cfg(not(target_arch = "wasm32"))]
+pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions};
 pub use mcp::named_query::tool_ask;
 #[cfg(feature = "owl")]
 pub use mcp::owl::tool_load_ontology;

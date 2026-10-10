@@ -18,6 +18,13 @@ use crate::shacl;
 use crate::{namespace, rdf::parse_rdf, store::Store};
 
 mod descriptions;
+mod edge_predicate;
+#[cfg(test)]
+use edge_predicate::KNOWN_PREFIXES;
+use edge_predicate::resolve_edge_predicate;
+mod node_type;
+use node_type::validate_node_type;
+pub(crate) use node_type::{QUECHUA_TYPE_PREFIX, node_type_iri};
 mod validation;
 
 /// Options controlling entity resolution during episode ingest.
@@ -369,7 +376,15 @@ pub fn ingest_episode_outcome(
         }
     }
 
-    let existing_hash = descriptions::current_content_hash(store, &ep_iri, base_ns)?;
+    // The episode's own graph, as an IRI: its activity facts live there, so the
+    // hash, the presence check and the stale-fact retraction must all read it
+    // (aegis-z1i5on). None is ROOT.
+    let graph_iri = episode
+        .graph
+        .as_deref()
+        .map(str::trim)
+        .filter(|g| !g.is_empty());
+    let existing_hash = descriptions::current_content_hash(store, &ep_iri, base_ns, graph_iri)?;
 
     // Idempotency fast path: same content already recorded → skip the write.
     // Reported as `Unchanged`, NOT as a bare `count: 0` — see `IngestOutcome`.
@@ -378,7 +393,15 @@ pub fn ingest_episode_outcome(
     // retraction of the entities it was recorded for, so `is_unchanged` also
     // confirms those entities are still in the store. Rationale and the
     // measurement are on `descriptions::is_unchanged`.
-    if descriptions::is_unchanged(store, &ep_iri, base_ns, episode, &existing_hash, &new_hash)? {
+    if descriptions::is_unchanged(
+        store,
+        &ep_iri,
+        base_ns,
+        graph_iri,
+        episode,
+        &existing_hash,
+        &new_hash,
+    )? {
         return Ok((NOOP_TX, 0, IngestOutcome::Unchanged));
     }
 
@@ -394,13 +417,6 @@ pub fn ingest_episode_outcome(
     } else {
         IngestOutcome::Created
     };
-    if existing_hash.is_some()
-        && !episode.replace_snapshot
-        && let Some(ep_id) = store.lookup(&ep_iri)?
-    {
-        store.retract_entity(ep_id, None, timestamp, actor)?;
-    }
-
     let source_str = format!("episode:{}", episode.name);
 
     // Named graph (aegis-g1al / #36): register the graph and write there.
@@ -417,6 +433,13 @@ pub fn ingest_episode_outcome(
         Some(iri) if !iri.trim().is_empty() => store.graph_create(iri)?,
         _ => 0,
     };
+
+    if existing_hash.is_some()
+        && !episode.replace_snapshot
+        && let Some(ep_id) = store.lookup(&ep_iri)?
+    {
+        descriptions::retract_activity(store, ep_id, graph, timestamp, actor, &source_str)?;
+    }
 
     let (tx_id, count) = if episode.replace_snapshot {
         let mut datums = store.plan_episode_retraction(&episode.name, graph)?;
@@ -657,8 +680,12 @@ fn episode_to_turtle(
         ttl.push_str(&node_term(&local, base_ns));
 
         if let Some(ntype) = &node.node_type {
-            let type_local = sanitize_iri_local(ntype);
-            ttl.push_str(&format!(" a aegis:{type_local}"));
+            if ntype.starts_with(QUECHUA_TYPE_PREFIX) {
+                ttl.push_str(&format!(" a <{}>", node_type_iri(ntype, base_ns)));
+            } else {
+                let type_local = sanitize_iri_local(ntype);
+                ttl.push_str(&format!(" a aegis:{type_local}"));
+            }
         }
 
         ttl.push_str(&format!(
@@ -771,149 +798,6 @@ fn confidence_literal(value: &serde_json::Value) -> Option<String> {
     }
 }
 
-/// Prefixes that `episode_to_turtle` declares, and so may appear verbatim in an
-/// edge `relation`. Keep in lockstep with the `@prefix` block in
-/// `episode_to_turtle` — a prefix resolved here but not declared there emits
-/// Turtle that fails to parse.
-const KNOWN_PREFIXES: &[(&str, &str)] = &[
-    ("rdf", namespace::RDF),
-    ("rdfs", namespace::RDFS),
-    ("owl", namespace::OWL),
-    ("skos", namespace::SKOS),
-    ("prov", namespace::PROV),
-    ("quipu", namespace::QUIPU),
-    ("xsd", namespace::XSD),
-    ("sh", namespace::SHACL),
-];
-
-/// Resolve an edge `relation` into the Turtle predicate term to emit.
-///
-/// `/episode` used to force EVERY relation into `aegis:` and then sanitize it,
-/// so `rdfs:subClassOf` was stored as `aegis:rdfs_subClassOf` — a predicate that
-/// resembles the intended one, matches nothing, and is inert. The response was
-/// HTTP 200 with a healthy `count`, so nothing signalled the loss (aegis-kuotp).
-/// Measured in the live graph before the fix: `aegis:owl_sameAs` had a real
-/// instance that no `owl:sameAs` query could ever reach.
-///
-/// The policy is: represent the caller's predicate faithfully, or refuse and say
-/// which path to use. Never silently rewrite it.
-///
-/// - `<http://example.org/p>` — a full IRI, emitted verbatim.
-/// - `rdfs:subClassOf` — a declared prefix, emitted verbatim.
-/// - `foo:bar` — an undeclared prefix, REFUSED (naming `/set`).
-/// - `related_to` — no prefix, lands in `aegis:` as before.
-/// - `runs on` — would not round-trip through `sanitize_iri_local`, REFUSED.
-fn resolve_edge_predicate(relation: &str) -> Result<String> {
-    let rel = relation.trim();
-    if rel.is_empty() {
-        return Err(crate::error::Error::InvalidValue(
-            "edge relation is empty — every edge requires a relation.".to_string(),
-        ));
-    }
-
-    // A full IRI, written in angle brackets. Emitted verbatim.
-    if let Some(inner) = rel.strip_prefix('<').and_then(|r| r.strip_suffix('>')) {
-        if inner.contains(['<', '>', '"', ' ']) || !inner.contains(':') {
-            return Err(crate::error::Error::InvalidValue(format!(
-                "edge relation '{relation}' is not a usable IRI."
-            )));
-        }
-        return Ok(format!("<{inner}>"));
-    }
-
-    // A prefixed name. Resolve against the prefixes this writer declares.
-    if let Some((prefix, local)) = rel.split_once(':') {
-        let Some((name, _)) = KNOWN_PREFIXES.iter().find(|(p, _)| *p == prefix) else {
-            let known: Vec<&str> = KNOWN_PREFIXES.iter().map(|(p, _)| *p).collect();
-            return Err(crate::error::Error::InvalidValue(format!(
-                "edge relation '{relation}' uses undeclared prefix '{prefix}:'. \
-                 /episode can emit these prefixes verbatim: {}. For any other \
-                 vocabulary, POST the fact to /set, which takes a full predicate \
-                 IRI — or write the relation as a full IRI in angle brackets, \
-                 e.g. \"<http://example.org/{local}>\" (aegis-kuotp).",
-                known.join(", ")
-            )));
-        };
-        if local.is_empty() || sanitize_iri_local(local) != local {
-            return Err(crate::error::Error::InvalidValue(format!(
-                "edge relation '{relation}' has a local name that is not a valid \
-                 IRI local part. Use only letters, digits, '-', '_' and '.' \
-                 (aegis-kuotp)."
-            )));
-        }
-        return Ok(format!("{name}:{local}"));
-    }
-
-    // A bare name: the aegis: domain vocabulary, as before. It must survive
-    // sanitization unchanged, or we would be silently renaming it — the exact
-    // defect this function exists to stop, one namespace over.
-    if sanitize_iri_local(rel) != rel {
-        return Err(crate::error::Error::InvalidValue(format!(
-            "edge relation '{relation}' cannot be represented as-is — it would be \
-             silently rewritten to '{}'. Use only letters, digits, '-', '_' and \
-             '.' (e.g. '{}'), or a prefixed/full IRI for a foreign vocabulary \
-             (aegis-kuotp).",
-            sanitize_iri_local(rel),
-            sanitize_iri_local(rel)
-        )));
-    }
-    Ok(format!("aegis:{rel}"))
-}
-
-/// Validate a node `type`, refusing anything that would be silently rewritten.
-///
-/// `type` is a STRING, and a comma-separated one used to mint a single junk class:
-/// `"Feature, Concept"` became `aegis:Feature__Concept` — one class, not two —
-/// behind HTTP 200 with a healthy `count`. The node was in the store, correctly
-/// described and edged, and **absent from `?s a Feature`**, the query anyone
-/// actually runs (aegis-vngta).
-///
-/// It catches careful people specifically: `/search` renders a multi-typed node as
-/// `type: Bead, Issue`, so the documented way to discover an existing node's typing
-/// hands back a string that looks like valid input. Searching first — the rule that
-/// exists to prevent duplicate nodes — is what fed the mistake.
-///
-/// REFUSE rather than split, deliberately. Splitting would be a lenient parser
-/// guessing intent, and it would fork semantics from the crew-side guard in
-/// `graph-extract` (aegis-vngta, muldoon), which already refuses this input and
-/// documents `/search` output as display-only. Two layers must not disagree about
-/// whether the same request is legal.
-fn validate_node_type(node_name: &str, ntype: &str) -> Result<()> {
-    let t = ntype.trim();
-    if t.contains(',') {
-        let split: Vec<&str> = t
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        return Err(crate::error::Error::InvalidValue(format!(
-            "node '{node_name}' has a comma-separated type '{ntype}'. `type` is a \
-             single class, and this would mint ONE junk class \
-             'aegis:{}' that no `?s a <type>` query can reach. For multiple types, \
-             send ONE ENTRY PER TYPE repeating the same node name — e.g. {} — which \
-             resolves to one entity carrying both types. Note that `/search` renders \
-             types as '{}' for DISPLAY only; that format is not valid input \
-             (aegis-vngta).",
-            sanitize_iri_local(t),
-            split
-                .iter()
-                .map(|s| format!("{{\"name\":\"{node_name}\",\"type\":\"{s}\"}}"))
-                .collect::<Vec<_>>()
-                .join(", "),
-            split.join(", "),
-        )));
-    }
-    if sanitize_iri_local(t) != t {
-        return Err(crate::error::Error::InvalidValue(format!(
-            "node '{node_name}' has type '{ntype}', which cannot be represented as-is \
-             — it would be silently rewritten to '{}'. Use only letters, digits, '-', \
-             '_' and '.' (aegis-vngta).",
-            sanitize_iri_local(t)
-        )));
-    }
-    Ok(())
-}
-
 /// Sanitize a name into a valid IRI local name.
 pub(crate) fn sanitize_iri_local(name: &str) -> String {
     name.chars()
@@ -983,4 +867,8 @@ fn escape_turtle(s: &str) -> String {
 }
 
 #[cfg(test)]
+mod graph_idempotency_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod type_ns_tests;

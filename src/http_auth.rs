@@ -59,6 +59,9 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
     // (a graphs-registry write, the same reason /overlay/create is here).
     "/align/apply",
+    // aegis-yavo9c: finishes a share merge from decided conflicts — one
+    // transaction asserting and retracting ROOT facts.
+    "/merge/apply",
     // aegis-2f4n: registered write routes that WRITE_ENDPOINTS had silently
     // omitted, so read-only mode and bearer auth did not cover them.
     "/project", // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
@@ -98,6 +101,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // writer of the three is /align/apply, above.
     "/align/propose",
     "/align/decide",
+    // aegis-yavo9c: emits (and optionally proposes) merge decisions from
+    // inline shares and ROOT; commits nothing. Its writer is /merge/apply.
+    "/merge/decisions",
     // Method-sensitive: GET/HEAD are reads; PUT/POST/DELETE are writes.
     "/rdf-graph-store",
     "/graphs",        // registry listing + kind capability probe (pooled read)

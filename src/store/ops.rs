@@ -179,6 +179,7 @@ impl Store {
                 self.maintain_read_model(graph, effective.as_deref(), tx_id);
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
+                let kind = crate::write_kind::classify(actor, source);
                 crate::metrics::metrics().observe_write(&crate::metrics::writes::WriteCounts {
                     submitted: datums.len() as u64,
                     inferred: counts.inferred as u64,
@@ -186,8 +187,20 @@ impl Store {
                     retracted: counts.retracted as u64,
                     superseded: counts.superseded as u64,
                     root: graph == crate::schema::ROOT_GRAPH,
-                    kind: crate::write_kind::classify(actor, source),
+                    kind,
                 });
+                // Count the commit under the requesting client's declared
+                // provenance (aegis-7zp4rc). The engine's own writers that a
+                // request merely triggers are not that client's writes.
+                if !matches!(
+                    kind,
+                    crate::write_kind::WriteKind::Verdict
+                        | crate::write_kind::WriteKind::Reasoner
+                        | crate::write_kind::WriteKind::Migration
+                ) && let Some(p) = crate::write_provenance::current()
+                {
+                    crate::metrics::metrics().observe_write_provenance(&p);
+                }
                 // Q-VERDICT-PERSIST: outside the savepoint, so the accept case
                 // and the denial case below record identically.
                 self.flush_pending_verdicts(timestamp, actor);

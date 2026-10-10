@@ -18,6 +18,7 @@ use oxigraph::{
 use super::{
     SharedStore,
     base::{AppError, blocking},
+    update_eval,
     update_slice::{self, Plan, Subjects},
 };
 
@@ -151,6 +152,7 @@ pub(crate) fn render_update_paths(out: &mut String) {
             counter.load(Ordering::Relaxed)
         );
     }
+    update_full::render(out);
 }
 
 /// Which dataset an update was evaluated over.
@@ -319,12 +321,8 @@ pub(super) fn apply_update_attributed(
         graphs.push((graph_id, name));
     }
     let path = match &plan {
-        Plan::Full(_) => {
-            for (graph_id, graph) in &graphs {
-                for fact in store.current_facts_in_graph(*graph_id)? {
-                    insert_fact(&store, &ox, fact.entity, fact.attribute, &fact.value, graph)?;
-                }
-            }
+        Plan::Full(reason) => {
+            update_full::copy(&store, &ox, &graphs, reason, update_full::max_facts())?;
             UPDATES_FULL.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Full
         }
@@ -338,12 +336,20 @@ pub(super) fn apply_update_attributed(
         .iter()
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
-    ox.update(update)
-        .map_err(|e| quipu::Error::InvalidValue(format!("SPARQL update error: {e}")))?;
+    // Not `ox.update`: Oxigraph interleaves DELETE/INSERT per solution (aegis-odm5yt).
+    update_eval::evaluate(&ox, update)?;
     let after: HashSet<Quad> = ox
         .iter()
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
+    // The write gates /knot enforces, on what this update asserts, before any
+    // term is interned or any transaction begins (aegis-1hfyk5).
+    update_gates::enforce(
+        &store,
+        after.difference(&before),
+        attribution.actor.as_deref(),
+        &attribution.source,
+    )?;
     let now = quipu::time::now_iso();
     let mut changes: HashMap<i64, Vec<quipu::store::Datum>> = HashMap::new();
     for quad in before.difference(&after) {
@@ -500,6 +506,12 @@ fn graph_id(
     Ok(id)
 }
 
+// Write gates (aegis-1hfyk5); declared here because server.rs is at the size cap.
+#[path = "update_full.rs"]
+pub(crate) mod update_full;
+#[path = "update_gates.rs"]
+mod update_gates;
+
 #[cfg(test)]
 #[path = "update_bench.rs"]
 mod bench;
@@ -517,3 +529,7 @@ mod update_report_tests;
 #[cfg(test)]
 #[path = "update_attribution_tests.rs"]
 mod update_attribution_tests;
+
+#[cfg(test)]
+#[path = "update_gates_tests.rs"]
+mod update_gates_tests;
