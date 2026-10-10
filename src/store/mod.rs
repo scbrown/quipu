@@ -150,6 +150,9 @@ pub struct Store {
     /// skips: a policy targeting `aegis:Verdict` would otherwise deny the
     /// verdict recording its own denial.
     pub(crate) recording_verdicts: bool,
+    /// The one registration a console bootstrap may create, set only for the
+    /// duration of `transact_trust_root_bootstrap` (aegis-kzt0ql.9.4).
+    pub(crate) trust_root_bootstrap: Option<String>,
     /// Base namespace new IRIs are minted under on the episode write paths.
     /// Defaults to the built-in aegis namespace; the server sets it from
     /// `[quipu].base_ns` at startup so a non-aegis deployment does not silently
