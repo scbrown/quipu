@@ -44,8 +44,7 @@ All notable changes to this project will be documented in this file.
 - *(paper)* Report negative Jev alias-resolution findings (#327)([2344938](https://github.com/scbrown/quipu/commit/234493859007103e3ae3322798f0562f0933f9b3))
 - Describe current installs, native MCP and inference behavior (#439)([68199f1](https://github.com/scbrown/quipu/commit/68199f1ba82c405c6939d107701aa8d99896c89f))
 - *(conformance)* Name non-passing SPARQL 1.0 cases (#469)([7c10e26](https://github.com/scbrown/quipu/commit/7c10e26fc87ea5b4406d1d9767a9444b54d31970))
-- *(conformance)* Accept measured MIN term discrepancy with disclosure([a221519](https://github.com/scbrown/quipu/commit/a2215192163b8b9d987cd4c1c42cdfe250660e6a))
-- *(conformance)* Retain exact merged-main measurement artifact([d45f3f5](https://github.com/scbrown/quipu/commit/d45f3f5b2d052e1fcb25ffbb7a0bcb39d33d9507))
+- *(conformance)* Record measured MIN term discrepancy with disclosure (#492)([9002821](https://github.com/scbrown/quipu/commit/9002821cab5c6285520c6fb0146efe99e262bca2))
 
 ### Fixed
 
@@ -70,6 +69,7 @@ All notable changes to this project will be documented in this file.
 - *(sparql)* CONSTRUCT template blank nodes are fresh per solution (#309)([e8a82b2](https://github.com/scbrown/quipu/commit/e8a82b2980d1bed5049fede3dd8011873da2ab8c))
 - *(provenance)* Govern episode references to existing work items (#329)([a404b89](https://github.com/scbrown/quipu/commit/a404b89698dbf5e0273ff5d3ca80932519364126))
 - Repair main release, conformance and governance checks (#491)([dfa6663](https://github.com/scbrown/quipu/commit/dfa66635fd4ed6d5641292d5b7f79ed225b038e6))
+- *(governance)* Preserve trust-root deduplication in Clippy-clean condition([7ca784a](https://github.com/scbrown/quipu/commit/7ca784ae1f76b712048345424dce5c819bd23ade))
 
 ### Miscellaneous
 
