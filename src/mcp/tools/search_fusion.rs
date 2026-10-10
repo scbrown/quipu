@@ -16,6 +16,20 @@ pub(super) fn dispatch_search_fusion(store: &Store, input: &JsonValue) -> Result
     if !input.is_object() {
         return Err(invalid("search input must be an object"));
     }
+    if let Some(req) = super::search_anchor::AnchorRequest::parse(input)? {
+        return super::search_anchor_mix::anchor_mix_response(store, input, &req);
+    }
+    fusion_with_candidates(store, input, None)
+}
+
+pub(super) fn fusion_with_candidates(
+    store: &Store,
+    input: &JsonValue,
+    neighbours: Option<&std::collections::HashSet<i64>>,
+) -> Result<JsonValue> {
+    if !input.is_object() {
+        return Err(invalid("search input must be an object"));
+    }
     let config = store.search_config();
     // Turning the feature off must restore old implicit callers even when
     // an operator previously selected hybrid as the server default.
@@ -59,14 +73,16 @@ pub(super) fn dispatch_search_fusion(store: &Store, input: &JsonValue) -> Result
     // No candidate enlargement, normalization, reranking, or lexical dependency
     // at alpha=1. Even scores and tie order retain their original representation.
     if mode == "semantic" || (mode == "hybrid" && alpha == 1.0) {
-        let mut response = super::search::semantic_response(store, input)?;
+        let mut response =
+            super::search_anchor_mix::anchor_text_candidates(store, input, neighbours, true)?;
         if explain {
             explain_pure(&mut response, input, true);
         }
         return Ok(response);
     }
     if mode == "keyword" || alpha == 0.0 {
-        let mut response = super::search::keyword_response(store, input)?;
+        let mut response =
+            super::search_anchor_mix::anchor_text_candidates(store, input, neighbours, false)?;
         if explain {
             explain_pure(&mut response, input, false);
         }
@@ -107,16 +123,23 @@ pub(super) fn dispatch_search_fusion(store: &Store, input: &JsonValue) -> Result
         .max(limit);
     request["limit"] = json!(pool);
     request["mode"] = json!("semantic");
-    let semantic = super::search::semantic_response(store, &request)?;
+    let semantic =
+        super::search_anchor_mix::anchor_text_candidates(store, &request, neighbours, true)?;
     request["mode"] = json!("keyword");
     request.as_object_mut().unwrap().remove("embedding");
     request["explain"] = json!(explain);
-    let keyword = super::search::keyword_response(store, &request)?;
+    let keyword =
+        super::search_anchor_mix::anchor_text_candidates(store, &request, neighbours, false)?;
     let rows = fuse(
         semantic["results"].as_array().unwrap(),
         keyword["results"].as_array().unwrap(),
         (alpha, fusion, k),
-        limit,
+        if neighbours.is_some() {
+            semantic["results"].as_array().unwrap().len()
+                + keyword["results"].as_array().unwrap().len()
+        } else {
+            limit
+        },
         &request,
         explain,
     );
