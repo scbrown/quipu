@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu does **not** pass every approved W3C SPARQL 1.1 Query, Update, Protocol
-> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **191/242**.
+> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **167/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **191/242**.
 > Exceptions, each named below: federated query (`SERVICE`) passes 6/7, with 1 refused by policy (variable
 > endpoints); entailment regimes are scored separately (35/70 passed, 0 failing, 35 declared non-goals);
 > SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.
@@ -37,9 +37,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `768c44ec6777f7e561724ed285b34eee1293d1c2` |
-| Quipu revision (syntax) | `768c44ec6777f7e561724ed285b34eee1293d1c2` |
-| Quipu version | `quipu 0.11.1` |
+| Quipu revision (evaluation) | `37e3f7d401924ef77ca4c0efdc7d3e61c18306d9` |
+| Quipu revision (syntax) | `37e3f7d401924ef77ca4c0efdc7d3e61c18306d9` |
+| Quipu version | `quipu 0.12.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -52,13 +52,13 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 168 | 0 | 0 | 0 | 168 |
+| query evaluation | 167 | 1 | 0 | 0 | 168 |
 | federated query (`SERVICE`) | 6 | 0 | 0 | 1 | 7 |
 | result format | 10 | 0 | 0 | 0 | 10 |
 | protocol | 34 | 0 | 0 | 0 | 34 |
 | update | 93 | 0 | 0 | 0 | 93 |
 | entailment | 35 | 0 | 0 | 35 | 70 |
-| **all classes** | **432** | **0** | **0** | **36** | **468** |
+| **all classes** | **431** | **1** | **0** | **36** | **468** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -73,7 +73,7 @@ shown separately, so a design choice is not presented as a wrong answer.
 
 | System | Version | Query evaluation | Of those failures, same value | Update |
 |---|---|---:|---:|---:|
-| quipu | `quipu 0.11.1` | 168/168 | — | 93/93 |
+| quipu | `quipu 0.12.0` | 167/168 | — | 93/93 |
 | RDF4J | `6.1.0` | 162/168 | 5 | 87/93 |
 | Oxigraph | `0.5.11` | 159/168 | 8 | 93/93 |
 | Jena Fuseki | `6.2.0` | 155/168 | 12 | 93/93 |
@@ -273,7 +273,7 @@ moves the most per fix.
 |---|---:|---:|---:|---:|---:|
 | `functions` | 57 | 0 | 0 | 0 | 57 |
 | `property-path` | 24 | 0 | 0 | 0 | 24 |
-| `aggregates` | 22 | 0 | 0 | 0 | 22 |
+| `aggregates` | 21 | 1 | 0 | 0 | 22 |
 | `subquery` | 14 | 0 | 0 | 0 | 14 |
 | `negation` | 11 | 0 | 0 | 0 | 11 |
 | `bind` | 10 | 0 | 0 | 0 | 10 |
@@ -287,6 +287,15 @@ moves the most per fix.
 
 Every test that does not pass is listed here with its W3C identifier, so a
 claim of progress can be checked against a specific case rather than a count.
+
+<details>
+<summary><code>aggregates</code> — 1 of 22 not passing</summary>
+
+| Test | Name | Status | Reason |
+|---|---|---|---|
+| `:agg-min-02` | MIN with GROUP BY | failed | `actual result differs from expected multiset` |
+
+</details>
 
 ## Federated query (`SERVICE`)
 

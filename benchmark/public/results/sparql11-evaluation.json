@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "768c44ec6777f7e561724ed285b34eee1293d1c2",
-  "quipu_version": "quipu 0.11.1\ngit_sha: 768c44ec6777f7e561724ed285b34eee1293d1c2\ngit_dirty: false",
-  "generated_at": "2026-10-10T12:33:58Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38052152981",
+  "quipu_revision": "37e3f7d401924ef77ca4c0efdc7d3e61c18306d9",
+  "quipu_version": "quipu 0.12.0\ngit_sha: 37e3f7d401924ef77ca4c0efdc7d3e61c18306d9\ngit_dirty: false",
+  "generated_at": "2026-10-10T15:03:11Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38061483792",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -24,7 +24,8 @@
   "classes": {
     "query-evaluation": {
       "cases": 168,
-      "passed": 168
+      "failed": 1,
+      "passed": 167
     },
     "protocol": {
       "cases": 34,
@@ -200,8 +201,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-min-02.rq",
       "result": "aggregates/agg-min-02.srx",
-      "status": "passed",
-      "diagnostic": ""
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "query-evaluation",

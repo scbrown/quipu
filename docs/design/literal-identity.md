@@ -90,8 +90,13 @@ of the ordered input sequence; canonicalizing that term would erase its lexical
 identity. The local MIN/MAX regression checks the original spelling with both
 read models.
 
-This remains a reported failure and a landing hold. The pinned fixture and the
-strict comparison are unchanged. Upstream
+On 2026-10-10, the known discrepancy was accepted into the measured baseline
+under the existing `min-input-term-conformance-discrepancy` ruling. Actual
+derivation run [38061483792](https://github.com/scbrown/quipu/actions/runs/38061483792)
+reports 167/168 query-evaluation passes and keeps this case failed. Its original
+revision stamp is retained. The pinned fixture, strict comparator and MIN
+input-term semantics are unchanged. This accepts the disclosed difference; it
+does not count the case as passed. Upstream
 [issue 58](https://github.com/w3c/rdf-tests/issues/58) discusses numeric result
 spelling, but an open question is not authorization to normalize results or
 count this case as passed.
