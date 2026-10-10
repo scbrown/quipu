@@ -1,0 +1,13 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+<https://quipu.dev/knowledge/publication-policy/shape> a sh:NodeShape ;
+    sh:targetClass aegis:InternalIdentifierPattern ;
+    sh:property [ sh:path rdfs:label ; sh:datatype xsd:string ;
+                  sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:regex ; sh:datatype xsd:string ;
+                  sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:enforcementTier ; sh:datatype xsd:string ;
+                  sh:hasValue "block" ; sh:maxCount 1 ] .

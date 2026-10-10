@@ -1,0 +1,30 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Public, generic receiver policy, not a projection of the producer's private
+# catalogue. The trusted producer still checks every outgoing byte against its
+# freshly fetched private policy. Receivers may add their own stricter rules.
+# This catalogue does not claim to enumerate an organization's private names.
+<https://quipu.dev/knowledge/publication-policy/access-tokens>
+    a aegis:InternalIdentifierPattern ;
+    rdfs:label "Access token formats" ;
+    aegis:regex "(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|AKIA[A-Z0-9]{16}|sk-ant-[A-Za-z0-9_-]{40,})" ;
+    aegis:enforcementTier "block" .
+
+<https://quipu.dev/knowledge/publication-policy/private-keys>
+    a aegis:InternalIdentifierPattern ;
+    rdfs:label "Private key headers" ;
+    aegis:regex "-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----" ;
+    aegis:enforcementTier "block" .
+
+<https://quipu.dev/knowledge/publication-policy/user-directories>
+    a aegis:InternalIdentifierPattern ;
+    rdfs:label "User home directory paths" ;
+    aegis:regex "/(?:home|Users)/[A-Za-z0-9_.-]+/" ;
+    aegis:enforcementTier "block" .
+
+<https://quipu.dev/knowledge/publication-policy/demo-private-domain>
+    a aegis:InternalIdentifierPattern ;
+    rdfs:label "Fictional private domain control" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .

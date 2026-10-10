@@ -1,4 +1,7 @@
 import { createConstellation } from "./constellation.js";
+import { setupWorkbench, loadStarted, loaded, setQuery } from "./workbench.js";
+
+setupWorkbench();
 
 // UI for the "Explore this repository's graph" page.
 //
@@ -304,6 +307,7 @@ async function selectFile(item) {
   body.replaceChildren(el("p", { class: "muted", text: "querying…" }));
   drawNeighbourhood(item);
   renderFacts(item);
+  if (!$("#facts-drawer").open) $("#facts-drawer").showModal();
   if (item.iri.startsWith("https://quipu.dev/knowledge/")) {
     body.replaceChildren(el("p", { text: "This is contributor knowledge. Its source and related nodes are in the constellation card; its editable facts are below." }));
     wireShowQuery("#detail-showq", factsQuery(item.iri));
@@ -413,6 +417,7 @@ async function afterWrite(item, outcome, description) {
   await constellation.load();
   drawNeighbourhood(item);
   await refreshExport();
+  await runSparql();
 }
 
 async function writeSet(item, predicate, value) {
@@ -688,6 +693,10 @@ function download(name, blob) {
 }
 
 async function downloadPack() {
+  const button = $("#download-pack");
+  button.disabled = true;
+  button.textContent = "Building pack…";
+  $("#export-status").textContent = "Building your share pack in this tab…";
   editNote("Building the pack…");
   try {
     const bytes = await ask({ cmd: "exportPack" });
@@ -697,7 +706,14 @@ async function downloadPack() {
     editNote(`Downloaded ${fmt(bytes.byteLength)} bytes. `
       + "Stage it locally: `quipu import <file> --db your.db` "
       + "(load the matching shapes in your database first; promotion is separate).");
-  } catch (err) { editNote(err.message, true); }
+    $("#export-status").textContent = `Downloaded ${fmt(bytes.byteLength)} bytes.`;
+  } catch (err) {
+    editNote(err.message, true);
+    $("#export-status").textContent = "Export refused by the graph's policy. Inspect the editor's report for details.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Download .qpack.tar.gz";
+  }
 }
 
 async function downloadNtriples() {
@@ -723,13 +739,13 @@ function wireShowQuery(sel, sparql) {
   if (!link) return;
   link.onclick = (e) => {
     e.preventDefault();
-    $("#sparql").value = sparql;
+    setQuery(sparql, "Inspect this query");
     $("#sparql").scrollIntoView({ behavior: "smooth", block: "center" });
   };
 }
 
 async function runSparql() {
-  const sparql = $("#sparql").value;
+  const sparql = ($("#sparql").dataset.prefixes || "") + "\n" + $("#sparql").value;
   const out = $("#sparql-out");
   out.replaceChildren(el("p", { class: "muted", text: "running…" }));
   const t0 = performance.now();
@@ -770,11 +786,13 @@ async function runSparql() {
 // ------------------------------------------------------------------- boot
 
 async function loadPack(bytes, source) {
+  loadStarted(bytes.byteLength);
   status(`Verifying and importing ${fmt(bytes.byteLength)} bytes from ${source}…`);
   const t0 = performance.now();
   const report = await ask({ cmd: "load", bytes, source });
   const load = performance.now() - t0;
   renderProvenance(report, source, { load });
+  loaded(report);
   status(`Loaded ${fmt(report.import.triples.accepted)} triples — everything below is a live `
     + `query against this tab's copy.`);
   $("main").hidden = false;
@@ -782,6 +800,9 @@ async function loadPack(bytes, source) {
   await constellation.load();
   await renderBrowser();
   await refreshExport();
+  setQuery(CANNED[0].sparql, CANNED[0].name);
+  $("#starter-questions button")?.setAttribute("aria-pressed", "true");
+  await runSparql();
   reportReleaseFreshness(report.manifest.producer.version);
 }
 
@@ -809,13 +830,16 @@ async function boot() {
       : `The WebAssembly worker did not start: ${err.message}`);
     return;
   }
-  $("#sparql").value = CANNED[0].sparql;
+  setQuery(CANNED[0].sparql, CANNED[0].name);
   $("#run").addEventListener("click", runSparql);
   const canned = $("#canned");
   for (const c of CANNED) {
     canned.append(el("button", {
       class: "canned", text: c.name,
-      onclick: () => { $("#sparql").value = c.sparql; runSparql(); },
+      onclick: () => {
+        setQuery(c.sparql, c.name);
+        runSparql();
+      },
     }));
   }
   registerServer();

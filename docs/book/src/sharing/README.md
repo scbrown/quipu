@@ -125,6 +125,23 @@ the qpack, checksum and source/binary provenance receipt; missing or invalid
 artifacts fail the job. The first enabled release must separately prove published
 artifact delivery. Hosted runners never receive the private policy catalogue.
 
+The repository pack also carries a separate, public receiver catalogue from
+`docs/knowledge/publication-policy.ttl`, with its SHACL constraints. It contains
+generic access-token, private-key and user-directory patterns plus a fictional
+domain control. It does **not** publish the trusted producer's private rules or
+claim to cover every organization's private identifiers. Load stricter local
+rules when your destination requires them. The producer's fresh private-policy
+check remains mandatory and is not replaced by this public catalogue.
+
+Before emitting a release pack, the builder imports it into a fresh receiver
+and proves outward sharing and re-import without injecting policy afterward.
+Acceptance pins all four public rule IRIs and their exact labels, regexes and
+block tiers; missing one rule or changing any of those values fails the check.
+Missing receiver policy and a planted forbidden value must still refuse without
+output, and native SHACL must refuse an incomplete policy rule. Carrying shapes
+does not establish that a particular browser binary has compiled SHACL; the
+explorer reports that capability from the engine build.
+
 ## What a share is
 
 A **share** is a directory you can commit to git, attach to an email, or publish
