@@ -246,6 +246,39 @@ with `source = "reasoner:<rule-id>"` provenance.
 See [Reasoner Reference](reasoner.md) for full details on rule syntax and
 the evaluation model.
 
+### `quipu demotions`
+
+List unsupported Datalog demotions in a premise graph's companion:
+
+```bash
+quipu demotions --db my.db
+quipu demotions --graph urn:example:premises --db my.db
+```
+
+The JSON rows identify the retained record, subject, predicate, object, premise
+graph, deriver source, promotion transaction and invalidation transaction.
+`--graph` defaults to ROOT. The command installs the shipped
+`unsupported_demotions` stored query if missing; a fresh store returns no rows.
+After the companion is initialized, HTTP clients can call
+`POST /ask` with `{"name":"unsupported_demotions"}`; for a named companion, add
+`"params":{"graph":"urn:example:premises#inferred"}`.
+
+Support loss removes the original triple from first-class standing and retains
+one `quipu:DemotedDerivation` reification record. Datalog, OWL and RDFS
+materializers exclude plane bookkeeping from premises. Ordinary graph queries
+can still inspect the record; it does not assert the reified triple. Restored
+support marks it `resolved` and recreates the derivation only in the companion.
+Resolved records remain available through graph queries but leave this list.
+This is truth maintenance, not a promotion or automatic-promotion API.
+Load the product evidence schema alongside the application's other shapes:
+
+```bash
+quipu shapes load demoted-derivations shapes/demoted-derivation.ttl --db my.db
+```
+
+Demotion does not load shapes automatically: installing the first shape set
+would activate the vocabulary gate for unrelated writes in an ungoverned store.
+
 ### `quipu impact <entity-IRI>`
 
 Bounded BFS over entity edges: what is downstream of this entity? With
@@ -649,6 +682,47 @@ Output is one line per hit (`tx <id> (<timestamp>): would have fired on
 so a script that knots on success cannot read an unevaluable candidate as
 clean.
 
+### `quipu gate shadow`
+
+Judge a **candidate policy set** over recorded history before any of it is
+created, and report which committed writes it would refuse that the governing
+set admitted (and the reverse). Never writes.
+
+```bash
+sqlite3 live.db ".backup copy.db"      # a quiescent copy, never the live store
+quipu gate shadow --rules candidate.ttl --db copy.db --since 7d
+quipu gate shadow --rules candidate.ttl --db copy.db --from-tx 1000 --to-tx 2000 --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--rules <file.ttl>` | Candidate policies: action-boundary `aegis:Policy` nodes with `aegis:targets` and `aegis:claim` (required) |
+| `--db <copy.db>` | A quiescent copy of the store (required; see refusals below) |
+| `--since <dur>` | Window: transactions stamped within `90m`, `24h`, `7d`, … |
+| `--from-tx <A> --to-tx <B>` | Explicit window; both together |
+| `--last-txs <N>` | The last N transactions (default: the whole log) |
+| `--max-txs <N>` | Stop after judging N; the report says where it stopped |
+| `--mode add\|replace` | `add` (default) layers the candidate over the governing set, same IRI replacing; `replace` makes the candidate the whole set |
+| `--json` | Machine-readable report |
+
+Each transaction is judged by the **write gate's own evaluator** against the
+post-state it saw, with the router read as of that transaction's time. The
+baseline is the policy set **in force at that transaction**, so a policy change
+inside the window is reported as a boundary and never attributed to the
+candidate.
+
+**Refusals, not advice.** The command refuses the configured live store and any
+path with a `-wal`, `-shm` or `-journal` sidecar (an open connection, or a copy
+taken mid-write): it reads with SQLite `immutable=1`, which ignores locks and
+the WAL and could see torn state on a live file.
+
+**Limits it reports rather than hides:** refused writes are rolled back and
+cannot be replayed, so they are counted, not judged; recorded verdicts are
+joined by `aegis:gatedTx` when present and otherwise by the next-transaction
+convention, with the match rate printed (and `UNMEASURED` when nothing joined);
+and a baseline that would refuse a committed write is counted as the fidelity
+signal (enforcement off then, an approval, or a reconstruction gap).
+
 ### `quipu path`
 
 Golden-path analysis over recorded trajectories: the provenance cone, the
@@ -909,3 +983,51 @@ feature).
 ```bash
 quipu migrate-vectors --from sqlite --to lancedb --dry-run --db my.db
 ```
+
+### `quipu hook session-capture` and `quipu hooks`
+
+quipu ships one agent hook: a Stop hook that asks the agent, once per session,
+whether the session produced durable knowledge worth writing as an episode.
+The agent may act or reply `skip`; the hook never blocks a second stop.
+
+```bash
+quipu hooks bundle                      # print the hook bundle (schema st.hook-bundle/1)
+quipu hooks install --harness claude    # merge into ~/.claude/settings.json
+quipu hooks install --harness codex     # merge into $CODEX_HOME/config.toml (default ~/.codex)
+quipu hooks status                      # exit 1 unless every harness has the hook
+quipu hooks uninstall                   # remove only quipu's hook
+```
+
+With no `--harness`, both harnesses are written. `--project` writes
+`./.claude/settings.json` or `./.codex/config.toml` instead. Install is
+idempotent, leaves every other hook in place, and keeps the previous file as
+`<file>.bak-quipu`. When a shantytown registry answers (`st ops hooks list`),
+install and uninstall register the bundle with `st` instead, which renders it
+into every role's settings; pass `--no-st` to write the harness config directly.
+
+The hook itself, `quipu hook session-capture`, reads the Stop-hook JSON on
+stdin and prints at most one response. It always exits 0, and every failure is
+silence rather than a malformed response. Its guards, in order:
+
+1. **Scope.** The crew comes from `GT_CREW`, else from a `.../crew/<name>/...`
+   working directory. An unidentified crew is never interrupted.
+   `QUIPU_HOOK_CREWS` (space-separated, default `*`) narrows the scope.
+2. **Loop guard.** `stop_hook_active: true` means the hook already fired this
+   turn, so it stays silent.
+3. **Once per session.** A `solicited-<session_id>` marker in the state
+   directory. Markers older than two days are reaped.
+4. **Durable denominator.** Each solicitation appends
+   `{ts, session_id, crew}` to `solicit-log.jsonl` before it is sent. If that
+   append fails the hook stays silent, so the log can never undercount.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QUIPU_SERVER` | `http://127.0.0.1:3030` | Server URL named in the message |
+| `QUIPU_HOOK_GROUP` | `default` | Episode `group_id` named in the message |
+| `QUIPU_HOOK_CREWS` | `*` | Crews the hook may interrupt |
+| `QUIPU_HOOK_STATE_DIR` | `~/.quipu-hook` | Markers and `solicit-log.jsonl` |
+| `GT_CREW` | (unset) | The crew name, when the cwd does not carry it |
+
+The message tells the agent that writes need a bearer from `QUIPU_AUTH_TOKEN`
+and to send `X-Quipu-Client: session-capture`. The act rate is
+`episodes whose source carries the session id / lines in solicit-log.jsonl`.

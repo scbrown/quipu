@@ -71,16 +71,17 @@ pub fn eval_type_pattern_with_subclasses(
     let Some(type_pred_id) = store.lookup(RDF_TYPE)? else {
         return Ok(vec![]);
     };
-    let subject_ids =
-        if let Some(iri) = super::pattern_util::resolve_subject_pattern(&tp.subject, bindings) {
-            let ids = store.lookup_all(&iri)?;
-            if ids.is_empty() {
-                return Ok(vec![]);
-            }
-            Some(ids)
-        } else {
-            None
-        };
+    let subject_ids = if let Some(iri) =
+        super::pattern_util::resolve_subject_pattern(store, &tp.subject, bindings)?
+    {
+        let ids = store.lookup_all(&iri)?;
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        Some(ids)
+    } else {
+        None
+    };
     let mut results = Vec::new();
     // An entity may assert both a subclass and its superclass. Entailment
     // produces one graph triple, not one row per proof path.
@@ -187,7 +188,7 @@ pub fn withheld_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<
     if !(ctx.graph.is_root_default() || (ctx.entails_rdfs && ctx.graph.includes_root_default())) {
         return Vec::new();
     }
-    let Ok(parsed) = super::sparql_parser().parse_query(query) else {
+    let Ok(Ok(parsed)) = crate::sparql_structure::parse_query(super::sparql_parser(), query) else {
         return Vec::new();
     };
 
@@ -223,7 +224,7 @@ pub fn withheld_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<
 /// wherever it occurs — inside OPTIONAL, UNION, a subquery, a FILTER EXISTS.
 /// Anything not recognised simply contributes nothing: a missed pattern costs a
 /// marker, never a wrong one.
-fn type_constants(query: &spargebra::Query) -> Vec<String> {
+pub(crate) fn type_constants(query: &spargebra::Query) -> Vec<String> {
     use spargebra::algebra::GraphPattern;
 
     // The wildcard arm below is DELIBERATE and must stay a wildcard.

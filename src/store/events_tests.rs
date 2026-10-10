@@ -863,3 +863,212 @@ fn shacl_refused_episode_records_refusal_event() {
         vec![("shacl".to_string(), 1)]
     );
 }
+
+/// aegis-4c3ppi (ian's ruling B, condition 2): the runtime HONOURS emit for the
+/// real `DirectiveTraceabilityShape`, loaded from the production shapes file,
+/// not a fixture copy. An untraced directive still COMMITS and leaves a
+/// `shacl.violation` naming that shape; a traced one and an exempt Policy
+/// leave none. Routing: `shacl::split_shapes_by_policy` +
+/// `episode::ingest_episode` (`validate_with_store_context` on the emit half).
+#[cfg(feature = "shacl")]
+mod directive_traceability_emit {
+    use super::*;
+
+    const SHAPES: &str = include_str!("../../shapes/aegis-ontology.shapes.ttl");
+
+    fn store_with_real_shapes() -> Store {
+        let mut store = Store::open_in_memory().unwrap();
+        store
+            .load_shapes("aegis-ontology", SHAPES, "2026-10-01T00:00:00Z")
+            .unwrap();
+        store.shacl_config_mut().validate_on_write = true;
+        store
+    }
+
+    fn traceability_events(store: &Store) -> Vec<EventRow> {
+        all_events(store)
+            .into_iter()
+            .filter(|e| e.event_type == "shacl.violation")
+            .filter(|e| e.payload.contains("DirectiveTraceabilityShape"))
+            .collect()
+    }
+
+    #[test]
+    fn untraced_directive_commits_and_emits_traceability_violation() {
+        let mut store = store_with_real_shapes();
+        let episode = ep(
+            "dt-untraced",
+            vec![node("dt-untraced-rule", "Directive")],
+            vec![],
+        );
+        let (tx, count) = ingest_episode(
+            &mut store,
+            &episode,
+            "2026-10-01T00:00:01Z",
+            DEFAULT_BASE_NS,
+        )
+        .expect("an emit-mode shape must not gate the directive write");
+        assert!(tx > 0 && count > 0, "write committed");
+        let evs = traceability_events(&store);
+        assert_eq!(evs.len(), 1, "exactly one traceability violation");
+        assert_eq!(evs[0].tx_id, tx);
+        let payload: serde_json::Value = serde_json::from_str(&evs[0].payload).unwrap();
+        assert_eq!(payload["mode"], "emit");
+    }
+
+    #[test]
+    fn traced_directive_emits_nothing() {
+        let mut store = store_with_real_shapes();
+        let episode = ep(
+            "dt-traced",
+            vec![
+                node("dt-traced-rule", "Directive"),
+                node("dt-work", "WorkItem"),
+                node("dt-policy", "Policy"),
+            ],
+            vec![
+                edge("dt-traced-rule", "trackedBy", "dt-work"),
+                edge("dt-traced-rule", "governedBy", "dt-policy"),
+            ],
+        );
+        ingest_episode(
+            &mut store,
+            &episode,
+            "2026-10-01T00:00:02Z",
+            DEFAULT_BASE_NS,
+        )
+        .expect("traced directive write");
+        let focus: Vec<_> = traceability_events(&store)
+            .into_iter()
+            .filter(|e| {
+                e.subject
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("dt-traced-rule")
+            })
+            .collect();
+        assert!(
+            focus.is_empty(),
+            "a traced directive is conformant: {focus:?}"
+        );
+    }
+
+    #[test]
+    fn policy_is_exempt() {
+        let mut store = store_with_real_shapes();
+        let episode = ep(
+            "dt-policy-only",
+            vec![node("dt-lone-policy", "Policy")],
+            vec![],
+        );
+        ingest_episode(
+            &mut store,
+            &episode,
+            "2026-10-01T00:00:03Z",
+            DEFAULT_BASE_NS,
+        )
+        .expect("policy write");
+        let focus: Vec<_> = traceability_events(&store)
+            .into_iter()
+            .filter(|e| {
+                e.subject
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("dt-lone-policy")
+            })
+            .collect();
+        assert!(
+            focus.is_empty(),
+            "Policy is the executable form and exempt: {focus:?}"
+        );
+    }
+}
+
+// -- Write provenance at commit (aegis-7zp4rc) ----------------------------
+
+/// The value of one `quipu_write_provenance_total` series, or 0 when absent.
+fn provenance_series(client: &str, endpoint: &str, class: &str) -> u64 {
+    let text = crate::metrics::metrics().render(0, 0, 0, None);
+    let key = format!(
+        "quipu_write_provenance_total{{client=\"{client}\",endpoint=\"{endpoint}\",provenance=\"{class}\"}} "
+    );
+    text.lines()
+        .find_map(|l| l.strip_prefix(&key))
+        .map_or(0, |n| n.parse().unwrap())
+}
+
+fn missing_series(client: &str, field: &str) -> u64 {
+    let text = crate::metrics::metrics().render(0, 0, 0, None);
+    let key =
+        format!("quipu_write_provenance_missing_total{{client=\"{client}\",field=\"{field}\"}} ");
+    text.lines()
+        .find_map(|l| l.strip_prefix(&key))
+        .map_or(0, |n| n.parse().unwrap())
+}
+
+/// One count per COMMITTED transaction under the request's class; a refused
+/// write counts nothing, and neither does the verdict the refusal records on
+/// the same thread; an unscoped write is not a request write.
+#[test]
+fn write_provenance_counts_committed_request_writes_only() {
+    use crate::write_provenance::{RequestProvenance, scoped};
+    use std::sync::Arc;
+    // A client label no other test uses: provenance is thread-scoped, so other
+    // tests' writes cannot reach these series.
+    const CLIENT: &str = "test-7zp4rc";
+    let mut store = Store::open_in_memory().unwrap();
+    define_require_label_policy(&mut store);
+    let complete = Arc::new(RequestProvenance::classify(
+        CLIENT,
+        "/knot",
+        [Some("ian"), Some("cron"), Some("host-a"), None, None],
+    ));
+    let absent = Arc::new(RequestProvenance::classify(CLIENT, "/knot", [None; 5]));
+
+    // A committed write counts once, under its class.
+    let ok = vec![assert_datum(
+        &store,
+        "http://ex/x1",
+        "http://ex/p",
+        Value::Str("v".into()),
+    )];
+    scoped(Some(complete.clone()), || {
+        store.transact(&ok, RTS, None, None).unwrap()
+    });
+    assert_eq!(provenance_series(CLIENT, "/knot", "complete"), 1);
+
+    // A refused write counts nothing, though its verdict commits on this thread.
+    let bad = unlabelled_doc(&store);
+    scoped(Some(complete), || {
+        assert!(store.transact(&bad, RTS, None, None).is_err());
+    });
+    assert_eq!(
+        provenance_series(CLIENT, "/knot", "complete"),
+        1,
+        "refusal counted"
+    );
+
+    // Absent declares nothing and names every required field.
+    let ok2 = vec![assert_datum(
+        &store,
+        "http://ex/x2",
+        "http://ex/p",
+        Value::Str("w".into()),
+    )];
+    scoped(Some(absent), || {
+        store.transact(&ok2, RTS, None, None).unwrap()
+    });
+    assert_eq!(provenance_series(CLIENT, "/knot", "absent"), 1);
+    assert_eq!(missing_series(CLIENT, "host"), 1);
+
+    // No request scope: not a request write, not counted under any client.
+    let ok3 = vec![assert_datum(
+        &store,
+        "http://ex/x3",
+        "http://ex/p",
+        Value::Str("z".into()),
+    )];
+    store.transact(&ok3, RTS, None, None).unwrap();
+    assert_eq!(provenance_series(CLIENT, "/knot", "complete"), 1);
+    assert_eq!(provenance_series(CLIENT, "/knot", "absent"), 1);
+}

@@ -624,13 +624,20 @@ fn pack_into(
     }
 }
 
+/// Open a pack file so that reading it cannot change it: read-only and
+/// `immutable=1` (see [`Store::open_immutable`], aegis-s8jra2).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn open_pack_read_only(path: &str) -> Result<rusqlite::Connection> {
+    crate::store::open_file_immutable(path)
+}
+
 /// Read a pack's manifest.
 ///
 /// # Errors
 /// The file is not a pack, or cannot be opened.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_manifest(path: &str) -> Result<Manifest> {
-    let conn = rusqlite::Connection::open(path)?;
+    let conn = open_pack_read_only(path)?;
     // `destination` arrived with aegis-9f899e. A pack cut before it has no such
     // column, and SELECTing one by name fails the whole read — so the column is
     // fetched separately and its absence degrades to `None` (UNKNOWN) instead
@@ -688,7 +695,12 @@ pub fn read_manifest(path: &str) -> Result<Manifest> {
 /// (aegis-9f899e, wu's census on #222).
 pub fn verify(path: &str) -> Result<(String, String, bool)> {
     let manifest = read_manifest(path)?;
-    let store = Store::open(path)?;
+    // READ-ONLY, never `Store::open`: that runs schema setup and migrations
+    // and commits them, so verifying a pack rewrote it (SQLite change counter
+    // at byte 28, new sha256). An integrity check must leave the artifact it
+    // checks byte-identical, or it can never run against a published,
+    // content-addressed or checked-in pack (aegis-s8jra2).
+    let store = Store::open_immutable(path)?;
     let shapes: Vec<String> = store
         .list_shapes()?
         .into_iter()

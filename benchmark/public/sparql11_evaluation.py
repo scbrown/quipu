@@ -1070,7 +1070,15 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
         except (ET.ParseError, ValueError, KeyError, json.JSONDecodeError) as error:
             return {**base, "status": "error", "diagnostic": str(error)}
         if isinstance(actual, Counter) and isinstance(expected, Counter):
-            passed = actual == expected
+            # Graphs are equal up to blank-node renaming (RDF graph
+            # isomorphism), so a CONSTRUCT that returns _:alice where the
+            # suite wrote _:gff is still correct (sparql10 construct-1..4).
+            if any(term.startswith("_:") for triple in expected for term in triple):
+                passed = rows_equal_with_blank_nodes(
+                    sorted(actual.elements()), sorted(expected.elements())
+                )
+            else:
+                passed = actual == expected
         elif isinstance(actual, bool) or isinstance(expected, bool):
             passed = actual == expected
         else:

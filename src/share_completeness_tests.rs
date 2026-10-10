@@ -66,6 +66,9 @@ fn tables_created_in_source() -> std::collections::BTreeSet<String> {
 #[test]
 fn every_table_a_real_store_creates_is_classified() {
     let store = Store::open_in_memory().unwrap();
+    // Opt-in virtual tables create engine-owned shadow tables absent from
+    // source DDL. Exercise actual activation, rather than exempt their names.
+    store.initialize_lexical_index().unwrap();
     let mut stmt = store
         .prepare(
             "SELECT name FROM sqlite_master \
@@ -119,6 +122,7 @@ fn every_table_a_real_store_creates_is_classified() {
 #[test]
 fn nothing_is_declared_that_nothing_creates() {
     let store = Store::open_in_memory().unwrap();
+    store.initialize_lexical_index().unwrap();
     let mut stmt = store
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
         .unwrap();

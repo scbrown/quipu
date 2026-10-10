@@ -429,3 +429,15 @@ fn verify_full_answers_a_question_pack_verify_cannot() {
          and the reason for verify_full both need revisiting"
     );
 }
+
+#[test]
+fn verify_full_leaves_the_pack_byte_identical() {
+    let dir = tmpdir("verify-full-bytes");
+    let pack = full_pack(&dir, "full.qpack");
+    let before = std::fs::read(&pack).unwrap();
+    assert!(crate::pack_full::verify_full(&pack).unwrap().2);
+    assert!(
+        std::fs::read(&pack).unwrap() == before,
+        "verify_full changed the bytes of the pack it verified (aegis-s8jra2)"
+    );
+}

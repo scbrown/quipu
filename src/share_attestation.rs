@@ -151,7 +151,7 @@ pub fn verify_attestation(
 }
 
 /// Accepted clock skew between the attestation's issuance and this import.
-const ATTESTATION_SKEW_SECS: u64 = 300;
+use crate::session_attestation::ATTESTATION_SKEW_SECS;
 
 /// Seconds since the epoch for an ISO-8601 `YYYY-MM-DDTHH:MM:SSZ` timestamp.
 ///

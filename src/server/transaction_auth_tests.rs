@@ -33,7 +33,7 @@ async fn generic_writes_keep_named_shared_and_declared_identity_separate() {
     }
     let app = Router::new()
         .route("/set", post(crate::tools::set_predicate))
-        .route("/transactions", get(crate::entity::transactions))
+        .route("/transactions", get(crate::feed::transactions))
         .layer(middleware::from_fn(
             move |mut req: axum::extract::Request, next| {
                 let policy = policy.clone();

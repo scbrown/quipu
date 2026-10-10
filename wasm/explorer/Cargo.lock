@@ -1611,6 +1611,7 @@ dependencies = [
 name = "quipu-ai"
 version = "0.9.1"
 dependencies = [
+ "base64",
  "datafrog",
  "flate2",
  "getrandom 0.3.4",
@@ -1635,6 +1636,7 @@ dependencies = [
  "spargebra",
  "strsim",
  "tar",
+ "tempfile",
  "thiserror",
  "toml 0.8.23",
 ]
