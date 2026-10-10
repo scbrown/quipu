@@ -131,6 +131,14 @@ pub struct SearchConfig {
     /// output exceeds the cap aborts immediately with a complexity error
     /// naming the limit, usually within milliseconds of going quadratic.
     pub max_join_rows: usize,
+
+    /// Graph-anchored search (`anchor` on `/search`, aegis-rcz5ib.8). OFF by
+    /// default until its evaluation gate passes; an anchored request on a
+    /// server with this off is refused, never silently answered unanchored.
+    pub anchored: bool,
+    /// SQLite FTS5 keyword search. Default off; activation creates only empty
+    /// schema/triggers. Historical rows require explicit bounded backfill.
+    pub keyword: bool,
 }
 
 impl Default for SearchConfig {
@@ -143,6 +151,8 @@ impl Default for SearchConfig {
             query_timeout_ms: 30_000,
             request_timeout_ms: 0,
             max_join_rows: 1_000_000,
+            anchored: false,
+            keyword: false,
         }
     }
 }
@@ -481,6 +491,12 @@ pub struct ServerConfig {
     /// handle per request. Readers are cheap but not free — each is an open
     /// `SQLite` connection with its own page cache.
     pub read_pool_size: usize,
+
+    /// Ceiling on facts copied for one `/update` that cannot be sliced (an
+    /// open subject with an open predicate copies the whole store). Past it
+    /// the update is refused with advice instead of exhausting memory
+    /// (aegis-11rwfs). 0 = unbounded. Default 250000.
+    pub update_full_copy_max_facts: usize,
 }
 
 impl Default for ServerConfig {
@@ -495,6 +511,7 @@ impl Default for ServerConfig {
             read_only: false,
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,
+            update_full_copy_max_facts: 250_000,
         }
     }
 }

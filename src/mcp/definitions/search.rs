@@ -10,11 +10,13 @@ pub(super) fn defs() -> Vec<JsonValue> {
     vec![
         serde_json::json!({
             "name": "quipu_search",
-            "description": "Semantic vector search over entity embeddings. Accepts a pre-computed embedding vector or a natural-language query (auto-embedded when an EmbeddingProvider is configured).",
+            "description": "Semantic vector search (default) or opt-in SQLite FTS5 keyword search. Keyword mode requires query text and an enabled, backfilled index; it needs no embedding provider.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "query": { "type": "string", "description": "Natural language search query (auto-embedded when EmbeddingProvider is attached)" },
+                    "mode": { "type": "string", "enum": ["semantic", "keyword"], "default": "semantic", "description": "Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true." },
+                    "infer_types": { "type": "boolean", "description": "Keyword mode only: type scope includes subclass inference when true; defaults false (asserted full-IRI types only). Type tokens are always asserted; response marks both choices." },
                     "embedding": { "type": "array", "items": { "type": "number" }, "description": "Pre-computed query embedding vector (f32 array). Takes precedence over query." },
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" },
@@ -22,6 +24,13 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "entity_type": { "type": "string", "description": "Optional: restrict to entities of this rdf:type IRI" },
                     "ranking": { "type": "string", "enum": ["content", "semantic"], "default": "semantic", "description": "Content ranking demotes repository artifacts lacking explanatory content; semantic returns raw cosine order." }
                     ,"verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
+                    ,"anchor": { "type": "string", "description": "Root the search on ONE entity (IRI, CURIE or exact label; ambiguity is refused, never guessed) and rank by hop distance from it. Requires [quipu.search] anchored = true on the server." }
+                    ,"max_hops": { "type": "integer", "description": "Anchor neighbourhood radius (default 3, server cap 4)." }
+                    ,"anchor_mode": { "type": "string", "enum": ["decay", "sort", "filter"], "description": "decay (default): score x decay^hops; sort: hops first; filter: only reachable results." }
+                    ,"decay": { "type": "number", "description": "Per-hop multiplier in (0, 1] for decay mode (default 0.5)." }
+                    ,"via": { "type": "array", "items": { "type": "string" }, "description": "Traverse only these predicate IRIs (replaces the default exclusions)." }
+                    ,"direction": { "type": "string", "enum": ["both", "out", "in"], "description": "Edge direction to traverse (default both)." }
+                    ,"explain": { "type": "boolean", "description": "Add one shortest path from the anchor to each result." }
                 }
             }
         }),

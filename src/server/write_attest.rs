@@ -214,6 +214,9 @@ fn refuse(refusal: &Refusal) -> Response {
             "verdict": refusal.verdict,
             "message": refusal.message,
             "reason": "attestation_refused",
+            "credential_type": "attested_signature",
+            "expected_scope": "write",
+            "provisioning": "Ask the identity introducer to register the client public key and bind its agent/session with allow_write; renew expired bindings. A rejected signature never falls back to bearer authentication.",
         })),
     )
         .into_response();

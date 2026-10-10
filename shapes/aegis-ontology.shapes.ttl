@@ -10,7 +10,9 @@
 
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
 @prefix quipu:  <http://quipu.dev/ontology/> .
 @prefix aegis:  <http://aegis.gastown.local/ontology/> .
 
@@ -1842,6 +1844,26 @@ aegis:FailureMode rdfs:subClassOf aegis:FailureKnowledge .
 aegis:FailurePattern rdfs:subClassOf aegis:FailureKnowledge .
 aegis:IncidentClass rdfs:subClassOf aegis:FailureKnowledge .
 aegis:Directive rdfs:subClassOf aegis:OperationalKnowledge .
+
+# ── Legacy aegis:Bead: deprecated, governed, never written (aegis-ks4oph) ──
+#
+# 2631 nodes still carry aegis:Bead beside aegis:WorkItem. aegis-ykuhen kept the
+# old type deliberately as auditable history when it moved them to WorkItem, and
+# the ruling on aegis-ks4oph (2026-10-07) keeps it: Bead is a DEPRECATED LEGACY
+# subclass of WorkItem. Producers emit WorkItem; nothing writes Bead.
+#
+# The shape exists so the live census (I7) sees a governed legacy kind, not an
+# unshaped one, and it asserts the one thing that makes a Bead legitimate: it is
+# ALSO a WorkItem. A Bead-only node, which is what a new Bead write would be,
+# violates it. Note that the vocabulary gate admits any targeted class, so this
+# shape does not by itself refuse such a write at /episode. It makes one visible.
+aegis:Bead rdfs:subClassOf aegis:WorkItem ;
+    owl:deprecated true .
+
+aegis:BeadLegacyShape a sh:NodeShape ;
+    sh:targetClass aegis:Bead ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue aegis:WorkItem ; ] .
 
 # ── Asserted in the store before they were ever written down ─────
 #
