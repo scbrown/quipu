@@ -18,10 +18,10 @@ pub(super) fn resume_offset(
     if since.is_some_and(|offset| offset < 0) {
         return Err("since must be nonnegative");
     }
-    if let (Some(query), Some(header)) = (since, header) {
-        if query != header {
-            return Err("since and Last-Event-ID disagree");
-        }
+    if let (Some(query), Some(header)) = (since, header)
+        && query != header
+    {
+        return Err("since and Last-Event-ID disagree");
     }
     Ok(since.or(header).unwrap_or(0))
 }

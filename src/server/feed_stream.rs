@@ -50,7 +50,7 @@ pub(crate) async fn events_stream(
     headers: HeaderMap,
     params: Query<Params>,
 ) -> Response {
-    stream(state.0, headers, params.0, false)
+    stream(state.0, &headers, params.0, false)
 }
 
 pub(crate) async fn changes_stream(
@@ -58,13 +58,12 @@ pub(crate) async fn changes_stream(
     headers: HeaderMap,
     params: Query<Params>,
 ) -> Response {
-    stream(state.0, headers, params.0, true)
+    stream(state.0, &headers, params.0, true)
 }
 
-fn stream(store: SharedStore, headers: HeaderMap, params: Params, changes: bool) -> Response {
-    let last = match headers.get("last-event-id").map(|v| v.to_str()).transpose() {
-        Ok(value) => value,
-        Err(_) => return (StatusCode::BAD_REQUEST, "invalid Last-Event-ID").into_response(),
+fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool) -> Response {
+    let Ok(last) = headers.get("last-event-id").map(|v| v.to_str()).transpose() else {
+        return (StatusCode::BAD_REQUEST, "invalid Last-Event-ID").into_response();
     };
     let offset = match resume_offset(params.since, last) {
         Ok(offset) => offset,
@@ -87,15 +86,12 @@ fn stream(store: SharedStore, headers: HeaderMap, params: Params, changes: bool)
     }
     static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
     let slots = SLOTS.get_or_init(|| Arc::new(Semaphore::new(64))).clone();
-    let slot = match slots.try_acquire_owned() {
-        Ok(slot) => slot,
-        Err(_) => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "stream capacity exhausted; reconnect later",
-            )
-                .into_response();
-        }
+    let Ok(slot) = slots.try_acquire_owned() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "stream capacity exhausted; reconnect later",
+        )
+            .into_response();
     };
     // Subscribe BEFORE the first log read so a concurrent commit cannot fall
     // between the empty read and registering interest.
