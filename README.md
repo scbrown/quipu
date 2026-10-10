@@ -20,8 +20,8 @@ It stores what your agents learn as facts, checks every write against rules you
 declare (SHACL shapes), and refuses the facts that break them, so bad knowledge
 never gets in.** It keeps every version of every fact, so you can ask what was
 true last Tuesday, and it answers standard SPARQL 1.1. It comes as a command-line
-tool, a REST server, and a Rust library, and agents reach it through
-[bobbin](https://github.com/scbrown/bobbin)'s MCP server.
+tool, a REST server, and a Rust library, and agents connect through Quipu’s
+own MCP server (`quipu mcp` for stdio or `quipu-server` over HTTP).
 
 A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record:
 cords are entities, knots are facts.
@@ -42,18 +42,33 @@ a comparison): [Why Quipu](docs/book/src/why-quipu.md).
 
 ## Install
 
-Linux x86_64: download the checksummed release.
+Linux (x86_64, arm64) and macOS (Apple Silicon, Intel): download the
+checksummed release.
 
 ```bash
-V=0.8.1
-curl -fsSLO "https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V/quipu-quipu-ai-v$V-x86_64-unknown-linux-gnu.tar.gz"
-curl -fsSLO "https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V/quipu-quipu-ai-v$V-x86_64-unknown-linux-gnu.tar.gz.sha256"
-sha256sum -c "quipu-quipu-ai-v$V-x86_64-unknown-linux-gnu.tar.gz.sha256"
-tar -xzf "quipu-quipu-ai-v$V-x86_64-unknown-linux-gnu.tar.gz"
+V=0.11.1
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64)  T=x86_64-unknown-linux-gnu ;;
+  Linux-aarch64) T=aarch64-unknown-linux-gnu ;;
+  Darwin-arm64)  T=aarch64-apple-darwin ;;
+  Darwin-x86_64) T=x86_64-apple-darwin ;;
+  *) echo "no release for this platform; build from source below"; exit 1 ;;
+esac
+A="quipu-quipu-ai-v$V-$T"
+curl -fsSLO "https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V/$A.tar.gz"
+curl -fsSLO "https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V/$A.tar.gz.sha256"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum -c "$A.tar.gz.sha256"
+else
+  shasum -a 256 -c "$A.tar.gz.sha256"
+fi
+tar -xzf "$A.tar.gz"
 mkdir -p ~/.local/bin
-install -m 755 "quipu-quipu-ai-v$V-x86_64-unknown-linux-gnu/quipu" \
-  "quipu-quipu-ai-v$V-x86_64-unknown-linux-gnu/quipu-server" ~/.local/bin/
+install -m 755 "$A/quipu" "$A/quipu-server" ~/.local/bin/
 ```
+
+Keep `quipu` and `quipu-server` side by side: `quipu mcp` runs the companion
+`quipu-server --mcp-stdio` from the same directory.
 
 Anywhere else, build from source (needs a Rust toolchain):
 
@@ -70,7 +85,7 @@ quipu --version
 ```
 
 ```text
-quipu 0.8.1
+quipu 0.11.1
 ```
 
 If that prints an older version, another copy is earlier on your `PATH`:
@@ -175,8 +190,9 @@ client can use the [REST API](docs/book/src/reference/rest-api.md) directly.
 
 ## Before you start
 
-**Platforms.** The release is built for Linux x86_64. On macOS and anywhere
-else, build from source; it needs a Rust toolchain and nothing else.
+**Platforms.** Releases ship Linux (x86_64, arm64) and macOS (Apple Silicon,
+Intel) archives. Anywhere else, build from source; it needs a Rust toolchain
+and nothing else.
 
 **What each build includes.** `quipu` needs the `shacl` feature and
 `quipu-server` needs `shacl`, `onnx` and `server`. `--features full`, as in the
@@ -201,6 +217,7 @@ Caboodle installs these together and proves each one works; every tool also stan
 | [bobbin](https://github.com/scbrown/bobbin) | search and context over your repositories, served over MCP |
 | [yupana](https://github.com/scbrown/yupana) | which code calls which: the blast radius before an edit |
 | [desire-path](https://github.com/scbrown/desire-path) | the tool calls your agents get wrong, so you can fix them |
+| [seeds](https://github.com/scbrown/seeds) | the work your agents track, as facts in the graph with full history |
 
 ## Contributing
 

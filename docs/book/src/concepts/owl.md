@@ -79,11 +79,6 @@ identity itself is closed both ways and through chains: with `a sameAs b` and
 > instead, which IS materialized and is the right axiom for saying two
 > properties mean the same thing. Tracked as the named gap on aegis-yro9m.
 
-Before 2026-09-06 `owl:sameAs` was not implemented at all: assertions were
-accepted and stayed completely inert, so a reader landing on one twin never saw
-the other's facts (aegis-yro9m, filed after the identity had been asserted 191
-times on a live store).
-
 ## Materialization
 
 Materialized facts are written with `source = "owl:materialize"` into ROOT's
@@ -94,10 +89,8 @@ ontology changes, derived facts can be re-materialized.
 
 Materialization runs to **fixpoint across axiom families**: a type introduced
 by `rdfs:range` feeds the subclass closure of the next pass, and passes repeat
-until one derives nothing new. (Before 2026-08-27 it was one-shot — each
-family ran once over base facts, so composed entailments were silently
-missing and the recorded workaround was re-encoding OWL axioms as Datalog
-rules.) Each pass derives only facts not already present, so re-running
+until one derives nothing new. Each pass derives only facts not already present,
+so re-running
 materialization at fixpoint is a no-op and the report counts stay honest.
 
 Materialization can also stay **live**: with `[quipu.owl]
@@ -105,8 +98,8 @@ reactive_materialize = true` (requires the `owl` and `reactive-reasoner`
 features — release `full` builds have both), the server re-runs
 materialization whenever a committed write touches vocabulary the loaded
 ontologies mention, so the closure extends as members arrive instead of going
-stale after load. Default off: it is a per-write cost a deployment should
-choose.
+stale after load. This setting defaults to true; set it to false to disable
+the per-write materialization cost.
 
 ```turtle
 ex:fido a ex:Dog .
@@ -120,17 +113,6 @@ After materialization,
 entailment lives in the companion, not beside its premises.
 
 ## Write-Time Validation
-
-> **Enforcement is OPT-IN, and was not wired at all before 2026-08-04.**
-> This section previously stated flatly that the two constraints below "are
-> enforced at write time". That was FALSE for the shipped server:
-> `Ontology::validate()` implemented both and had **no caller** — nothing on the
-> write path invoked it, so an ontology could declare a disjointness and every
-> violating write was accepted. The caller landed on 2026-08-04.
->
-> It is recorded here rather than quietly corrected because the failure mode is
-> the doc, not the code: a capability claim in a manual is not tested, it is
-> BELIEVED, so it stops the reader checking the very thing that is broken.
 
 Two OWL constraints are enforced at write time by default when built with the
 `owl` feature. Set `owl.validate_on_write = false` only for an explicitly

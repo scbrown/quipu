@@ -14,6 +14,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "structured_query": { "type": "string", "description": "Explicit boolean field/phrase/prefix candidate expression. Requires structured=true and SQLite. Candidate selection precedes ranking; default off." },
+                    "filters": { "type": "object", "description": "Equivalent strict AST: {term:string}, {not:expr}, {and:[expr,expr]}, {or:[expr,expr]}. Mutually exclusive with structured_query." },
                     "query": { "type": "string", "description": "Natural language search query (auto-embedded when EmbeddingProvider is attached)" },
                     "mode": { "type": "string", "enum": ["semantic", "keyword", "hybrid"], "default": "semantic", "description": "Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true." },
                     "alpha": { "type":"number", "minimum":0, "maximum":1, "description":"Semantic weight. Hybrid alpha=1 preserves semantic results exactly, alpha=0 returns keyword results." },

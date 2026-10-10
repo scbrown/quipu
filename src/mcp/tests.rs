@@ -2433,6 +2433,43 @@ fn test_hybrid_search_with_sparql_filter() {
 }
 
 #[test]
+fn hybrid_scope_keeps_matches_below_the_global_top_k() {
+    let mut store = Store::open_in_memory().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &b"@prefix ex: <http://example.org/> . ex:plan ex:kind \"planned\" . ex:noise ex:kind \"ordinary\" ."[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    ).unwrap();
+    let plan = store.intern("http://example.org/plan").unwrap();
+    let noise = store.intern("http://example.org/noise").unwrap();
+    store
+        .embed_entity(plan, "planned review role", &[0.8, 0.6], "2026-01-01")
+        .unwrap();
+    store
+        .embed_entity(noise, "unrelated global leader", &[1.0, 0.0], "2026-01-01")
+        .unwrap();
+    let result = super::tools::tool_hybrid_search(
+        &store,
+        &serde_json::json!({
+            "embedding": [1.0, 0.0],
+            "sparql": "SELECT ?s WHERE { ?s <http://example.org/kind> \"planned\" }",
+            "limit": 1
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["sparql_candidates"], 1);
+    assert_eq!(
+        result["count"], 1,
+        "scope must apply before selecting top-K"
+    );
+    assert_eq!(result["results"][0]["entity"], "http://example.org/plan");
+}
+
+#[test]
 fn test_search_results_include_source_field() {
     let store = test_store_with_data();
     let eid = store.intern("http://example.org/alice").unwrap();

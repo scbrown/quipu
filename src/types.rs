@@ -31,7 +31,7 @@ impl Op {
 ///
 /// Values are stored as typed blobs with a discriminant tag so round-trip
 /// fidelity is preserved without external schema lookups.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     /// IRI reference (dictionary-encoded term id).
     Ref(i64),

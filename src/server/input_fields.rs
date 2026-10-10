@@ -6,6 +6,21 @@ use std::sync::OnceLock;
 
 pub(crate) const HTTP_ONLY_FIELDS: &[(&str, &[&str])] = &[
     (
+        "quipu_search_query",
+        &[
+            "mode",
+            "query",
+            "embedding",
+            "seed_limit",
+            "seed_variable",
+            "sparql",
+            "query_options",
+            "valid_at",
+            "entity_type",
+            "group_ids",
+        ],
+    ),
+    (
         "quipu_subscriptions",
         &[
             "action",

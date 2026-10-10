@@ -17,6 +17,22 @@ write-coverage metrics. Model and session values are not added to logs.
 
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
+## Queued write timeouts
+
+When a request budget expires before a tool write starts, the server returns
+HTTP **503**, `Retry-After: 1`, and a JSON error with `code: "write_not_started"`,
+`write_started: false`, and `waited_ms`. This covers write admission and the
+first writer acquisition of the tool endpoints, including `/episode` and
+`/set`. The check runs before signed nonce settlement. The tool did not run,
+so the caller can retry after the indicated delay.
+
+A real query timeout still returns **408** with query-specific advice. Do not
+infer that a write was unrun merely from a 408, a zero elapsed time, a transport
+failure, or a gateway error. A timeout after execution begins may have committed;
+verify the requested facts and preserve the same payload before retrying.
+These diagnostics do not change the configured request budget or bound direct
+protocol handlers that bypass tool-write admission.
+
 ## Unrecognized request fields
 
 Successful tool-backed JSON endpoints report unrecognized top-level request keys
@@ -119,6 +135,38 @@ and provisioning guidance. Clients should configure a matching
 `QUIPU_AUTH_TOKEN` or `QUIPU_AUTH_TOKEN_FILE`; retrying an absent or rejected
 credential does not repair it. Signed authentication is available only on
 signed-write routes with a registered, unexpired identity and write scope.
+
+### Provision a client credential
+
+The server administrator issues credentials through the deployment's approved
+secret distribution channel. For a shared bearer, the supplied value must match
+an active server bearer. For a named credential, the administrator registers its
+verifier and activates the validated registry before supplying the plaintext to
+the client. Installing an arbitrary token on a client cannot grant access.
+
+Shantytown and CABOODLE use `~/.config/quipu/token` as the default credential
+file. A nonempty `QUIPU_AUTH_TOKEN` overrides `QUIPU_AUTH_TOKEN_FILE`, which
+overrides this default. Files are read at request time. This is a client
+convention; the server neither reads your home directory nor distributes secrets.
+
+```sh
+install -d -m 700 "$HOME/.config/quipu" && install -m 400 /secure/issued-token "$HOME/.config/quipu/token"
+st ops doctor quipu --no-latest
+# Or, on a CABOODLE host:
+caboodle doctor
+```
+
+Keep an existing explicit file override until provisioning and rotation move
+together. Do not create independent copies that can diverge at rotation. Never
+put a token value in command arguments, logs, issues, or version control.
+
+The doctor check POSTs an empty object to `/episode`. Authentication and
+read-only policy run before episode parsing: an accepted request receives
+HTTP 400 with `invalid episode JSON: missing field ...`, and stores nothing.
+HTTP 401 means a missing or rejected bearer; HTTP 403 with
+`reason: server_is_read_only` means no credential can permit the write.
+Network failures and unexpected responses leave authorization unproven. This
+check proves access to the write handler, not a successful storage commit.
 
 ### Additive named credentials
 
@@ -468,13 +516,49 @@ Two things it does **not** promise, both still on the caller:
   nobody queries is `created` and unreachable. Ask it back the way a reader
   would.
 
+#### Work-item context without duplicate entities
+
+An episode may carry one `aegis:aboutWorkItem` edge from its generated activity
+(`episode_` plus the sanitized episode name) to an existing WorkItem IRI. This
+claims the episode's context, not that the work is implemented or complete.
+Knowledge remains reachable by joining `prov:wasGeneratedBy` to that activity.
+Do not copy the WorkItem into the knowledge graph merely to create a reference.
+
+The shipped `AboutWorkItemShape` constrains the reference to one IRI. The
+producer must first verify the target's direct WorkItem type in its authoritative
+records graph, behind a passing control, and read the edge back after writing.
+SHACL does not prove a target's type in a graph outside its validation dataset.
+The property has no global domain or range, so linking cannot manufacture the
+type assertion used by that verification. Historical episodes may omit it.
+
+Select both graphs explicitly when retrieving bead-related knowledge. For
+example, with `ex:` bound to the deployment vocabulary, join the records graph's
+`ex:WorkItem` to the knowledge graph's activity and generated entities:
+
+```sparql
+PREFIX ex: <https://example.org/vocab/>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+SELECT DISTINCT ?knowledge WHERE {
+  GRAPH <urn:example:records> {
+    <https://example.org/vocab/task-123> a ?type .
+    FILTER(?type = ex:WorkItem)
+  }
+  GRAPH <urn:example:knowledge> {
+    ?episode ex:aboutWorkItem <https://example.org/vocab/task-123> .
+    ?knowledge prov:wasGeneratedBy ?episode .
+  }
+}
+```
+
+The producer chooses the primary task explicitly; do not guess it from every
+identifier mentioned in free text. Direct `/episode` calls do not parse task
+markers automatically. This relationship does not repair historical omissions
+or establish that a tracker backlog has drained.
+
 #### Edge `relation`: which vocabularies `/episode` can write
 
-`/episode` used to force **every** relation into `aegis:` and then sanitize it, so
-`"relation": "rdfs:subClassOf"` was stored as `aegis:rdfs_subClassOf` — a predicate
-that resembles the intended one, matches nothing, and is inert — behind HTTP 200 with
-a healthy `count`. It no longer does. The policy is now: **represent the caller's
-predicate faithfully, or refuse and say which path to use.** Never silently rewrite it.
+`/episode` represents the caller's predicate faithfully or refuses it with
+an explanation of which path to use. It never silently rewrites a predicate.
 
 | `relation` | Emitted |
 |---|---|
@@ -482,7 +566,7 @@ predicate faithfully, or refuse and say which path to use.** Never silently rewr
 | `owl:sameAs`, `rdfs:seeAlso`, `rdf:*`, `skos:*`, `prov:*`, `quipu:*`, `xsd:*`, `sh:*` | verbatim, in that namespace |
 | `<http://example.org/p>` | verbatim (full IRI in angle brackets) |
 | `foo:bar` (undeclared prefix) | **400**, naming `/set` and the angle-bracket form |
-| `runs on` (would not round-trip sanitization) | **400** — it would be silently renamed |
+| `runs on` (would not round-trip sanitization) | **400** — spaces are not accepted in a bare relation |
 
 The declared prefix set is `KNOWN_PREFIXES` in `src/episode/mod.rs`, kept in lockstep
 with the `@prefix` block `episode_to_turtle` emits.
@@ -857,7 +941,8 @@ semantic and keyword endpoints retain their configured result limits.
 Both branches retain temporal, graph and provenance scopes. Intermediate hybrid
 weights use semantic type inference for both branches (`infer_types: true`);
 asserted-only hybrid type scopes are refused until both branches support them.
-Content and anchor reranking are not yet composed with intermediate fusion.
+Content reranking is not composed with intermediate fusion. Graph anchors
+compose with semantic, keyword and hybrid ranking when `anchored = true`.
 Intermediate weights require query text; an optional embedding supplies the
 semantic branch. Endpoints retain their pure modes' input requirements and
 restrictions (keyword rejects embeddings; semantic permits an embedding without
@@ -953,7 +1038,7 @@ curl -s localhost:3030/search -X POST \
 it narrows to entities whose facts trace (via `prov:wasGeneratedBy → episode →
 groupId`) to a listed group, and it **drops** ungrouped `/knot` facts (they have
 no episode to trace). `entity_type` restricts to an rdf:type IRI. See
-[group-isolation](../../design/group-isolation.md).
+[group-isolation](https://github.com/scbrown/quipu/blob/main/docs/design/group-isolation.md).
 
 > ⚠️ **The `type: A, B` in a result's `text` is NOT valid as `/episode` input.** A
 > multi-typed entity renders as `... type: Feature, Tool, Concept`, and that string
@@ -997,14 +1082,31 @@ facts (`valid_at` applies). `owl:sameAs` costs no hop. `rdf:type`,
 `rdfs:subClassOf`, PROV links, `distinctFrom`, `mentions` and `inDocument` are
 not traversed. Without that, everything is two hops from everything through a
 class, an activity or a document. A node with more than 150 edges is reached
-but not expanded; the anchor itself is always expanded. The walk stops at 5,000
+but not expanded along ordinary edges; zero-cost aliases remain traversable.
+Non-anchor reads fetch at most 151 object edges per direction before applying
+the hub rule. At the outer hop ring, only alias edges are queried. The anchor
+read is bounded by the node budget, and a possibly incomplete ring is reported
+as truncated. The walk stops at 5,000
 nodes. The response's `anchor` block reports `reached`, `hubs_not_expanded`,
 `truncated` and `truncated_at_hop`. A truncated ring is never presented as
 complete.
 
 Each result gains `hops` (null when unreachable) and `text_score` (the
-unanchored score). The 200 best unanchored candidates are reordered, so an
-entity outside that pool is not added by being near the anchor.
+blended text score before hop ranking). Global text candidates and candidates
+restricted to the bounded neighbourhood are unioned before fusion. Each source
+gets half the configured candidate pool; each text branch is capped at 1,000.
+This admits a near text match that falls below the global pool. Normalization
+and ranks use that bounded union. Anchored result limits above 1,000 are refused.
+Explicit named-graph anchors remain unsupported; traversal is ROOT-only.
+Malformed anchors and traversal options are refused.
+
+The CLI exposes the same controls:
+
+```bash
+quipu search "backup failure" --mode hybrid --alpha 0.5 --fusion rrf \
+  --anchor https://example.org/host --max-hops 3 --anchor-mode sort \
+  --direction both --decay 0.5 --explain
+```
 
 ### `POST /hybrid_search`
 
@@ -1244,13 +1346,13 @@ List schema-evolution proposals. Body: optional `status`
 
 ### `POST /proposal/accept`
 
-Accept a pending proposal. Body: `id`, optional `decided_by`, `note`,
-`timestamp`.
+Accept a pending proposal. Body: `id`, `decided_by` (required), optional
+`note`, `timestamp`.
 
 ### `POST /proposal/reject`
 
-Reject a pending proposal. Body: `id`, `note`, optional `decided_by`,
-`timestamp`.
+Reject a pending proposal. Body: `id`, `note`, `decided_by` (required),
+optional `timestamp`.
 
 ### `POST /entity_history`
 
@@ -1334,8 +1436,13 @@ trigger scans. WAL size still comes from a current filesystem metadata read.
 `quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
 including pending requests, cancelled requests and metrics scrapes. It has no
 labels and resets when the process restarts. Use it to measure arrival rate:
-`quipu_http_requests_total` and `quipu_http_client_requests_total` count completed
-responses, so low completion rates alone do not establish low traffic.
+`quipu_http_requests_total` and `quipu_http_client_requests_total` count terminal
+request observations, including dropped request futures with synthetic status
+499. Endpoint histograms and client-duration counters include elapsed time until
+that drop. `quipu_http_requests_cancelled_total{client,endpoint}` separately
+counts dropped futures; its client budget is 31 named callers plus `other`, and
+endpoint labels use route templates. Low terminal rates alone do not establish
+low traffic.
 
 `quipu_http_auth_refusals_total{client,endpoint,method,expected_probe}` counts
 completed HTTP 401 responses, including protected GET requests. Observed
@@ -1392,6 +1499,35 @@ adds `status`, `duration_ms`, and the actual `auth_outcome`; `/query` responses
 also add `query_shape` and `result_size`. Logs contain normalized attribution
 and bounded metadata, never the Authorization header or response body. Slow or
 failed query text retains its existing separate diagnostic line.
+
+Dropping a polled request future also emits one `request_complete` with
+`completion_outcome: "cancelled"`, synthetic `status: 499` and elapsed time.
+No HTTP 499 response is delivered. Authorization remains `pending` and result
+metadata is absent because no response established those values. Normal responses
+use `completion_outcome: "response"`. This records abandonment of the HTTP
+future, including cancellation during shutdown; it does not prove that a blocking
+worker stopped or that a write did not commit. Response-body streaming after the
+handler returns is outside this measurement.
+Completed `/search`, `/hybrid-search`, and `/search-query` pipelines exceeding 500 ms also emit
+`search_phase_slow`. This anonymous record reports `pipeline_ms`, combined
+`admission_dispatch_ms`, and `phase_ms` for embedding, reader acquisition,
+tool execution, SQLite scan/decode/scoring, sorting, and survivor metadata.
+Tool time contains the SQLite phases; these overlapping values must not be
+summed. Admission includes the asynchronous permit wait and blocking-pool
+dispatch, which this record cannot separate. The pipeline excludes HTTP body
+parsing and response serialization and therefore differs from request duration.
+Missing phases are `null`, including embedding for supplied-vector requests.
+
+On Linux, `thread_logical_read_bytes` and `thread_physical_read_bytes` are
+counter deltas from the same blocking thread, including embedding and retrieval.
+They are `null` with `thread_io_known=false` if unavailable or inconsistent;
+physical reads of zero can mean cached reads. They are not process totals and
+do not count work performed on other threads. Records contain no query text,
+entity names, caller labels, embeddings, or headers. Errors retain the phases
+that ran and set `ok=false`. Cancellation before blocking work starts emits
+no phase record; panics are not completion records. Library and CLI vector
+calls outside these HTTP handlers do not emit records. This is diagnostic
+evidence for individual slow requests, not proof of a historical cause.
 
 ### UI assets (not documented individually)
 
@@ -1744,3 +1880,11 @@ manifest; `{"queries": {...}}` runs the batch and returns candidates per
 query, scored the way `/resolve` scores.
 
 RDF `/knot` loads accept `blank_node_scope`: distinct IDs separate repeated identical input; the same ID shares blank nodes across graphs only for byte-identical input. By default, whole-document bytes and destination graph define scope.
+
+### POST /search_query
+
+Search first, then evaluate SELECT from at most100 distinct seed IRIs.
+Keyword mode defaults and needs no embeddings; hybrid fuses successful lexical
+and semantic retrieval with reciprocal rank fusion. Seed ranks and explicit
+bounded completeness accompany the ordinary query result. See
+[the request and scope contract](../../../design/search-rooted-sparql.md).

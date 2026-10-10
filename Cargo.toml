@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.11.1"
+version = "0.12.0"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -101,6 +101,7 @@ tar = "0.4"
 # format, on native and wasm alike.
 rusqlite = { version = "0.40", features = ["bundled", "functions", "hooks", "serialize"] }
 thiserror = "2"
+bigdecimal = "0.4.10"
 oxrdf = { version = "0.3", features = ["rdfc-10"] }
 oxttl = "0.2"
 oxrdfio = "0.2"

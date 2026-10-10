@@ -59,6 +59,27 @@ The common verifier in
 boundary. Share import reaches it through
 [`src/share_attestation.rs`](../../src/share_attestation.rs).
 
+`quipu-write-v2` (aegis-72cpbx) is v1 plus an **audience**: the receiving
+store's `store_id`, which `GET /stats` reports. A v1 message names no server,
+so a write one quipu accepted could be relayed to another quipu that trusts
+the same key, and it verified there because nonces are per store. Under v2 the
+server signs its OWN id into the message and compares the envelope's
+`audience` claim against it first. A relay is refused as `invalid` (audience
+mismatch). An envelope whose claim was rewritten to the relay target passes
+that comparison and fails the signature (`badsig`). A v1 envelope that carries
+an `audience` is `invalid`, because v1 never signs that field. The pinning
+regressions are in
+[`tests/signed_writes_server.rs`](../../tests/signed_writes_server.rs)
+(`a_v2_write_signed_for_one_store_is_refused_by_another_as_invalid`,
+`swapping_the_envelope_audience_to_the_relay_target_fails_the_signature`),
+and the published vector is `tests/vectors/write-attestation-v2.json`.
+v1 stays accepted, and its v1 relay is pinned by
+`baseline_a_v1_write_accepted_by_one_store_is_accepted_by_another`; the v1
+sunset is a separate decision. **Limit:** `store_id` is lineage, not identity.
+A file-level copy of a store (a backup restore or a fork) keeps the id, so v2
+does not separate a store from its own copy. Those two already trust the same
+bindings.
+
 Session bindings and spent nonces live in protected SQLite tables
 ([`src/store/attestation.rs`](../../src/store/attestation.rs)), separate from
 graph-writable `VerifierRegistration` facts. Nonce spending participates in
@@ -199,6 +220,65 @@ as-of replay extended to the trust root — GS6 for signatures. Rotation
 is a close-then-insert; revocation is a close; expiry is absence.
 CEN-M2 grows a column: verdicts whose seal re-verifies as-of.
 
+### Sealed decisions (aegis-kzt0ql.9.3) — sign the whole decision
+
+> **Implemented** in [`src/governance/decision_seal.rs`](../../src/governance/decision_seal.rs).
+> `decision-v1` signs `evidenceHash|outcome|by` only, so a decision's
+> question, options, scope and expiry could be rewritten after signing and
+> the ruling would still stand (pinned by
+> `v1_decisions_do_not_seal_their_content_use_decision_seal`).
+> `quipu-decision-v2` seals the content:
+>
+> 1. `present` computes `sha256` over the RDFC-1.0 canonical form of the
+>    decision's concise bounded description (its facts in ROOT, plus the
+>    blank nodes it reaches; only attestation fields are excluded), mints a
+>    nonce, and records an `aegis:DecisionPresentation`.
+> 2. The approver signs
+>    `quipu-decision-v2|quipu-verdict|decision|digest|outcome|nonce|expiresAt`.
+> 3. `attest` RECOMPUTES the digest from the stored decision and never takes
+>    a supplied one. It checks the digest equals the frozen one, checks the
+>    outcome is a declared `aegis:option`, and verifies against a key
+>    registered now for `aegis:decisionPolicy`. It then spends the nonce and
+>    records the `aegis:DecisionVerdict` in ONE savepoint (`decision_nonces`,
+>    never pruned).
+> 4. `verify_recorded` recomputes the digest from the decision as it stands
+>    now (so an edit after signing invalidates the verdict) and verifies as
+>    of the recorded signature (S1). It also requires that `attest` admitted
+>    the verdict: the verdict is `decision_verdict_<nonce>`, the nonce's
+>    spend row names this decision and this verdict, the spending
+>    transaction wrote every load-bearing verdict fact (`forPresentation`,
+>    `outcome`, `verifier`, `sealSignature`), and it was recorded before
+>    `presentationExpiresAt`. Verdicts are graph-writable until S3, so
+>    without this a hand-written verdict carrying a captured signature (one
+>    `attest` refused as expired, or never received) would verify, and so
+>    would a second verdict on a spent nonce (wu-rev-345 F1).
+>
+> **Limits of the seal (wu-rev-345 F2, F4).** The digest covers the
+> decision's own ROOT facts and their blank-node closure, nothing more.
+> An object that is an IRI (an `aegis:authorizedAction <x>`, a warrant-scope
+> entity) is sealed BY REFERENCE: a later change to that entity's own facts
+> is not detected. Facts about the decision in NAMED graphs are not sealed,
+> because `entity_facts` reads ROOT; a reader that resolves decision
+> content across graphs can read something other than what was sealed.
+> .9.6 should consider sealing the closure of the scope and action
+> predicates too. The digest also depends on the lexical form quipu emits
+> for each literal, so a future literal re-encoding (e.g. numeric
+> identity, #320) changes every sealed digest and turns open presentations
+> into `ContentChanged`. That fails closed.
+>
+> **Wiring rule (F3).** `present(now)` and `attest(now)` have no production
+> caller yet. When they are exposed over MCP or REST, `now` MUST be the
+> server clock and never input, or the expiry becomes caller-controlled
+> (the same rule as S1's caller-supplied instant).
+>
+> The seal uses its own predicates where a shared one carries an
+> `rdfs:domain` that inference would apply (`decisionPolicy`,
+> `presentationExpiresAt`, `sealSignature`). Presentation writes are
+> graph-writable until S3 gates them. That cannot forge a verdict (the
+> digest is recomputed and the key is checked), but an agent could choose
+> a presentation's nonce or expiry, and the approver sees both in the
+> challenge.
+
 ### S2 — the scheme as a versioned fact
 
 `aegis:SigningScheme` facts carry the canonical message format, hash
@@ -208,6 +288,52 @@ citing a retired version. A `v2` rollout becomes a bitemporal amendment
 instead of a synchronized multi-repo deploy.
 
 ### S3 — registry amendments through the gate
+
+> **Implemented** in [`src/governance/trust_root.rs`](../../src/governance/trust_root.rs)
+> (aegis-kzt0ql.9.4). Before it, a writer holding the bearer could
+> register its own key as `verifier "stiwi"` for a decision policy and
+> the verdict verified: measured, the forged registration landed with
+> every governance flag on. `enforce_graph_authority` could not have
+> stopped it, because nothing in production sets a principal chain.
+>
+> - **Two tiers.** A registration is human-tier iff it carries an
+>   asserted `aegis:trustTier "human"` in ROOT (`Scope::HumanTier`, a SQL
+>   join over asserted facts, so neither inference nor a named graph can
+>   supply it). The decision seal and the escalation router verify ONLY
+>   against human-tier keys. Agent registrations (shuttle's identity
+>   graph, certifiers, the MCP verdict-verify tool) are unchanged: still
+>   writable, and never able to verify a human decision.
+> - **The gate compares state.** Every `transact` snapshots the human-tier
+>   registry (registration -> RDFC digest of its ROOT content, excluding
+>   `aegis:signCount`) before staging and recomputes it after. Any
+>   difference, including one no datum names (a functional-property
+>   supersede), must be covered by an `aegis:RegistryAmendment` in the same
+>   write, signed over
+>   `quipu-registry-amendment-v1|<store id>|<registration>|<digest or "revoked">|<nonce>`
+>   by a key that was human-tier and attested `urn:quipu:policy:trust-root`
+>   BEFORE the write (so a key cannot enrol itself). The nonce is spent in
+>   the write's savepoint (`registry_amendment_nonces`, never pruned).
+>   `trust_root::digest_after` computes the digest a client must sign.
+> - **Always on.** No config flag, and not skipped while recording
+>   verdicts: a switch an agent can flip is not a trust root.
+> - **Bootstrap.** `quipu trust-root bootstrap` (CLI only, no REST/MCP)
+>   enrols the first key with proof of possession, and refuses if a
+>   human-tier marker was EVER asserted in ROOT (full bitemporal history).
+>   A second device is an amendment signed by the first. The ceremony is
+>   [`docs/runbooks/trust-root-ceremony.md`](../runbooks/trust-root-ceremony.md).
+>
+> **Stated limits.** Proof of possession proves the key, not the person:
+> until the ceremony, anyone who can run the CLI against the store file
+> could bootstrap their own key first, and "once ever" would then lock the
+> forgery in. The runbook's fingerprint comparison and a standing alert on
+> the `aegis:TrustRootBootstrap` record cover that window. Root on the
+> quipu host (the DB file, the binary, `import`/`unpack`/`restore`,
+> `fork create`, a physical delete) defeats all of this; the gate
+> constrains graph writers, not hosts. The network paths that skip
+> `transact` (overlay tombstones, freeze, thaw) cannot reach ROOT, which
+> is the only graph the human tier reads. Amendments and the bootstrap
+> PoP verify ed25519 today; the hardware schemes (.9.2) plug into the same
+> verification point.
 
 "Who signs the registry" (deferred in v1) gets the same answer policies
 got: registration writes go through the write gate under a

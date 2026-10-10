@@ -391,6 +391,102 @@ fn held_histogram_shows_a_per_request_bound_a_total_cannot() {
 }
 
 #[test]
+fn caller_histograms_distinguish_equal_means_and_aggregate_tasks() {
+    let m = Metrics::default();
+    for (task, steady, tail) in [("first", 0.75, 0.25), ("second", 0.75, 1.25)] {
+        m.observe_client("steady", task, "/search", steady);
+        m.observe_client("tail", task, "/search", tail);
+        m.observe_request("/search", 200, tail);
+    }
+    let text = m.render(0, 0, 0, None);
+    let name = "quipu_http_client_request_duration_seconds";
+    for client in ["steady", "tail"] {
+        assert!(text.contains(&format!(
+            "{name}_sum{{client=\"{client}\",endpoint=\"/search\"}} 1.5"
+        )));
+        assert!(text.contains(&format!(
+            "{name}_count{{client=\"{client}\",endpoint=\"/search\"}} 2"
+        )));
+        assert!(text.contains(&format!(
+            "{name}_bucket{{client=\"{client}\",endpoint=\"/search\",le=\"+Inf\"}} 2"
+        )));
+    }
+    for (client, edge, count) in [
+        ("steady", "0.25", 0),
+        ("tail", "0.25", 1),
+        ("steady", "0.75", 2),
+        ("tail", "0.75", 1),
+        ("tail", "1.5", 2),
+        ("tail", "5", 2),
+    ] {
+        assert!(text.contains(&format!(
+            "{name}_bucket{{client=\"{client}\",endpoint=\"/search\",le=\"{edge}\"}} {count}"
+        )));
+    }
+    assert!(
+        text.lines()
+            .filter(|l| l.starts_with(name))
+            .all(|l| !l.contains("task="))
+    );
+    // The global family keeps its labels and receives the same new boundaries.
+    assert!(text.contains(
+        "quipu_http_request_duration_seconds_bucket{endpoint=\"/search\",le=\"0.25\"} 1"
+    ));
+    assert!(
+        text.contains(
+            "quipu_http_request_duration_seconds_bucket{endpoint=\"/search\",le=\"1.5\"} 2"
+        )
+    );
+}
+
+#[test]
+fn caller_histogram_cap_agrees_with_counters_across_tasks_and_routes() {
+    let m = Metrics::default();
+    for i in 0..MAX_CLIENTS * 4 {
+        for route in ["/search", "/query"] {
+            m.observe_client(&format!("caller{i}"), &format!("task{i}"), route, 31.0);
+        }
+    }
+    let text = m.render(0, 0, 0, None);
+    let labels = |prefix: &str| -> BTreeSet<String> {
+        text.lines()
+            .filter(|l| l.starts_with(prefix))
+            .map(|l| {
+                l.split("client=\"")
+                    .nth(1)
+                    .unwrap()
+                    .split('"')
+                    .next()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect()
+    };
+    let histogram = "quipu_http_client_request_duration_seconds";
+    let clients = labels(&format!("{histogram}_count"));
+    assert_eq!(clients.len(), MAX_CLIENTS);
+    assert!(clients.contains("other"));
+    assert_eq!(clients, labels("quipu_http_client_requests_total"));
+    let count_lines: Vec<_> = text
+        .lines()
+        .filter(|l| l.starts_with(&format!("{histogram}_count")))
+        .collect();
+    assert_eq!(count_lines.len(), MAX_CLIENTS * 2);
+    let total: u64 = count_lines
+        .iter()
+        .map(|l| l.rsplit(' ').next().unwrap().parse::<u64>().unwrap())
+        .sum();
+    assert_eq!(total as usize, MAX_CLIENTS * 8);
+    // Above the largest finite boundary: not lost, and not counted at 30s.
+    assert!(text.contains(&format!(
+        "{histogram}_bucket{{client=\"caller0\",endpoint=\"/search\",le=\"30\"}} 0"
+    )));
+    assert!(text.contains(&format!(
+        "{histogram}_bucket{{client=\"caller0\",endpoint=\"/search\",le=\"+Inf\"}} 1"
+    )));
+}
+
+#[test]
 fn positive_auth_diagnostic_failures_remain_unexpected() {
     let m = Metrics::default();
     m.observe_auth_result("auth-diagnostic", "/shapes", "POST", 401);

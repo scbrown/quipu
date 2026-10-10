@@ -14,6 +14,8 @@ use rusqlite::{OptionalExtension, params};
 use crate::error::Result;
 use crate::store::Store;
 
+mod scoped;
+
 /// Schema for the vectors table, created alongside the fact log.
 pub(crate) const VECTORS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS vectors (
@@ -253,6 +255,7 @@ impl Store {
             "SELECT entity_id, embedding FROM vectors WHERE valid_to IS NULL"
         };
 
+        let scan_trace = crate::search_trace::phase(crate::search_trace::Phase::Scan);
         let mut stmt = self.conn.prepare(sql)?;
         let mut rows = if let Some(vt) = valid_at {
             stmt.query(params![vt])?
@@ -283,6 +286,8 @@ impl Store {
             scored.push((entity_id, cosine_similarity(query_embedding, &stored)));
         }
 
+        drop(scan_trace);
+        let sort_trace = crate::search_trace::phase(crate::search_trace::Phase::Sort);
         // Sort by score descending, take top N.
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         // With a `keep` predicate, walk the WHOLE ranked list and keep the first
@@ -307,6 +312,8 @@ impl Store {
                 kept
             }
         };
+        drop(sort_trace);
+        let _metadata_trace = crate::search_trace::phase(crate::search_trace::Phase::Metadata);
 
         // Fetch text + validity for the survivors only (same validity filter, so
         // the row scored is the row read back).

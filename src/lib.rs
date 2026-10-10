@@ -22,14 +22,17 @@ pub mod lattice;
 pub mod lattice_fold;
 pub mod lattice_kind;
 pub mod lexical;
+mod literal_identity;
 pub mod mcp;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
 pub mod namespace;
+mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
 mod search_graph_scope;
+pub mod search_trace;
 pub mod transaction_auth;
 pub mod write_kind;
 pub mod write_provenance;
@@ -68,6 +71,8 @@ pub mod session_attestation;
 #[cfg(feature = "shacl")]
 pub mod shacl;
 #[cfg(feature = "shacl")]
+mod shacl_admission;
+#[cfg(feature = "shacl")]
 pub mod shacl_context;
 pub mod share;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,
@@ -86,6 +91,8 @@ mod git_merge_alias;
 mod git_merge_repo;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_restore;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod project_graph;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
 pub mod share_completeness;
@@ -242,3 +249,7 @@ pub use vector_lance::LanceVectorStore;
 /// Native MCP protocol adapters over the governed HTTP application.
 #[cfg(feature = "mcp")]
 pub mod mcp_transport;
+
+/// Bounded search-seeded SPARQL SELECT queries.
+pub mod search_query;
+pub use search_query::tool_search_query;

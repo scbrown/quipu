@@ -137,7 +137,12 @@ pub fn eval_pattern_seeded(
             // aegis-tl2q4j: narrow the scan by the filter's string tests.
             let narrowed = super::string_pushdown::narrowed(expr, inner, inner_seed, ctx);
             let inner_ctx = narrowed.as_ref().unwrap_or(ctx);
-            let (rows, vars) = eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?;
+            let (rows, vars) = match super::status_pushdown::candidates(
+                store, expr, inner, inner_ctx, inner_seed,
+            )? {
+                Some(candidates) => candidates,
+                None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+            };
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {
                 // A pure-Rust filter over pre-materialized rows touches
@@ -335,6 +340,11 @@ pub fn eval_pattern_seeded(
             variables,
             aggregates,
         } => {
+            if let Some(result) =
+                super::count_stream::try_evaluate(store, inner, variables, aggregates, ctx, seed)?
+            {
+                return Ok(result);
+            }
             let (rows, _) = eval_pattern_seeded(store, inner, ctx, seed)?;
             Ok(super::group::evaluate(store, rows, variables, aggregates))
         }

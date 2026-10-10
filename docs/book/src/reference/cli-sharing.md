@@ -1,6 +1,6 @@
 # CLI: sharing, import and legacy packs
 
-Reference for the commands behind [Sharing & Federation](../sharing/README.md).
+Reference for the commands behind [Sharing & Federation](../sharing/index.md).
 Every flag here is checked against `quipu --help` by `tests/cli_doc_drift.rs`, so
 this page cannot quietly fall behind the binary.
 
@@ -14,7 +14,7 @@ interchange format.
 
 ## `quipu share` — produce a share
 
-Prerequisite: [load the identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+Prerequisite: [load the identifier-policy catalogue](../sharing/index.md#prepare-an-outward-share)
 and the shapes governing your data. The default destination is outward.
 An empty block-tier catalogue exits 2 (cannot verify); a matching identifier
 exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this check.
@@ -201,6 +201,15 @@ share graph hash mismatch: manifest=… actual=…
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
 result, then sends that result through the same verified in-memory import path.
 
+Loaded local shapes determine admission. Their explicit
+`quipu:onViolation "emit"` diagnostics are advisory; reject-policy Violations
+quarantine the share. Missing policies mean reject, and unknown or conflicting
+policy values refuse. Carried shapes cannot downgrade a local reject policy.
+The report keeps strict `conforms` separate from `blocking`, with complete
+diagnostics and `advisory_results`. An emit-only Violation can therefore produce
+`conforms: false` with `blocking: false`. Vocabulary, integrity, trust and explicit
+promotion requirements still apply.
+
 ## `quipu import promote` — admit a staged share into ROOT
 
 ```text
@@ -209,7 +218,45 @@ quipu import promote <share-id> [--actor <id>] [--db <path>]
 
 The second, separate verb. Nothing reaches ROOT because a file arrived; it
 reaches ROOT because someone ran this. Keeping admission in its own command is
-the point rather than an inconvenience — see the [primitive](../sharing/README.md).
+the point rather than an inconvenience — see the [primitive](../sharing/index.md).
+
+## The project graph: `quipu share --project` and `quipu load`
+
+```text
+quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]
+quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]
+```
+
+A repository commits its project's graph under `.quipu/`, tool-neutral:
+
+| path | committed | what |
+|---|---|---|
+| `.quipu/project` | yes | one line, the project id; the graph is `urn:quipu:project:<id>` |
+| `.quipu/graph/` | yes | the share bundle for that graph (`manifest.json`, `export.nt`, …) |
+| `.quipu/.gitignore` | yes | written by quipu: an allow-list for the two above |
+| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and the host's PRIVATE signing key |
+
+`share --project <id>` names the project once (it is then committed) and
+re-shares the graph into `.quipu/graph/`. Re-running it replaces the bundle;
+it never re-points a repository at a different id. The outward scrub applies
+exactly as for any share, because the repository may be public; use
+`--destination internal` only for a private one.
+
+`load <dir>`, on a directory holding a share manifest, is the one command a
+fresh clone needs:
+
+```bash
+git clone <repo> && cd <repo>
+quipu load .quipu/graph --db .quipu/local.db
+```
+
+It runs the ordinary [`import`](#quipu-import--receive-a-share-into-quarantine),
+with every gate import has, and then promotes into the bundle's own graph
+instead of ROOT, as a diff. A re-load after `git pull` changes only what
+changed; an unchanged bundle opens no transaction. A quarantined import loads
+nothing. `load <file.ttl>` still means `knot`.
+
+The server equivalent is `POST /import` of the same bundle, which stages it.
 
 ## `quipu status` — has this share diverged?
 

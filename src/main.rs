@@ -24,6 +24,8 @@
 //!   quipu gate shadow ...                 Judge a candidate policy set over recorded history (never writes)
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu audit namespace                                   Report base-namespace drift
+//!   quipu audit replay <verdict> [--delta <file>]           Re-derive a gate decision as of its tx
+//!   quipu audit quarantine [list|purge]                     Refused-attempt evidence behind verdicts
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
 //!   quipu db attach --list                List the databases mounted alongside this store
 //!   quipu pack <graph-iri> --out <file> [--space N]  Export a graph as an attachable pack
@@ -61,8 +63,10 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_quarantine;
 mod cli_search;
 mod cli_share_diff;
+mod cli_trust_root;
 mod hook_session_capture;
 mod hooks_install;
 
@@ -128,9 +132,20 @@ fn main() {
     match cmd {
         "mcp" => cli_mcp::run(&args[2..]),
         "demotions" => cli_demotions::run(&args, db_path),
+        // `load <dir>` with a share manifest loads a project bundle into its own
+        // graph (aegis-w3k75d.11). A directory can never be knotted, so the
+        // file form keeps meaning exactly what it did.
+        "load"
+            if args
+                .get(2)
+                .is_some_and(|a| std::path::Path::new(a).join("manifest.json").is_file()) =>
+        {
+            cli_pack::cmd_load_bundle(&args, db_path);
+        }
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
+        "trust-root" => cli_trust_root::cmd_trust_root(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
@@ -374,12 +389,17 @@ COMMANDS:
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
     quipu share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
+    quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]   commit this repo's project graph to .quipu/graph
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     quipu attest list [--db <path>]
+    quipu trust-root challenge --verifier NAME --public-key HEX [--db <path>]
+    quipu trust-root bootstrap --verifier NAME --public-key HEX --pop-signature HEX [--attests POLICY]... [--db <path>]
+    quipu trust-root status [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
     quipu import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
     quipu import delta <parent-share> <delta-share> [--actor <id>]
+    quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]   import a project bundle (.quipu/graph) into its own graph
     quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
     quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
@@ -396,8 +416,11 @@ COMMANDS:
     quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
     quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
-    quipu audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--json] [--db <path>]
+    quipu audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--yupana <exe>] [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
+    quipu audit replay <verdict> [--delta <file>] [--json] [--db <path>]
+    quipu audit quarantine [list [--verdict <iri>]] [--json] [--db <path>]
+    quipu audit quarantine purge (--graph <iri>|--before <ts>|--older-than <days>|--all) [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
     quipu hook session-capture   Stop hook: solicit one knowledge episode per session (stdin JSON)
     quipu hooks bundle           print quipu's hook bundle (st.hook-bundle/1)

@@ -1,8 +1,9 @@
 # MCP Tools
 
 Quipu exposes its API as MCP (Model Context Protocol) tools for agent
-integration. These tools are available when Quipu runs as a Bobbin subsystem
-or standalone MCP server.
+integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
+`quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
+`knowledge_*` tools, not these.)
 
 The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
 **50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
@@ -340,8 +341,8 @@ Two properties worth knowing before using it:
 
 - **`planned: 0` is a real answer.** It means the named source owns no live
   facts. `quipu_knot` reports `replaced: true, count: 0` both for a retraction
-  that removed nothing and for one that emptied a graph, so this question
-  previously had no answer.
+  that deletes nothing and for one that empties a graph. Read `planned`
+  to distinguish those cases.
 - **Re-keying order is retract FIRST, then re-promote.** The store dedups an
   identical triple to one row carrying one source, and the existence check
   ignores the transaction source — so asserting canonically first is skipped as
@@ -444,6 +445,19 @@ without one it errors naming the missing `[quipu.embedding]` configuration.
 The response carries an `embeddings` block (`configured`, `embedded_entities`)
 so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
+
+For the built-in SQLite backend, an explicit SPARQL scope is scored before
+selecting the top results. Narrow scopes to at most 1,000 candidate rows,
+resolved entity IDs, and eligible embedding rows; larger scopes return an error.
+Historical ranking returns the text from the exact embedding version scored.
+Query and stored vectors must contain finite values with matching dimensions;
+the SQLite scoped path accepts up to 16,384 dimensions. An empty eligible scope
+returns no results. SPARQL candidates use the requested valid time and a bounded
+query budget. Unscoped ranking and delegated backend ranking retain their
+existing implementation; candidate-before-top-K is a SQLite guarantee.
+Scoring reads the local SQLite vector table, including rows keyed by composed
+alias IDs; it does not scan vector tables in attachments. The candidate, scoring,
+and text reads do not provide one snapshot across concurrent writes.
 
 ### `quipu_graph`
 
@@ -917,7 +931,7 @@ Accept a pending schema proposal. Shape proposals are validated before writing.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to accept |
-| `decided_by` | No | Identity of the approver |
+| `decided_by` | Yes | Identity of the approver |
 | `note` | No | Optional acceptance note |
 | `timestamp` | No | ISO-8601 timestamp |
 
@@ -929,7 +943,7 @@ Reject a pending schema proposal with a reason.
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to reject |
 | `note` | Yes | Reason for rejection |
-| `decided_by` | No | Identity of the rejector |
+| `decided_by` | Yes | Identity of the rejector |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_resolve_entity`

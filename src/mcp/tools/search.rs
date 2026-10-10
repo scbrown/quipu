@@ -14,20 +14,25 @@ use crate::types::Value;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    if input.get("structured_query").is_some() || input.get("filters").is_some() {
+        return super::structured_search::search(store, input);
+    }
     super::search_fusion::dispatch_search_fusion(store, input)
 }
 
 pub(super) fn semantic_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    semantic_response_in(store, input, None)
+}
+
+pub(super) fn semantic_response_in(
+    store: &Store,
+    input: &JsonValue,
+    candidates: Option<&std::collections::HashSet<i64>>,
+) -> Result<JsonValue> {
     let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
     let content_ranking = super::search_ranking::ranking_mode(input)?;
-    let anchored = super::search_anchor::AnchorRequest::parse(input)?;
-    if graph_scope.explicit && (content_ranking || anchored.is_some()) {
+    if graph_scope.explicit && content_ranking {
         return Err(Error::InvalidValue("explicit graph scope currently supports semantic or keyword ranking, not ROOT content/anchor ranking".into()));
-    }
-    if anchored.is_some() && !store.search_config().anchored {
-        return Err(Error::InvalidValue(
-            "anchored search is disabled on this server ([quipu.search] anchored = false)".into(),
-        ));
     }
     let explicit_embedding: Option<Vec<f32>> = input
         .get("embedding")
@@ -94,11 +99,7 @@ pub(super) fn semantic_response(store: &Store, input: &JsonValue) -> Result<Json
     // Oversample in both paths: an entity has one embedding row per fact/text,
     // so the raw top-N can be several rows of the same entity (aegis-a1s5).
     // Fetching extra candidates leaves room to dedupe down to `limit` entities.
-    let mut oversampled = store.search_config().oversample(limit);
-    if anchored.is_some() {
-        // The anchor reorders; give it a pool to reorder (the .8 baseline's).
-        oversampled = oversampled.max(ANCHOR_POOL);
-    }
+    let oversampled = store.search_config().oversample(limit);
 
     // The in-scope predicate is applied while walking the full ranking
     // (vector_search_where), so a small graph or group is never starved by a
@@ -108,6 +109,9 @@ pub(super) fn semantic_response(store: &Store, input: &JsonValue) -> Result<Json
         .then(|| graph_scope.entities(store, valid_at))
         .transpose()?;
     let mut keep = |entity_id: i64| -> Result<bool> {
+        if candidates.is_some_and(|ids| !ids.contains(&entity_id)) {
+            return Ok(false);
+        }
         let in_graph = if let Some(entities) = &graph_entities {
             entities.contains(&entity_id)
         } else {
@@ -136,17 +140,6 @@ pub(super) fn semantic_response(store: &Store, input: &JsonValue) -> Result<Json
         .collect();
     let matches =
         super::search_ranking::rank(store, matches, content_ranking, valid_at, query_text)?;
-    if let Some(req) = anchored {
-        return anchored_response(
-            store,
-            &matches,
-            &req,
-            limit,
-            valid_at,
-            prefixes.as_ref(),
-            scope.is_some(),
-        );
-    }
 
     let results: Vec<JsonValue> = matches
         .iter()
@@ -187,6 +180,14 @@ pub(super) fn semantic_response(store: &Store, input: &JsonValue) -> Result<Json
 }
 
 pub(super) fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    keyword_response_in(store, input, None)
+}
+
+pub(super) fn keyword_response_in(
+    store: &Store,
+    input: &JsonValue,
+    candidates: Option<&std::collections::HashSet<i64>>,
+) -> Result<JsonValue> {
     let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
     if !store.search_config().keyword {
         return Err(Error::InvalidValue(
@@ -229,6 +230,17 @@ pub(super) fn keyword_response(store: &Store, input: &JsonValue) -> Result<JsonV
         infer_types,
         Some(&graph_scope),
     )?;
+    let scope = if let Some(ids) = candidates {
+        let neighbours = ids
+            .iter()
+            .map(|id| store.resolve(*id))
+            .collect::<Result<std::collections::HashSet<_>>>()?;
+        Some(scope.map_or(neighbours.clone(), |allowed| {
+            allowed.intersection(&neighbours).cloned().collect()
+        }))
+    } else {
+        scope
+    };
     let matches = store.keyword_search_hits_in_graphs(
         query,
         limit,
@@ -463,40 +475,23 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
     // Try to extract a pushdown filter from SPARQL type constraints.
     let pushdown = sparql_filter.and_then(extract_type_filter);
 
-    // Step 1: If SPARQL filter provided, get candidate entity IRIs for post-filter.
-    // This is always needed as a fallback (SQLite) and safety net (complex SPARQL).
-    let candidate_iris: Option<Vec<String>> = if let Some(sparql) = sparql_filter {
-        let result = crate::sparql::query(store, sparql)?;
-        let mut iris = Vec::new();
-        for row in result.rows() {
-            if let Some(first_var) = result.variables().first() {
-                match row.get(first_var) {
-                    Some(crate::types::Value::Ref(id)) => {
-                        iris.push(store.resolve(*id)?);
-                    }
-                    Some(crate::types::Value::Str(s)) => {
-                        iris.push(s.clone());
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Some(iris)
-    } else {
-        None
-    };
+    let _budget = super::search_scoped::request_budget(store);
+    let candidate_iris = sparql_filter
+        .map(|sparql| super::search_scoped::candidates(store, sparql, valid_at))
+        .transpose()?;
 
-    // Step 2: Vector search with predicate pushdown (LanceDB) or oversample (SQLite).
-    let all_matches = store.vector_store().vector_search_filtered(
+    // Step 2: SQLite scores scoped candidates before top-K; other backends retain pushdown.
+    let all_matches = super::search_scoped::matches(
+        store,
         &embedding,
         limit,
         pushdown.as_deref(),
         valid_at,
+        candidate_iris.as_deref(),
     )?;
 
     // Step 3: Post-filter by SPARQL candidates when present.
     // With LanceDB pushdown the filter is redundant but harmless (belt + suspenders).
-    // With SQLite fallback (oversampled, no pushdown) this is essential.
     let filtered: Vec<_> = if let Some(ref candidates) = candidate_iris {
         all_matches
             .into_iter()
@@ -540,66 +535,5 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
             "configured": store.embedding_provider().is_some(),
             "embedded_entities": store.vector_store().vector_count().unwrap_or(0),
         },
-    }))
-}
-
-/// Candidates an anchored search reorders: the plain top of this many.
-const ANCHOR_POOL: usize = 200;
-
-/// The anchored form of [`tool_search`]'s response (aegis-rcz5ib.8): the same
-/// result shape plus `hops` (and `path` with `explain`) per result, and an
-/// `anchor` block reporting reach and truncation.
-fn anchored_response(
-    store: &Store,
-    matches: &[super::search_ranking::RankedMatch],
-    req: &super::search_anchor::AnchorRequest,
-    limit: usize,
-    valid_at: Option<&str>,
-    prefixes: Option<&crate::compact::PrefixMap>,
-    scoped: bool,
-) -> Result<JsonValue> {
-    let nb = super::search_anchor::walk(store, req, valid_at)?;
-    let by_id: std::collections::HashMap<i64, &super::search_ranking::RankedMatch> =
-        matches.iter().map(|m| (m.matched.entity_id, m)).collect();
-    let order = super::search_anchor::rerank(
-        matches
-            .iter()
-            .map(|m| (m.matched.entity_id, m.score))
-            .collect(),
-        &nb,
-        req,
-    );
-    let results: Vec<JsonValue> = order
-        .into_iter()
-        .take(limit)
-        .map(|(id, score, hops)| {
-            let ranked = by_id[&id];
-            let m = &ranked.matched;
-            let iri = store.resolve(id).unwrap_or_else(|_| format!("ref:{id}"));
-            let iri = prefixes.map_or(iri.clone(), |map| map.compact(&iri));
-            let mut row = serde_json::json!({
-                "entity": iri,
-                "text": m.text,
-                "score": score,
-                "text_score": ranked.score,
-                "similarity": m.score,
-                "hops": hops,
-                "ranking_reason": if ranked.demoted { "contentless_artifact" } else { "anchored" },
-                "source": "knowledge",
-                "valid_from": m.valid_from,
-                "valid_to": m.valid_to
-            });
-            if req.explain {
-                row["path"] = serde_json::json!(nb.path(store, id));
-            }
-            row
-        })
-        .collect();
-    Ok(serde_json::json!({
-        "results": results,
-        "count": results.len(),
-        "scoped": scoped,
-        "ranking": "anchored",
-        "anchor": super::search_anchor::summary(&nb, req),
     }))
 }

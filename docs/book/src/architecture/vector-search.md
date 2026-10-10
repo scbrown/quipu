@@ -78,7 +78,7 @@ The `quipu_hybrid_search` tool combines SPARQL filtering with vector ranking:
 1. **Extract pushdown filter** -- simple type patterns (`?s a <Type>`) are
    converted to a filter string for the vector backend
 2. **Vector search with filter** -- LanceDB applies the filter during ANN
-   search; SQLite oversamples 5x and post-filters
+   search; built-in SQLite scores the bounded SPARQL candidate set before top-K
 3. **Cross-filter with SPARQL** -- full SPARQL query runs independently,
    results intersected for consistency
 
