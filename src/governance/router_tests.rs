@@ -250,6 +250,56 @@ fn only_an_approval_permits() {
 // forged decision is not a wrong ruling, it is no ruling at all.
 
 #[test]
+fn an_agent_tier_decider_signature_is_not_a_human_ruling() {
+    let mut store = store_with_request(600);
+    let kp = keypair();
+    let registration = store.intern("http://ex/agent_decider").unwrap();
+    let mut datums = Vec::new();
+    for (predicate, value) in [
+        (
+            RDF_TYPE.to_string(),
+            Value::Ref(
+                store
+                    .intern(&format!("{DEFAULT_BASE_NS}VerifierRegistration"))
+                    .unwrap(),
+            ),
+        ),
+        (
+            format!("{DEFAULT_BASE_NS}verifier"),
+            Value::Str("agent".into()),
+        ),
+        (
+            format!("{DEFAULT_BASE_NS}attests"),
+            Value::Str(POLICY.into()),
+        ),
+        (
+            format!("{DEFAULT_BASE_NS}publicKey"),
+            Value::Str(crate::signing::public_key_hex(&kp)),
+        ),
+    ] {
+        datums.push(Datum {
+            entity: registration,
+            attribute: store.intern(&predicate).unwrap(),
+            value,
+            valid_from: TS.to_string(),
+            valid_to: None,
+            op: Op::Assert,
+        });
+    }
+    store.transact(&datums, TS, None, None).unwrap();
+    let hash = evidence_hash(POLICY, TARGET);
+    let signature = crate::signing::sign_hex(&kp, &decision_message(&hash, "approve", "agent"));
+    write_decision(&mut store, "approve", "agent", &hash, Some(&signature));
+    assert_eq!(
+        resolve(&store, POLICY, TARGET, NOW).unwrap(),
+        Some(Ruling::Pending {
+            expires_at: NOW + 600,
+        }),
+        "a valid agent-tier signature must not grant human decision authority",
+    );
+}
+
+#[test]
 fn an_unsigned_decision_is_not_a_ruling() {
     let mut store = store_with_request(600);
     let hash = evidence_hash(POLICY, TARGET);
