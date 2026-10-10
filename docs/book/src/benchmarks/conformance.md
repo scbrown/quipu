@@ -198,12 +198,6 @@ runner limitations. Listing a case does not claim its engine defect is fixed.
 | `:date-3` | failed | actual result differs from expected multiset |
 | `:open-cmp-01` | failed | actual result differs from expected multiset |
 | `:open-cmp-02` | failed | actual result differs from expected multiset |
-| `:cast-str` | failed | actual result differs from expected multiset |
-| `:cast-flt` | failed | actual result differs from expected multiset |
-| `:cast-dec` | failed | actual result differs from expected multiset |
-| `:cast-int` | failed | actual result differs from expected multiset |
-| `:cast-dT` | failed | actual result differs from expected multiset |
-| `:cast-bool` | failed | actual result differs from expected multiset |
 | `:dawg-str-1` | failed | actual result differs from expected multiset |
 | `:dawg-str-2` | failed | actual result differs from expected multiset |
 | `:dawg-isBlank-1` | failed | actual result differs from expected multiset |
@@ -240,7 +234,6 @@ runner limitations. Listing a case does not claim its engine defect is fixed.
 | `:dawg-sort-8` | unsupported |  |
 | `:dawg-sort-9` | unsupported |  |
 | `:dawg-sort-10` | unsupported |  |
-| `:dawg-sort-function` | failed | actual result differs from expected multiset |
 | `:reduced-2` | failed | actual result differs from expected multiset |
 
 ## SPARQL 1.2 query tests
