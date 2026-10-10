@@ -2,8 +2,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oxrdf::Term;
-use oxrdfio::{RdfFormat, RdfParser};
+use oxrdf::{Quad, Term};
+use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 
 use crate::error::{Error, Result};
 use crate::shacl::{ValidationFeedback, ValidationIssue};
@@ -30,16 +30,36 @@ impl PolicyValidation {
     }
 }
 
-/// Unknown or conflicting policy declarations refuse rather than guessing.
-fn check_policy(shapes: &str) -> Result<()> {
+/// Parse policy by RDF subject, independent of Turtle whitespace/prefixes.
+/// Both validation graphs keep every constraint and shared/list dependency;
+/// only independent targets of inactive shapes are removed.
+struct PolicyGraphs {
+    full: String,
+    reject: String,
+    emit: String,
+    has_emit: bool,
+}
+
+fn policy_graphs(shapes: &str) -> Result<PolicyGraphs> {
+    let quads: Vec<Quad> = RdfParser::from_format(RdfFormat::Turtle)
+        .for_reader(shapes.as_bytes())
+        .map(|quad| quad.map_err(|e| Error::InvalidValue(format!("shape policy RDF: {e}"))))
+        .collect::<Result<_>>()?;
     let mut policies = BTreeMap::<String, BTreeSet<String>>::new();
-    for quad in RdfParser::from_format(RdfFormat::Turtle).for_reader(shapes.as_bytes()) {
-        let quad =
-            quad.map_err(|error| Error::InvalidValue(format!("shape policy RDF: {error}")))?;
-        if quad.predicate.as_str() != ON_VIOLATION {
+    let mut node_shapes = BTreeSet::new();
+    for quad in &quads {
+        if quad.predicate.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+            && matches!(&quad.object, Term::NamedNode(n) if n.as_str() == "http://www.w3.org/ns/shacl#NodeShape")
+        {
+            node_shapes.insert(quad.subject.to_string());
+        }
+        if !matches!(
+            quad.predicate.as_str(),
+            ON_VIOLATION | "http://quipu.dev/ontology/onViolation"
+        ) {
             continue;
         }
-        let Term::Literal(value) = quad.object else {
+        let Term::Literal(value) = &quad.object else {
             return Err(Error::InvalidValue(
                 "onViolation must be emit or reject".into(),
             ));
@@ -60,12 +80,59 @@ fn check_policy(shapes: &str) -> Result<()> {
             "conflicting onViolation policies".into(),
         ));
     }
-    Ok(())
+    let emit_subjects: BTreeSet<String> = policies
+        .into_iter()
+        .filter(|(_, values)| values.contains("emit"))
+        .map(|(subject, _)| subject)
+        .collect();
+    if !emit_subjects.is_empty()
+        && quads
+            .iter()
+            .any(|q| q.predicate.as_str() == "http://www.w3.org/ns/shacl#target")
+    {
+        return Err(Error::InvalidValue(
+            "onViolation admission does not support custom SHACL targets".into(),
+        ));
+    }
+    let partition = |emit: bool| -> Result<String> {
+        serialize_policy(quads.iter().filter(|quad| {
+            let active = emit_subjects.contains(&quad.subject.to_string()) == emit;
+            if active { return true; }
+            match quad.predicate.as_str() {
+                "http://www.w3.org/ns/shacl#targetClass" |
+                "http://www.w3.org/ns/shacl#targetNode" |
+                "http://www.w3.org/ns/shacl#targetSubjectsOf" |
+                "http://www.w3.org/ns/shacl#targetObjectsOf" => false,
+                // Disable implicit class targets on inactive NodeShapes.
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" =>
+                    !(node_shapes.contains(&quad.subject.to_string())
+                    && matches!(&quad.object, Term::NamedNode(n) if n.as_str() == "http://www.w3.org/2000/01/rdf-schema#Class")),
+                _ => true,
+            }
+        }))
+    };
+    Ok(PolicyGraphs {
+        full: serialize_policy(quads.iter())?,
+        reject: partition(false)?,
+        emit: partition(true)?,
+        has_emit: !emit_subjects.is_empty(),
+    })
 }
 
-/// `shapes` must be the caller's authoritative policy, never an incoming override.
-/// Validate the complete document for diagnostics, then the reject subset for
-/// admission. The emit subset contributes advisory diagnostics only.
+fn serialize_policy<'a>(quads: impl Iterator<Item = &'a Quad>) -> Result<String> {
+    let mut writer = RdfSerializer::from_format(RdfFormat::Turtle).for_writer(Vec::new());
+    for quad in quads {
+        writer
+            .serialize_quad(quad)
+            .map_err(|e| Error::InvalidValue(format!("shape policy serialize: {e}")))?;
+    }
+    let bytes = writer
+        .finish()
+        .map_err(|e| Error::InvalidValue(format!("shape policy finish: {e}")))?;
+    String::from_utf8(bytes).map_err(|e| Error::InvalidValue(format!("shape policy UTF8: {e}")))
+}
+
+/// Validate full diagnostics and reject gates under caller-authoritative policy.
 pub(crate) fn validate<F>(
     shapes: &str,
     data: &str,
@@ -75,12 +142,11 @@ pub(crate) fn validate<F>(
 where
     F: FnMut(&str, &str) -> Result<ValidationFeedback>,
 {
-    check_policy(shapes)?;
-    let mut full = validator(shapes, data)?;
+    let split = policy_graphs(shapes)?;
+    let mut full = validator(&split.full, data)?;
     // Context repair historically used violations==0; this report promises
     // SHACL's strict meaning, including Warning and Info results.
     full.conforms = full.results.is_empty();
-    let split = crate::shacl::split_shapes_by_policy(shapes);
     let (blocking, advisory, rejecting_violations) = if emit_authorized && split.has_emit {
         let rejecting = validator(&split.reject, data)?;
         let advisory = validator(&split.emit, data)?.results;

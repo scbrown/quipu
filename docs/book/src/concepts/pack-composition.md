@@ -60,6 +60,15 @@ selection authorizes that bundle's `quipu:onViolation "emit"` policy. Default
 identical bundles validate the union but do not implicitly authorize emit
 admission. Missing policies mean reject; unknown or conflicting values refuse.
 
+Admission parses policy by RDF subject, so compact Turtle, alternate prefixes,
+comments and string literals cannot route a neighboring reject shape into emit.
+Both validator graphs preserve all constraints and shared RDF-list dependencies;
+only inactive independent targets are removed, including implicit class targets.
+Policy on a nested property does not downgrade its enclosing reject shape.
+The four core target kinds are supported; custom SHACL-AF targets refuse when
+emit partitioning is requested. Canonical and legacy annotation IRIs are checked
+together, so conflicting declarations cannot choose their own precedence.
+
 `conforms` retains strict SHACL meaning: any diagnostic, including an advisory
 Violation or Warning, makes it false. Admission uses `blocking` separately.
 Emit-policy diagnostics appear in `advisory_results`; reject-policy Violations
