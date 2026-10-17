@@ -166,6 +166,7 @@ impl EmbeddingStatus {
     }
 }
 
+pub mod briefing;
 mod rerank;
 
 /// Configuration for the context pipeline.

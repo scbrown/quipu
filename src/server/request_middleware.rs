@@ -111,6 +111,11 @@ async fn log_request_with_sequence(
             .get("x-quipu-task")
             .and_then(|v| v.to_str().ok()),
     );
+    let purpose = quipu::request_usage::normalize_purpose(
+        req.headers()
+            .get("x-quipu-purpose")
+            .and_then(|v| v.to_str().ok()),
+    );
     // Log before dispatch so a request that never completes is still visible.
     let id = sequence.fetch_add(1, Ordering::Relaxed);
     let declared_host = req
@@ -128,10 +133,13 @@ async fn log_request_with_sequence(
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map(|info| info.0);
     let provenance = write_provenance_of(req.headers(), &client, &endpoint);
-    let attributed = |log| {
+    let attributed = |log: String| {
+        let mut record: serde_json::Value = serde_json::from_str(&log).unwrap();
+        record["purpose"] = purpose.into();
+        record["purpose_source"] = "declared_header".into();
         quipu::request_usage::with_request_context(
             quipu::request_usage::with_declared_attribution(
-                log,
+                record.to_string(),
                 declared_host.as_deref(),
                 declared_agent.as_deref(),
             ),
@@ -162,6 +170,7 @@ async fn log_request_with_sequence(
         id,
         client: client.clone(),
         task,
+        purpose,
         method: method.to_string(),
         path,
         endpoint: endpoint.clone(),

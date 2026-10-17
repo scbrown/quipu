@@ -247,7 +247,7 @@ Authorization: Bearer <token>. Resolve a non-empty token from QUIPU_AUTH_TOKEN, 
 QUIPU_AUTH_TOKEN_FILE or the configured client token file. If no credential is available, stop \
 before HTTP and report the missing credential; do not send an unauthenticated probe. Keep the \
 bearer server-side where possible and never print it. Send the header X-Quipu-Client: \
-session-capture on every call so this traffic is attributable. Three rules:
+session-capture and X-Quipu-Purpose: INGEST on every call so this traffic is attributable. Three rules:
 
 1. SEARCH BEFORE YOU MINT. POST {server}/search with {{\"query\":\"<your concept>\"}} and REUSE the \
 existing node's exact name if one matches. Do not create a second node for a concept that already \

@@ -64,6 +64,17 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "type": "object",
                 "properties": {
                     "query": { "type": "string", "description": "Natural language query to find relevant knowledge context" },
+                    "briefing": {
+                        "type": "object",
+                        "description": "Explicit exact task briefing; requires server task_briefing opt-in. Does not infer current authority from prose.",
+                        "properties": {
+                            "task_iri": {"type":"string"},
+                            "graph": {"type":"string","description":"Registered graph IRI, or explicit ROOT"},
+                            "knowledge_graphs": {"type":"array","maxItems":2,"items":{"type":"string"}},
+                            "delivery": {"type":"string","enum":["explicit","automatic"],"default":"explicit"}
+                        },
+                        "required":["task_iri","graph"]
+                    },
                     "max_entities": { "type": "integer", "description": "Maximum entities to return (default from pipeline config)" },
                     "expand_links": { "type": "boolean", "description": "Whether to expand to entities linked from the matches" },
                     "ppr_rerank": { "type": "boolean", "description": "Re-order candidates by Personalized PageRank seeded at the direct hits before truncation (default: false)" }

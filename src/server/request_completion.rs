@@ -61,6 +61,7 @@ pub(super) struct Completion<'a> {
     pub(super) id: u64,
     pub(super) client: String,
     pub(super) task: String,
+    pub(super) purpose: &'static str,
     pub(super) method: String,
     pub(super) path: String,
     pub(super) endpoint: String,
@@ -125,6 +126,8 @@ impl Completion<'_> {
             self.declared_agent.as_deref(),
         );
         let mut log: serde_json::Value = serde_json::from_str(&log).unwrap();
+        log["purpose"] = self.purpose.into();
+        log["purpose_source"] = "declared_header".into();
         log["completion_outcome"] = if cancelled { "cancelled" } else { "response" }.into();
         (self.emit)(log.to_string());
     }

@@ -10,6 +10,9 @@ use super::{ContextPipeline, ContextPipelineConfig};
 /// Input: `{ "query": "...", "max_entities": N, "expand_links": bool }`
 /// Output: `KnowledgeContext` as JSON
 pub fn tool_context(store: &Store, input: &serde_json::Value) -> Result<serde_json::Value> {
+    if let Some(briefing) = input.get("briefing") {
+        return super::briefing::task_briefing(store, briefing);
+    }
     let query = input
         .get("query")
         .and_then(|v| v.as_str())

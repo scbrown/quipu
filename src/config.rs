@@ -145,6 +145,8 @@ pub struct SearchConfig {
     /// default until its evaluation gate passes; an anchored request on a
     /// server with this off is refused, never silently answered unanchored.
     pub anchored: bool,
+    /// Explicit task briefing; default OFF until paired evaluation.
+    pub task_briefing: bool,
     /// SQLite FTS5 keyword search. Default off; activation creates only empty
     /// schema/triggers. Historical rows require explicit bounded backfill.
     pub keyword: bool,
@@ -177,6 +179,7 @@ impl Default for SearchConfig {
             episode_request_timeout_ms: 0,
             max_join_rows: 1_000_000,
             anchored: false,
+            task_briefing: false,
             keyword: false,
             structured: false,
             hybrid: false,

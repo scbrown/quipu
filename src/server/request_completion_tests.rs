@@ -11,6 +11,7 @@ fn completion<'a>(
         id: 7,
         client: "test-client".into(),
         task: "unattributed".into(),
+        purpose: "CONTEXT",
         method: "GET".into(),
         path: "/pending".into(),
         endpoint: "/pending".into(),
@@ -47,6 +48,7 @@ async fn dropping_polled_pending_future_accounts_once() {
     assert_eq!(event["event"], "request_complete");
     assert_eq!(event["request_id"], 7);
     assert_eq!(event["status"], 499);
+    assert_eq!(event["purpose"], "CONTEXT");
     assert_eq!(event["completion_outcome"], "cancelled");
     assert!(event["duration_ms"].is_u64());
     assert_eq!(event["auth_outcome"], "pending");

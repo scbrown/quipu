@@ -42,6 +42,7 @@ mod cli_alias;
 mod cli_align;
 mod cli_attest;
 mod cli_audit;
+mod cli_briefing;
 mod cli_changes;
 mod cli_commands;
 mod cli_compose;
@@ -180,6 +181,7 @@ fn main() {
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
+        "task-briefing" => cli_briefing::run(&args, db_path, &config.search),
         "search" => cli_search::cmd_search(&args, db_path),
         "search-index" => cli_search::cmd_index(&args, db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),

@@ -1,0 +1,10 @@
+Script started on 2026-10-17 06:55:00-04:00 [COMMAND="python3 docs/probes/task-briefing/reproduce.py "$QUIPU_DEMO_BINARY"" <not executed on terminal>]
+DEFAULT OFF: explicit request refused (no briefing).
+EXPLICIT OPT-IN: CONTEXT
+urnstatus: closed [recorded 2026-01-01T00:00:00Z; authority/supersession UNKNOWN; urn:task:one tx 1]
+urnowner: urn:alice [recorded 2026-01-01T00:00:00Z; authority/supersession UNKNOWN; urn:task:one tx 1]
+
+ABSENT EXACT ID: NO_CONTEXT; similar task never substitutes; database bytes unchanged.
+Synthetic fixture only. No live usefulness or current-policy acceptance.
+
+Script done on 2026-10-17 06:55:01-04:00 [COMMAND_EXIT_CODE="0"]

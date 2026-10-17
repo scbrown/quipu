@@ -7,6 +7,19 @@
 
 use serde_json::{Value, json};
 
+/// Bounded caller-declared intent. It is not authority or observed use.
+#[must_use]
+pub fn normalize_purpose(value: Option<&str>) -> &'static str {
+    match value {
+        Some("CONTEXT") => "CONTEXT",
+        Some("VERIFY") => "VERIFY",
+        Some("POLICY") => "POLICY",
+        Some("MONITOR") => "MONITOR",
+        Some("INGEST") => "INGEST",
+        _ => "UNKNOWN",
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Authorization result established by the auth middleware.
 pub enum AuthOutcome {
@@ -384,5 +397,25 @@ mod tests {
         assert_eq!(json_result_size(&json!({"rows": [{}, {}]})), 2);
         assert_eq!(json_result_size(&json!({"triples": [{}, {}, {}]})), 3);
         assert_eq!(json_result_size(&json!({"result": false})), 1);
+    }
+}
+
+#[cfg(test)]
+mod purpose_tests {
+    #[test]
+    fn bounded_purpose_never_infers_or_echoes_arbitrary_input() {
+        for value in [
+            "CONTEXT", "VERIFY", "POLICY", "MONITOR", "INGEST", "UNKNOWN",
+        ] {
+            assert_eq!(super::normalize_purpose(Some(value)), value);
+        }
+        for value in [
+            None,
+            Some("context"),
+            Some("CONTEXT\nsecret"),
+            Some("arbitrary"),
+        ] {
+            assert_eq!(super::normalize_purpose(value), "UNKNOWN");
+        }
     }
 }

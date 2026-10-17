@@ -21,6 +21,7 @@ pub(super) fn layer(origins: &[String]) -> tower_http::cors::CorsLayer {
             axum::http::header::AUTHORIZATION,
             axum::http::HeaderName::from_static("x-quipu-client"),
             axum::http::HeaderName::from_static("x-quipu-task"),
+            axum::http::HeaderName::from_static("x-quipu-purpose"),
         ])
 }
 
@@ -42,7 +43,7 @@ mod tests {
                     .header("access-control-request-method", "POST")
                     .header(
                         "access-control-request-headers",
-                        "content-type,x-quipu-client,x-quipu-task",
+                        "content-type,x-quipu-client,x-quipu-task,x-quipu-purpose",
                     )
                     .body(Body::empty())
                     .unwrap(),
@@ -66,7 +67,8 @@ mod tests {
                 "content-type",
                 "authorization",
                 "x-quipu-client",
-                "x-quipu-task"
+                "x-quipu-task",
+                "x-quipu-purpose"
             ]
             .into_iter()
             .collect()
