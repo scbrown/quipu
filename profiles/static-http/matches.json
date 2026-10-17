@@ -1,0 +1,55 @@
+{
+  "name": "static_http_matches",
+  "description": "Opt-in static candidates only: an unbound producer is unresolved. No runtime dependency assertion.",
+  "template": "PREFIX code: <http://aegis.gastown.local/ontology/>\nSELECT ?consumer ?producer ?service ?method ?path\n       ?consumerRepository ?consumerRevision ?consumerHash ?consumerExtractor\n       ?producerRepository ?producerRevision ?producerHash ?producerExtractor\n       ?consumerManifest ?consumerManifestHash ?producerManifest ?producerManifestHash\nFROM <{input_graph}>\nWHERE {\n  ?consumer a code:HttpContractCandidate ; code:candidateRole \"consumer\" ;\n    code:httpMethod ?method ; code:httpPath ?path ;\n    code:repo ?consumerRepository ; code:revision ?consumerRevision ;\n    code:sourceHash ?consumerHash ; code:extractorVersion ?consumerExtractor ;\n    code:candidateTier \"treesitter\" ; code:candidateConfidence \"candidate\" ;\n    code:sourceManifest ?consumerManifest .\n  ?consumerManifest a code:Document ; code:httpCandidateContract \"yupana-http-candidates/v1\" ;\n    code:httpCandidateProfile \"python-fastapi-requests/v1\" ;\n    code:manifestBody ?consumerManifestBody ; code:manifestHash ?consumerManifestHash .\n  OPTIONAL { ?consumer code:service ?service . }\n  OPTIONAL {\n    ?producer a code:HttpContractCandidate ; code:candidateRole \"producer\" ;\n      code:service ?producerService ; code:httpMethod ?method ; code:httpPath ?path ;\n      code:repo ?producerRepository ; code:revision ?producerRevision ;\n      code:sourceHash ?producerHash ; code:extractorVersion ?producerExtractor ;\n      code:resolution \"exact\" ; code:generatedClient false ;\n      code:candidateTier \"treesitter\" ; code:candidateConfidence \"candidate\" ;\n      code:sourceManifest ?producerManifest .\n    ?producerManifest a code:Document ; code:httpCandidateContract \"yupana-http-candidates/v1\" ;\n      code:httpCandidateProfile \"python-fastapi-requests/v1\" ;\n      code:manifestBody ?producerManifestBody ; code:manifestHash ?producerManifestHash .\n    ?consumer code:resolution \"exact\" ; code:generatedClient false .\n    FILTER(?producerService = ?service)\n    FILTER(?service = <{service}>)\n    FILTER(?consumerRepository = '{consumer_repository}')\n    FILTER(?producerRepository = '{producer_repository}')\n    FILTER(?consumerRevision = '{consumer_revision}')\n    FILTER(?producerRevision = '{producer_revision}')\n    FILTER(?consumerHash = '{consumer_source_hash}')\n    FILTER(?producerHash = '{producer_source_hash}')\n    FILTER(?method != \"UNKNOWN\")\n    FILTER(!REGEX(?path, \"[*{}?#]\"))\n    FILTER NOT EXISTS {\n      ?other a code:HttpContractCandidate ; code:candidateRole \"producer\" ;\n        code:service ?service ; code:httpMethod ?method ; code:httpPath ?path .\n      FILTER(?other != ?producer)\n    }\n  }\n}\nORDER BY ?consumer ?producer\n",
+  "params": [
+    {
+      "name": "input_graph",
+      "type": "iri",
+      "required": true,
+      "description": "Explicit input scope/pin; never inferred from a hostname or working tree."
+    },
+    {
+      "name": "service",
+      "type": "iri",
+      "required": true,
+      "description": "Explicit input scope/pin; never inferred from a hostname or working tree."
+    },
+    {
+      "name": "consumer_repository",
+      "type": "text",
+      "required": true,
+      "description": "Explicit input scope/pin; never inferred from a hostname or working tree."
+    },
+    {
+      "name": "producer_repository",
+      "type": "text",
+      "required": true,
+      "description": "Explicit input scope/pin; never inferred from a hostname or working tree."
+    },
+    {
+      "name": "consumer_revision",
+      "type": "text",
+      "required": true,
+      "description": "Explicit input scope/pin; never inferred from a hostname or working tree."
+    },
+    {
+      "name": "producer_revision",
+      "type": "text",
+      "required": true,
+      "description": "Explicit input scope/pin; never inferred from a hostname or working tree."
+    },
+    {
+      "name": "consumer_source_hash",
+      "type": "text",
+      "required": true,
+      "description": "Expected sha256: digest of the exact source-file bytes, independently verified by caller."
+    },
+    {
+      "name": "producer_source_hash",
+      "type": "text",
+      "required": true,
+      "description": "Expected sha256: digest of the exact source-file bytes, independently verified by caller."
+    }
+  ]
+}

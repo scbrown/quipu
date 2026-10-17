@@ -1,0 +1,38 @@
+# Proposed opt-in source profile; not automatically loaded or enrolled.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix code: <http://aegis.gastown.local/ontology/> .
+
+code:HttpContractCandidateShape a sh:NodeShape ;
+    sh:targetClass code:HttpContractCandidate ;
+    sh:nodeKind sh:IRI ;
+    sh:property [ sh:path code:sourceManifest ; sh:class code:Document ; sh:node code:HttpCandidateManifestShape ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path code:candidateTier ; sh:in ( "treesitter" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path code:candidateConfidence ; sh:in ( "candidate" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rdfs:label ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path code:service ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+    sh:property [ sh:path code:repo ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ] ;
+    sh:property [ sh:path code:revision ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:pattern "^[0-9a-f]{40}([0-9a-f]{24})?$" ] ;
+    sh:property [ sh:path code:sourceHash ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:pattern "^sha256:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path code:extractorVersion ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ] ;
+    sh:property [ sh:path code:filePath ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ] ;
+    sh:property [ sh:path code:occurrenceSpan ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^[0-9]+:[0-9]+$" ] ;
+    sh:property [ sh:path code:callerSpan ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:pattern "^[0-9]+:[0-9]+$" ] ;
+    sh:property [ sh:path code:handlerSpan ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:pattern "^[0-9]+:[0-9]+$" ] ;
+    sh:property [ sh:path code:httpMethod ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:in ( "GET" "POST" "PUT" "PATCH" "DELETE" "HEAD" "OPTIONS" "TRACE" "CONNECT" "UNKNOWN" ) ] ;
+    sh:property [ sh:path code:httpPath ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:pattern "^/" ] ;
+    sh:property [ sh:path code:resolution ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:in ( "exact" "unresolved" ) ] ;
+    sh:property [ sh:path code:candidateRole ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:in ( "producer" "consumer" ) ] ;
+    sh:property [ sh:path code:generatedClient ; sh:datatype xsd:boolean ; sh:maxCount 1 ; ] .
+
+# A DTO manifest is an existing Document, not a second endpoint/entity class.
+# Load code-entities alongside this opt-in profile.
+code:HttpCandidateManifestShape a sh:NodeShape ;
+    sh:targetSubjectsOf code:httpCandidateContract ;
+    sh:property [ sh:path rdf:type ; sh:hasValue code:Document ] ;
+    sh:property [ sh:path code:httpCandidateContract ; sh:in ( "yupana-http-candidates/v1" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path code:httpCandidateProfile ; sh:in ( "python-fastapi-requests/v1" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path code:manifestBody ; sh:datatype xsd:string ; sh:minLength 1 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path code:manifestHash ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:minCount 1 ; sh:maxCount 1 ] .

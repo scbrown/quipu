@@ -1,0 +1,16 @@
+Script started on 2026-10-17 15:41:31-04:00 [COMMAND="target/static-http-demo --test-threads=1 --nocapture" <not executed on terminal>]
+
+running 6 tests
+test collisions_wrong_method_and_wrong_prefix_do_not_resolve ... ok
+test occurrence_identity_and_manifest_are_mandatory ... ok
+test shape_requires_single_service_and_complete_committed_source_evidence ... ok
+test stale_generated_unknown_and_wrong_service_do_not_resolve ... ok
+test uncertain_consumer_evidence_remains_visible_and_unresolved ... ok
+test unique_exact_match_preserves_both_provenances_and_ignores_root ... BEFORE (base code-entities only): candidate input refused as unknown rdf:type
+AFTER (opt-in profile loaded): {"consumer":"http://aegis.gastown.local/ontology/http-candidate/055f2cbd946eeb1fdeb7b8a32787ef255af019aa27cdbd0759bf8064e37d8309","consumerExtractor":"fixture-v1","consumerHash":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","consumerManifest":"urn:example:manifest-consumer","consumerManifestHash":"sha256:42fa0d15efadb287d1f7d6949bd07af9cd4ccc57454a85b629200ce3ded698bb","consumerRepository":"client","consumerRevision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","method":"GET","path":"/api/items","producer":"http://aegis.gastown.local/ontology/http-candidate/261f8ecfa9decd04b6c3eb3ced20692da9fe9be45cb576a0714a477f4b6b70d2","producerExtractor":"fixture-v1","producerHash":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","producerManifest":"urn:example:manifest-producer","producerManifestHash":"sha256:8a117fddd901a42e050b5627e85f0260e363b15470164ea83576ff1bed277d25","producerRepository":"server","producerRevision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","service":"urn:example:service"}
+ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+
+Script done on 2026-10-17 15:41:32-04:00 [COMMAND_EXIT_CODE="0"]
