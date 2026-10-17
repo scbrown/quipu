@@ -29,6 +29,8 @@ All notable changes to this project will be documented in this file.
 - *(graph)* Stable labeled communities and explorer companions (#632)([4382118](https://github.com/scbrown/quipu/commit/4382118d48f8ac74944d4810e3cce9b3a9698253))
 - *(server)* Add opt-in read processes with one memory budget (#641)([0eaf25f](https://github.com/scbrown/quipu/commit/0eaf25f8e0fe6fe8b0164cf76e3a90dba8000e70))
 
+
+
 ### Documentation
 
 - Replace the README cast with an agent + live graph demo (#558)([69f13ef](https://github.com/scbrown/quipu/commit/69f13ef3ad0834f72b5c66b6bb4568574190d6e3))
