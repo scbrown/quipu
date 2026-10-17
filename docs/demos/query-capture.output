@@ -1,0 +1,14 @@
+Script started on 2026-10-16 21:56:57-04:00 [COMMAND="./.task-notes/query-capture-demo-test query_capture::tests::query_capture_private_demo --exact --ignored --nocapture" <not executed on terminal>]
+
+running 1 test
+BEFORE: same synthetic3995-byte query, capture disabled: no worker/artifact
+{"event":"query_capture_state","outcome":"armed","window_id":"private-trial"}
+AFTER: exact query retained, private0600 artifact 4411bytes <=16384; secret extra excluded
+{"event":"query_capture_state","outcome":"claim_refused","window_id":"private-trial"}
+CONTROL: restart with same nonce refused; no second specimen
+test query_capture::tests::query_capture_private_demo ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 181 filtered out; finished in 0.01s
+
+
+Script done on 2026-10-16 21:56:57-04:00 [COMMAND_EXIT_CODE="0"]

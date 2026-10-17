@@ -273,3 +273,7 @@ syn = { version = "2", features = ["full", "visit"] }
 # lock file transitively, so this pulls no new supply chain and nothing new
 # ships in the binary.
 proptest = "1"
+
+[target.'cfg(unix)'.dependencies]
+# Safe descriptor-relative private diagnostics; already present transitively.
+rustix = { version = "=1.1.4", features = ["fs", "process"] }

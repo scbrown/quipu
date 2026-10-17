@@ -327,6 +327,11 @@ fn routes_in_server_source() -> Vec<String> {
             "server/snapshot_upload.rs",
             include_str!("../server/snapshot_upload.rs"),
         ),
+        // Startup diagnostics currently register no routes; keep future routes visible.
+        (
+            "server/query_capture.rs",
+            include_str!("../server/query_capture.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is

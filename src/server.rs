@@ -56,6 +56,8 @@ mod parse_guard_tests;
 mod point_reads;
 #[path = "server/publication.rs"]
 mod publication;
+#[path = "server/query_capture.rs"]
+mod query_capture;
 mod query_endpoint;
 #[path = "server/query_usage.rs"]
 mod query_usage;
@@ -339,6 +341,7 @@ async fn main() {
 
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     handle.log_query_admission = config.server.log_query_admission;
+    handle.query_capture = query_capture::start(config.server.query_capture.as_ref(), &db_path);
     handle.replica = config
         .server
         .replica

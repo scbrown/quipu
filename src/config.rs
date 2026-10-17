@@ -12,11 +12,13 @@ use serde::Deserialize;
 
 mod attachments;
 mod federation;
+mod query_capture;
 mod vector_backend;
 pub use attachments::{
     AttachmentConfig, describe_attachments, open_with_configured_attachments, resolve_attachments,
 };
 pub use federation::{FederationConfig, RemoteEndpoint};
+pub use query_capture::QueryCaptureConfig;
 pub use vector_backend::install_vector_backend;
 
 use crate::namespace;
@@ -591,6 +593,9 @@ pub struct ServerConfig {
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
 
+    /// Expiring, operator-only private specimen capture; omitted by default.
+    pub query_capture: Option<QueryCaptureConfig>,
+
     /// Ceiling on facts copied for one `/update` that cannot be sliced (an
     /// open subject with an open predicate copies the whole store). Past it
     /// the update is refused with advice instead of exhausting memory
@@ -613,6 +618,7 @@ impl Default for ServerConfig {
             read_pool_size: 4,
             reserve_point_reads: false,
             log_query_admission: false,
+            query_capture: None,
             update_full_copy_max_facts: 250_000,
         }
     }

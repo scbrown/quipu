@@ -277,3 +277,37 @@ contract before interpreting transaction distance. A primary without
 503 write responses, lag failure handling and a pending-subscription trap that
 must never deliver. Library/server tests also plant a write against the actual
 read-only connection. The scratch test does not change or probe production.
+
+## Private bounded query specimen
+
+`server.query_capture` is omitted by default. An omitted configuration or
+`enabled = false` creates no capture worker, file or capture-state log. An
+operator can explicitly configure `enabled`, an exact lowercase `query_sha256`,
+`query_bytes` (1–4096), a unique alphanumeric/underscore/hyphen `window_id`, and
+absolute `start_epoch_secs`/`end_epoch_secs`. The window is at most five minutes;
+startup refuses an expired window or a start more than fifteen minutes ahead.
+A parsed selector/window that fails validation disables the diagnostic without
+changing normal query results; malformed configuration still follows normal
+strict configuration-loading errors. There is no HTTP endpoint to arm it.
+
+Only the first matching Seeds-category POST `/query` request can consume the
+claim. Eligibility is the intersection of the absolute UTC window and its
+startup-pinned monotonic start/end, so clock jumps cannot extend or start it early. At startup the
+server exclusively claims `query-captures/<window_id>.json` beside the canonical
+store file, using a same-owner private directory and descriptor-relative,
+no-follow exclusive creation. Existing claims are never overwritten, including
+empty files left by a crash: restarting cannot renew the attempt. Unsupported
+platforms refuse enabled capture. Operators retain and adjudicate these private
+artifacts; the server does not delete or retry them.
+
+A capacity-one worker writes at most 16 KiB outside store locks. The record
+contains exact raw SPARQL, bounded planning options, UTC, build identity and the
+existing request/process/query/input digests. Headers, response bodies and
+unknown JSON fields are excluded; omitted fields are explicitly flagged. Raw
+query literals can be sensitive, and a digest is not anonymization. The Seeds
+client category is an unauthenticated attribution label, not proof of caller
+identity. Serialization overflow consumes the attempt and records refusal
+without a truncated query. File failures leave an UNKNOWN partial or empty
+claim; no request is retried. Default-off source deployment does not authorize
+arming: use a separately approved window and flag-off rollback, then read back
+that the flag is off.

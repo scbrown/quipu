@@ -4666,6 +4666,7 @@ dependencies = [
  "rudof_iri",
  "rudof_rdf",
  "rusqlite",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "sha1",

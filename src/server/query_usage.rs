@@ -77,6 +77,16 @@ impl Observation {
         observation
     }
 
+    pub(super) fn capture(
+        &self,
+        capture: &super::query_capture::Capture,
+        input: &Value,
+        client: &str,
+        is_post: bool,
+    ) {
+        capture.observe(input, &self.identity, client, is_post);
+    }
+
     pub(super) fn dispatched(&mut self) {
         self.dispatched_ms = Some(self.started.elapsed().as_secs_f64() * 1_000.0);
         self.outcome = "unfinished";
