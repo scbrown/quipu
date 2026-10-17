@@ -45,3 +45,15 @@ aegis:ContainsShape a sh:PropertyShape ;
     sh:targetSubjectsOf aegis:contains ;
     sh:path aegis:contains ;
     sh:class aegis:WorkItem .
+
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix a: <http://aegis.gastown.local/ontology/> .
+# Standard /episode provenance entity; no new entity kind.
+# Label is always emitted. Other provenance/body fields remain optional.
+# No maxCount on comments: description revision history may retain several.
+a:EpisodeActivityShape a sh:NodeShape ;
+ sh:targetClass prov:Activity ;
+ sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:datatype xsd:string ] .

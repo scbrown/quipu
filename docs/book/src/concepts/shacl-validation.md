@@ -235,3 +235,13 @@ quipu shapes load --name aegis --file shapes/aegis-ontology.shapes.ttl --db home
   add datatype checks as your ontology stabilizes
 - **Use validation feedback** — the structured JSON is designed for automated
   remediation by agents
+
+## Episode provenance activities
+
+The shipped `shapes/provenance.ttl` includes a minimal `prov:Activity` profile
+for episode provenance. It requires a string `rdfs:label`, which the episode
+producer emits. Body and source fields remain optional so historical episodes
+remain valid, and multiple retained comments are permitted. This profile does
+not authorize a new write path or change import/promotion checks. A receiver
+must load its reviewed shapes and verify the loaded vocabulary before importing
+activity facts; a source file alone does not establish runtime governance.

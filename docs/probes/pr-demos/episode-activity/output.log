@@ -1,0 +1,14 @@
+Script started on 2026-10-17 15:40:14-04:00 [COMMAND="python3 demo.py" <not executed on terminal>]
+Isolated episode provenance fixtures; no server or live-store writes.
+before legacy exit=0 conforms=True violations=0
+before body exit=0 conforms=True violations=0
+before missing exit=0 conforms=True violations=0
+before iri exit=0 conforms=True violations=0
+before integer exit=0 conforms=True violations=0
+after legacy exit=0 conforms=True violations=0
+after body exit=0 conforms=True violations=0
+after missing exit=1 conforms=False violations=1
+after iri exit=1 conforms=False violations=1
+after integer exit=1 conforms=False violations=1
+
+Script done on 2026-10-17 15:40:14-04:00 [COMMAND_EXIT_CODE="0"]
