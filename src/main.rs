@@ -66,6 +66,7 @@ mod cli_pointer;
 mod cli_policy;
 mod cli_propose;
 mod cli_quarantine;
+mod cli_rule_answers;
 mod cli_search;
 mod cli_share_diff;
 mod cli_share_review;
@@ -152,6 +153,7 @@ fn main() {
         "attest" => cli_attest::cmd_attest(&args, db_path),
         "trust-root" => cli_trust_root::cmd_trust_root(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
+        "rule-query" => cli_rule_answers::run(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
         "impact" => cli::cmd_impact(&args, db_path),
@@ -353,6 +355,7 @@ COMMANDS:
     qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
     qp ingest <file> --graph <iri> --timestamp <ISO-8601> --declare-count <n> --declare-sha256 <hex> [--format nt|ttl|nq] [--chunk N] [--db <path>]
     qp read \"<sparql>\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]
+    qp rule-query <request.json> [--db <existing-path>]  Typed ROOT support and judgment
     qp cord [--type <IRI>] [--limit N] [--db <path>]
     qp unravel [--tx N] [--valid-at <date>] [--db <path>]
     qp impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]

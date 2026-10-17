@@ -499,7 +499,8 @@ mod tests {
                     || include_str!("server/merge_decisions.rs").contains(&format!("\"{path}\""))
                     || include_str!("server/snapshot_upload.rs").contains(&format!("\"{path}\""))
                     || include_str!("server/publication.rs").contains(&format!("\"{path}\""))
-                    || include_str!("server/base.rs").contains(&format!("\"{path}\"")),
+                    || include_str!("server/base.rs").contains(&format!("\"{path}\""))
+                    || include_str!("query_endpoint/routes.rs").contains(&format!("\"{path}\"")),
                 "{name}: {path}"
             );
         }

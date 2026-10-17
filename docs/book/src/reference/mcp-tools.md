@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **76 tools** in a default build, or
-**78** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **77 tools** in a default build, or
+**79** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -77,6 +77,23 @@ Execute a SPARQL SELECT query.
 
 Query results use prefixes declared by the loaded shape sets for compact CURIE
 values by default. IRIs in unknown namespaces remain full IRIs.
+
+### `quipu_rule_query`
+
+Read one grounded claim using independent positive and explicit-negative evidence.
+The result preserves supported, refuted, both and neither, with a separate admitted
+judgment disposition. Failed, capped or incomplete reads return UNKNOWN; answers
+never grant action authority. See [rule answers](../concepts/rule-answers.md) for
+strict request fields, evidence scope and retained judgment requirements.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `subject` | Yes | Absolute subject IRI |
+| `positive_predicate` | Yes | Absolute predicate for explicit positive support |
+| `negative_predicate` | Yes | Distinct absolute predicate for explicit negative support |
+| `object` | Yes | One strict IRI or plain-string value object |
+| `judgment_policy` | Yes | Expected admitted judgment policy |
+| `witness_limit` | No | Evidence row bound per side, 1–256 (default 64) |
 
 ### `quipu_export`
 

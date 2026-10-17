@@ -97,6 +97,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    "/rule_query",
     "/watermark",
     // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
     // (lookup + a prepared SELECT); `decide` touches no store at all. The

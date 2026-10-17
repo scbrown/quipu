@@ -1,0 +1,29 @@
+Script started on 2026-10-17 17:47:43-04:00 [COMMAND="python3 docs/probes/pr-demos/rule-answers/demo.py "$BASE_CLI" "$CANDIDATE_CLI"" <not executed on terminal>]
+BEFORE: actual copied CLI, isolated synthetic store
+quipu 0.14.1
+git_sha: f6739976ba3433ee8bb0530f55aa3fa209351e88
+git_dirty: false
+$ quipu rule-query request.json --db fixture.db # supported
+exit=1; unknown command: rule-query
+$ quipu rule-query request.json --db fixture.db # refuted
+exit=1; unknown command: rule-query
+$ quipu rule-query request.json --db fixture.db # both
+exit=1; unknown command: rule-query
+$ quipu rule-query request.json --db fixture.db # neither
+exit=1; unknown command: rule-query
+Eight unchanged ASK controls: PASS; no installation or live graph mutation
+AFTER: actual copied CLI, isolated synthetic store
+quipu 0.14.1
+git_sha: bdb7709cd1cf5600485a87ebc648b9fc37b563fb
+git_dirty: false
+$ quipu rule-query request.json --db fixture.db # supported
+{"action_authority": "not_granted", "judgment": "none_recorded", "negative": false, "positive": true, "status": "complete", "truth": "supported"}
+$ quipu rule-query request.json --db fixture.db # refuted
+{"action_authority": "not_granted", "judgment": "none_recorded", "negative": true, "positive": false, "status": "complete", "truth": "refuted"}
+$ quipu rule-query request.json --db fixture.db # both
+{"action_authority": "not_granted", "judgment": "none_recorded", "negative": true, "positive": true, "status": "complete", "truth": "both"}
+$ quipu rule-query request.json --db fixture.db # neither
+{"action_authority": "not_granted", "judgment": "none_recorded", "negative": false, "positive": false, "status": "complete", "truth": "neither"}
+Eight unchanged ASK controls: PASS; no installation or live graph mutation
+
+Script done on 2026-10-17 17:47:44-04:00 [COMMAND_EXIT_CODE="0"]

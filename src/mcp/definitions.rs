@@ -8,6 +8,7 @@ mod episodes;
 mod parity;
 mod policy_overlays;
 mod projection;
+mod rule_answers;
 mod schema;
 mod search;
 
@@ -20,6 +21,7 @@ pub fn tool_definitions() -> Vec<JsonValue> {
     defs.extend(search::defs());
     defs.extend(schema::defs());
     defs.extend(projection::defs());
+    defs.extend(rule_answers::defs());
     defs.extend(policy_overlays::defs());
 
     // OWL reasoning is gated behind the (non-default) `owl` feature; only

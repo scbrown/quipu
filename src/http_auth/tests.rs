@@ -291,6 +291,10 @@ fn routes_in_server_source() -> Vec<String> {
     // route moved into one of those fragments is still a registered route.
     let sources = [
         ("server.rs", include_str!("../server.rs")),
+        (
+            "query_endpoint/routes.rs",
+            include_str!("../query_endpoint/routes.rs"),
+        ),
         ("server/cors.rs", include_str!("../server/cors.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
         (

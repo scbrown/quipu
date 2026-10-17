@@ -68,6 +68,7 @@ pub mod reconcile;
 pub mod report;
 pub mod request_usage;
 pub mod resolution;
+pub mod rule_answers;
 pub mod schema;
 pub mod semweb;
 #[cfg(not(target_arch = "wasm32"))]
@@ -199,6 +200,7 @@ pub use mcp::proposal::{
     tool_accept_proposal, tool_list_proposals, tool_propose_schema_change, tool_reject_proposal,
 };
 pub use mcp::resolution::tool_resolve_entity;
+pub use mcp::rule_answers::tool_rule_query;
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
     PreparedEpisode, resolve_validation_shapes, tool_cord, tool_datasets, tool_episode,

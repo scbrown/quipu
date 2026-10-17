@@ -19,6 +19,55 @@ fn payload(result: CallToolResult) -> Value {
 }
 
 #[tokio::test]
+async fn rule_answer_states_native_mcp_dispatch_preserves_typed_answers_and_read_annotation() {
+    use axum::extract::State;
+    let mut store = crate::Store::open_in_memory().unwrap();
+    store
+        .load_shapes(
+            "rule-answers",
+            include_str!("../../shapes/rule-answers.ttl"),
+            "2026-01-01",
+        )
+        .unwrap();
+    crate::tool_knot(&mut store, &json!({"turtle":
+        "<urn:supported> <urn:positive> <urn:target> . <urn:refuted> <urn:negative> <urn:target> . <urn:both> <urn:positive> <urn:target> ; <urn:negative> <urn:target> ."
+    })).unwrap();
+    let shared = std::sync::Arc::new(std::sync::Mutex::new(store));
+    async fn handler(
+        State(store): State<std::sync::Arc<std::sync::Mutex<crate::Store>>>,
+        axum::Json(input): axum::Json<Value>,
+    ) -> axum::Json<Value> {
+        axum::Json(crate::tool_rule_query(&store.lock().unwrap(), &input).unwrap())
+    }
+    let server = McpServer::new(
+        Router::new()
+            .route("/rule_query", post(handler))
+            .with_state(shared.clone()),
+    );
+    let definition = server
+        .tools
+        .iter()
+        .find(|tool| tool.name == "quipu_rule_query")
+        .unwrap();
+    let definition = serde_json::to_value(definition).unwrap();
+    assert_eq!(definition["annotations"]["readOnlyHint"], true);
+    assert_eq!(definition["annotations"]["destructiveHint"], false);
+    for subject in ["supported", "refuted", "both", "neither"] {
+        let input = json!({"subject":format!("urn:{subject}"),"positive_predicate":"urn:positive",
+            "negative_predicate":"urn:negative","object":{"iri":"urn:target"},"judgment_policy":"urn:policy"});
+        let expected = crate::tool_rule_query(&shared.lock().unwrap(), &input).unwrap();
+        let actual = payload(
+            server
+                .dispatch("quipu_rule_query", input, &HeaderMap::new())
+                .await
+                .unwrap(),
+        );
+        assert_eq!(actual, expected);
+        assert_eq!(actual["action_authority"], "not_granted");
+    }
+}
+
+#[tokio::test]
 async fn numeric_get_filters_and_fragment_iris_reach_the_existing_route() {
     let server = McpServer::new(
         Router::new()

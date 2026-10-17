@@ -1,0 +1,20 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix a: <http://aegis.gastown.local/ontology/> .
+@prefix rule: <http://quipu.local/rule#> .
+
+# A purpose-specific profile of the existing governed Decision class.
+# The JSON value is parsed strictly and its complete Decision content must
+# pass the existing admitted decision-seal verifier before use in an answer.
+# Decisions without judgmentClaim remain outside this profile.
+rule:judgmentClaim a rdf:Property ; rdfs:label "judgment claim digest" ; rdfs:range xsd:string .
+rule:RuleJudgmentProfile a sh:NodeShape ;
+    sh:targetSubjectsOf rule:judgmentClaim ;
+    sh:class a:Decision ;
+    sh:property [ sh:path rule:judgmentClaim ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:pattern "^[a-f0-9]{64}$" ] ;
+    sh:property [ sh:path rdf:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path a:decisionPolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:datatype xsd:string ] .

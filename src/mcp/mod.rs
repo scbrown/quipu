@@ -24,6 +24,7 @@ pub mod repair;
 #[cfg(test)]
 mod repair_tests;
 pub mod resolution;
+pub mod rule_answers;
 pub mod search;
 #[cfg(test)]
 mod tests;

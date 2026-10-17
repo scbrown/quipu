@@ -1,5 +1,8 @@
 //! SPARQL Protocol transports and the primary query endpoint.
 
+mod routes;
+pub(crate) use routes::routes;
+
 use axum::{
     body::Bytes,
     extract::{OriginalUri, Query, State},

@@ -25,6 +25,7 @@
 - [Schema Evolution](concepts/schema-evolution.md)
 - [OWL Ontology Layer](concepts/owl.md)
 - [The Reasoner](concepts/reasoning.md)
+- [Four-valued rule answers](concepts/rule-answers.md)
 - [Embeddings and Semantic Search](concepts/embeddings.md)
 
 # Tutorials
