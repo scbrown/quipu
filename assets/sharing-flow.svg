@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" role="img" aria-label="Sharing knowledge between Quipu stores, animated: a share moves from their store into a git-diffable bundle of export.nt, shapes.ttl and manifest.json with stable hashes; quipu import verifies the hashes and checks the shapes in quarantine, never the main graph; quipu import promote is an explicit step into your graph. When two copies diverge, quipu merge runs a three-way, shape-aware merge and exits with code 2 on a conflict. The producer refuses to publish internal identifiers, and the same pack opens in a browser tab.">
+  <style>
+    .t{font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif}
+    .m{font-family:JetBrains Mono,Menlo,Consolas,monospace}
+    .ico{fill:none;stroke:#ffc24d;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .ico .p{stroke:#ff4fa0}
+    .card{fill:#20203a;stroke:#2e2e4d}
+    .pipe{stroke:#ff8a70;stroke-width:2.5;fill:none;stroke-dasharray:6 6;opacity:.6;animation:flow 1.2s linear infinite}
+    .check{stroke-dasharray:22;stroke-dashoffset:22;animation:tick 4.8s ease-in-out infinite}
+    .halo{animation:halo 4.8s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+    @keyframes flow{to{stroke-dashoffset:-24}}
+    @keyframes tick{0%,45%{stroke-dashoffset:22}55%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:22}}
+    @keyframes halo{0%,70%{opacity:0}78%{opacity:.9}100%{opacity:0}}
+    @media (prefers-reduced-motion: reduce){.pipe,.halo{animation:none}.check{animation:none;stroke-dashoffset:0}.pkt,.mdot{display:none}}
+  </style>
+  <defs>
+    <path id="lane" d="M222 186 H750"/>
+    <path id="br1" d="M60 352 C92 352 102 330 128 330 S172 352 200 352"/>
+    <path id="br2" d="M60 352 C92 352 102 374 128 374 S172 352 200 352"/>
+    <g id="file">
+      <path d="M-7 -9 h9 l5 5 v13 h-14 z" fill="#1a1a2e" stroke="#ffc24d" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M2 -9 v5 h5" fill="none" stroke="#ffc24d" stroke-width="1.6"/>
+      <path d="M-4 0 h7 M-4 4 h7" stroke="#ff4fa0" stroke-width="1.4"/>
+    </g>
+  </defs>
+
+  <rect width="960" height="470" rx="20" fill="#12121f"/>
+  <text class="t" x="40" y="52" fill="#ecebf5" font-size="24" font-weight="700">Share knowledge without trusting it blindly</text>
+  <text class="t" x="40" y="78" fill="#a7a6c2" font-size="14">A share is plain files you can diff in git. Nothing reaches your main graph until someone promotes it.</text>
+
+  <path class="pipe" d="M222 186 H262 M462 186 H504 M702 186 H744"/>
+
+  <g class="t">
+    <!-- their store -->
+    <g transform="translate(40,120)">
+      <rect class="card" width="180" height="132" rx="12"/>
+      <g class="ico" transform="translate(16,14)">
+        <ellipse cx="16" cy="6" rx="12" ry="4.5"/><path d="M4 6 v18 c0 2.5 5.4 4.5 12 4.5 s12-2 12-4.5 v-18"/><path class="p" d="M4 15 c0 2.5 5.4 4.5 12 4.5 s12-2 12-4.5"/>
+      </g>
+      <text x="16" y="72" fill="#ecebf5" font-size="16" font-weight="600">Their store</text>
+      <text x="16" y="92" fill="#a7a6c2" font-size="13">Facts, shapes, lineage</text>
+      <text class="m" x="16" y="116" fill="#ff4fa0" font-size="12">quipu share</text>
+    </g>
+    <!-- bundle -->
+    <g transform="translate(266,120)">
+      <rect width="194" height="132" rx="12" fill="#1a1a2e" stroke="#ffc24d" stroke-dasharray="4 4"/>
+      <g class="ico" transform="translate(16,14)">
+        <path d="M2 8 h10 l3 3 h15 v17 h-28 z"/><path class="p" d="M8 18 h16 M8 23 h10"/>
+      </g>
+      <text x="58" y="34" fill="#ffc24d" font-size="16" font-weight="600">Bundle</text>
+      <text class="m" x="16" y="70" fill="#ecebf5" font-size="12">export.nt</text>
+      <text class="m" x="16" y="88" fill="#ecebf5" font-size="12">shapes.ttl</text>
+      <text class="m" x="16" y="106" fill="#ecebf5" font-size="12">manifest.json</text>
+      <text x="16" y="124" fill="#a7a6c2" font-size="11.5">stable hashes, git-diffable</text>
+    </g>
+    <!-- quarantine -->
+    <g transform="translate(506,120)">
+      <rect class="card" width="194" height="132" rx="12"/>
+      <g transform="translate(16,12)">
+        <circle cx="16" cy="16" r="19" fill="#ff4fa0" opacity="0" class="halo"/>
+        <path d="M16 2 L28 7 V16 C28 24 22 29 16 31 C10 29 4 24 4 16 V7 Z" fill="none" stroke="#ffc24d" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M10 16 l4.5 4.5 L23 11.5" fill="none" stroke="#ff4fa0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="check"/>
+      </g>
+      <text x="16" y="72" fill="#ecebf5" font-size="16" font-weight="600">Quarantine</text>
+      <text x="16" y="92" fill="#a7a6c2" font-size="13">Hashes verified, shapes checked</text>
+      <text class="m" x="16" y="116" fill="#ff4fa0" font-size="12">quipu import</text>
+    </g>
+    <!-- your graph -->
+    <g transform="translate(746,120)">
+      <rect width="174" height="132" rx="12" fill="#20203a" stroke="#ff4fa0"/>
+      <g class="ico" transform="translate(16,14)">
+        <path d="M8 8 L24 10 L16 26 Z M24 10 L28 24"/><circle cx="8" cy="8" r="3.5" fill="#1a1a2e"/><circle cx="24" cy="10" r="3.5" fill="#1a1a2e"/><circle cx="16" cy="26" r="3.5" fill="#1a1a2e"/>
+        <circle class="p" cx="28" cy="24" r="3.5" fill="#1a1a2e"><animate attributeName="r" values="3.5;3.5;5;3.5" keyTimes="0;.78;.86;1" dur="4.8s" repeatCount="indefinite"/></circle>
+      </g>
+      <text x="16" y="72" fill="#ecebf5" font-size="16" font-weight="600">Your graph</text>
+      <text x="16" y="92" fill="#a7a6c2" font-size="13">Only by an explicit step</text>
+      <text class="m" x="16" y="116" fill="#ff4fa0" font-size="12">import promote</text>
+    </g>
+  </g>
+
+  <!-- a share packet travels the pipeline: out of their store, through the bundle and quarantine, into your graph -->
+  <g class="pkt">
+    <use href="#file" opacity="0">
+      <animateMotion dur="4.8s" repeatCount="indefinite" keyPoints="0;0.08;0.46;0.54;0.92;1" keyTimes="0;0.12;0.4;0.6;0.88;1" calcMode="linear"><mpath href="#lane"/></animateMotion>
+      <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.08;0.5;0.92;1" dur="4.8s" repeatCount="indefinite"/>
+    </use>
+  </g>
+
+  <g class="t">
+    <!-- merge -->
+    <g transform="translate(40,290)">
+      <rect class="card" width="420" height="150" rx="12"/>
+      <g transform="translate(0,-290)">
+        <path d="M60 352 C92 352 102 330 128 330 S172 352 200 352" fill="none" stroke="#ffc24d" stroke-width="2"/>
+        <path d="M60 352 C92 352 102 374 128 374 S172 352 200 352" fill="none" stroke="#ff4fa0" stroke-width="2"/>
+        <circle cx="60" cy="352" r="5" fill="#1a1a2e" stroke="#a7a6c2" stroke-width="2"/>
+        <circle cx="200" cy="352" r="6" fill="#1a1a2e" stroke="#ecebf5" stroke-width="2"/>
+        <g class="mdot">
+          <circle r="4" fill="#ffc24d"><animateMotion dur="2.6s" begin="0s" repeatCount="indefinite"><mpath href="#br1"/></animateMotion></circle>
+          <circle r="4" fill="#ff4fa0"><animateMotion dur="2.6s" begin="0s" repeatCount="indefinite"><mpath href="#br2"/></animateMotion></circle>
+        </g>
+        <text class="m" x="60" y="380" text-anchor="middle" fill="#a7a6c2" font-size="10.5">base</text>
+        <text class="m" x="128" y="320" text-anchor="middle" fill="#ffc24d" font-size="10.5">ours</text>
+        <text class="m" x="128" y="392" text-anchor="middle" fill="#ff4fa0" font-size="10.5">theirs</text>
+        <text class="m" x="200" y="380" text-anchor="middle" fill="#ecebf5" font-size="10.5">merged</text>
+      </g>
+      <text x="248" y="40" fill="#ecebf5" font-size="15" font-weight="600">Diverged? Merge</text>
+      <text x="248" y="58" fill="#ecebf5" font-size="15" font-weight="600">three ways, by the rules</text>
+      <text x="248" y="80" fill="#a7a6c2" font-size="12">Your shapes decide what</text>
+      <text x="248" y="96" fill="#a7a6c2" font-size="12">counts as a conflict.</text>
+      <text class="m" x="18" y="128" fill="#ff4fa0" font-size="12">quipu merge ./share</text>
+      <text x="168" y="128" fill="#a7a6c2" font-size="12">a conflict exits 2 and nothing is guessed</text>
+    </g>
+    <!-- publish safely -->
+    <g transform="translate(500,290)">
+      <rect class="card" width="420" height="150" rx="12"/>
+      <g class="ico" transform="translate(18,18)">
+        <rect x="5" y="13" width="22" height="16" rx="3"/><path d="M10 13 v-4 a6 6 0 0 1 12 0 v4"/><circle class="p" cx="16" cy="21" r="2"/>
+      </g>
+      <g class="ico" transform="translate(18,82)">
+        <rect x="1" y="3" width="30" height="25" rx="4"/><path d="M1 10 h30"/><path class="p" d="M8 22 l4 -6 4 3 4 -5 4 4"/>
+      </g>
+      <text x="64" y="32" fill="#ecebf5" font-size="15" font-weight="600">Safe to publish</text>
+      <text x="64" y="52" fill="#a7a6c2" font-size="12.5">Internal identifiers your rules mark as private</text>
+      <text x="64" y="68" fill="#a7a6c2" font-size="12.5">are refused before any byte leaves.</text>
+      <text x="64" y="98" fill="#ecebf5" font-size="15" font-weight="600">Easy to open</text>
+      <text x="64" y="118" fill="#a7a6c2" font-size="12.5">The same pack opens in a browser tab, or joins</text>
+      <text x="64" y="134" fill="#a7a6c2" font-size="12.5">a read-only federation with trust labels.</text>
+    </g>
+  </g>
+</svg>

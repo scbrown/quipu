@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-label="Quipu runs anywhere: one store file, six ways to use it, with data flowing between each surface and the store. Claude Code and any MCP client through quipu mcp; the quipu command line; quipu-server over HTTP with REST, MCP and a web UI; the quipu-ai Rust library embedded in your app; fully offline as a single SQLite file; and in the browser through WebAssembly with no server.">
+  <style>
+    .t{font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif}
+    .m{font-family:JetBrains Mono,Menlo,Consolas,monospace}
+    .ico{fill:none;stroke:#ffc24d;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .ico .p{stroke:#ff4fa0}
+    .wire{stroke:#ff8a70;stroke-width:2;stroke-dasharray:4 7;fill:none;opacity:.55;animation:flow 1.6s linear infinite}
+    .glow{transform-origin:480px 300px;animation:breathe 3.2s ease-in-out infinite}
+    .ring{transform-origin:480px 300px;animation:ripple 3.2s ease-out infinite}
+    .card{fill:#20203a;stroke:#2e2e4d}
+    @keyframes flow{to{stroke-dashoffset:-22}}
+    @keyframes breathe{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+    @keyframes ripple{0%{opacity:.6;transform:scale(1)}100%{opacity:0;transform:scale(1.9)}}
+    @media (prefers-reduced-motion: reduce){.wire,.glow,.ring{animation:none}.dot{display:none}}
+  </style>
+  <defs>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF"/><stop offset="35%" stop-color="#FFF1C9"/><stop offset="70%" stop-color="#FFC24D"/><stop offset="100%" stop-color="#FF5A4E"/>
+    </radialGradient>
+    <radialGradient id="bloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF4FA0" stop-opacity=".45"/><stop offset="100%" stop-color="#FF4FA0" stop-opacity="0"/>
+    </radialGradient>
+    <path id="w1" d="M310 172 L424 270"/>
+    <path id="w2" d="M480 180 L480 238"/>
+    <path id="w3" d="M650 172 L536 270"/>
+    <path id="w4" d="M310 428 L424 330"/>
+    <path id="w5" d="M480 420 L480 362"/>
+    <path id="w6" d="M650 428 L536 330"/>
+  </defs>
+
+  <rect width="960" height="540" rx="20" fill="#12121f"/>
+  <text class="t" x="40" y="52" fill="#ecebf5" font-size="24" font-weight="700">Run it anywhere</text>
+  <text class="t" x="40" y="78" fill="#a7a6c2" font-size="14">One store, one engine, six ways in. The same rules, provenance and history wherever it runs.</text>
+
+  <g>
+    <use href="#w1" class="wire"/><use href="#w2" class="wire"/><use href="#w3" class="wire"/>
+    <use href="#w4" class="wire"/><use href="#w5" class="wire"/><use href="#w6" class="wire"/>
+  </g>
+
+  <g class="dot">
+    <circle r="4" fill="#ffc24d"><animateMotion dur="2.4s" repeatCount="indefinite" begin="0s"><mpath href="#w1"/></animateMotion></circle>
+    <circle r="3.5" fill="#ff4fa0"><animateMotion dur="2.4s" repeatCount="indefinite" begin="-1.2s" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w1"/></animateMotion></circle>
+    <circle r="4" fill="#ffc24d"><animateMotion dur="2.0s" repeatCount="indefinite" begin="-.4s"><mpath href="#w2"/></animateMotion></circle>
+    <circle r="3.5" fill="#ff4fa0"><animateMotion dur="2.0s" repeatCount="indefinite" begin="-1.4s" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w2"/></animateMotion></circle>
+    <circle r="4" fill="#ffc24d"><animateMotion dur="2.6s" repeatCount="indefinite" begin="-.8s"><mpath href="#w3"/></animateMotion></circle>
+    <circle r="3.5" fill="#ff4fa0"><animateMotion dur="2.6s" repeatCount="indefinite" begin="-2.1s" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w3"/></animateMotion></circle>
+    <circle r="4" fill="#ffc24d"><animateMotion dur="2.2s" repeatCount="indefinite" begin="-.2s"><mpath href="#w4"/></animateMotion></circle>
+    <circle r="3.5" fill="#ff4fa0"><animateMotion dur="2.2s" repeatCount="indefinite" begin="-1.3s" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w4"/></animateMotion></circle>
+    <circle r="4" fill="#ffc24d"><animateMotion dur="1.9s" repeatCount="indefinite" begin="-.6s"><mpath href="#w5"/></animateMotion></circle>
+    <circle r="3.5" fill="#ff4fa0"><animateMotion dur="1.9s" repeatCount="indefinite" begin="-1.55s" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w5"/></animateMotion></circle>
+    <circle r="4" fill="#ffc24d"><animateMotion dur="2.5s" repeatCount="indefinite" begin="-1s"><mpath href="#w6"/></animateMotion></circle>
+    <circle r="3.5" fill="#ff4fa0"><animateMotion dur="2.5s" repeatCount="indefinite" begin="-2.25s" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w6"/></animateMotion></circle>
+  </g>
+
+  <circle cx="480" cy="300" r="62" fill="none" stroke="#ff4fa0" stroke-width="2" class="ring"/>
+  <circle cx="480" cy="300" r="122" fill="url(#bloom)" class="glow"/>
+  <circle cx="480" cy="300" r="60" fill="url(#core)" stroke="#FF4FA0" stroke-width="3"/>
+  <g fill="none" stroke="#1a1a2e" stroke-width="2.2" stroke-linecap="round">
+    <ellipse cx="480" cy="282" rx="17" ry="6"/>
+    <path d="M463 282 v22 c0 3.3 7.6 6 17 6 s17-2.7 17-6 v-22"/>
+    <path d="M463 293 c0 3.3 7.6 6 17 6 s17-2.7 17-6"/>
+  </g>
+  <text class="t" x="480" y="330" text-anchor="middle" fill="#1a1a2e" font-size="14" font-weight="700">Quipu</text>
+  <text class="m" x="480" y="345" text-anchor="middle" fill="#1a1a2e" font-size="10">store.db</text>
+
+  <g class="t">
+    <g transform="translate(70,128)">
+      <rect class="card" width="240" height="88" rx="12"/>
+      <g class="ico" transform="translate(16,16)">
+        <path d="M10 2 v8 M22 2 v8"/><rect x="5" y="10" width="22" height="9" rx="3"/><path class="p" d="M16 19 v6 c0 3 -2 5 -5 5"/>
+      </g>
+      <text x="60" y="34" fill="#ecebf5" font-size="16" font-weight="600">Claude Code &amp; MCP</text>
+      <text x="60" y="54" fill="#a7a6c2" font-size="12.5">Any MCP client, local or HTTP</text>
+      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">quipu mcp</text>
+    </g>
+    <g transform="translate(360,92)">
+      <rect class="card" width="240" height="88" rx="12"/>
+      <g class="ico" transform="translate(16,18)">
+        <rect x="1" y="2" width="30" height="24" rx="4"/><path d="M7 11 l5 4 -5 4"/><path class="p" d="M15 20 h8"><animate attributeName="opacity" values="1;0;1" dur="1.1s" repeatCount="indefinite"/></path>
+      </g>
+      <text x="60" y="34" fill="#ecebf5" font-size="16" font-weight="600">Command line</text>
+      <text x="60" y="54" fill="#a7a6c2" font-size="12.5">Write, query, share, merge</text>
+      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">quipu read "SELECT …"</text>
+    </g>
+    <g transform="translate(650,128)">
+      <rect class="card" width="240" height="88" rx="12"/>
+      <g class="ico" transform="translate(16,16)">
+        <rect x="3" y="2" width="26" height="11" rx="3"/><rect x="3" y="17" width="26" height="11" rx="3"/>
+        <circle class="p" cx="9" cy="7.5" r="1.4"><animate attributeName="opacity" values="1;.2;1" dur="1.4s" repeatCount="indefinite"/></circle>
+        <circle class="p" cx="9" cy="22.5" r="1.4"><animate attributeName="opacity" values=".2;1;.2" dur="1.4s" repeatCount="indefinite"/></circle>
+        <path d="M15 7.5 h9 M15 22.5 h9"/>
+      </g>
+      <text x="60" y="34" fill="#ecebf5" font-size="16" font-weight="600">HTTP server</text>
+      <text x="60" y="54" fill="#a7a6c2" font-size="12.5">REST, MCP over HTTP, web UI</text>
+      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">quipu-server</text>
+    </g>
+    <g transform="translate(70,384)">
+      <rect class="card" width="240" height="88" rx="12"/>
+      <g class="ico" transform="translate(16,16)">
+        <path d="M16 2 L29 9 V23 L16 30 L3 23 V9 Z"/><path d="M3 9 L16 16 L29 9 M16 16 V30"/><path class="p" d="M9.5 5.5 L22.5 12.5"/>
+      </g>
+      <text x="60" y="34" fill="#ecebf5" font-size="16" font-weight="600">Embedded library</text>
+      <text x="60" y="54" fill="#a7a6c2" font-size="12.5">Inside your Rust app</text>
+      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">quipu-ai crate</text>
+    </g>
+    <g transform="translate(360,420)">
+      <rect class="card" width="240" height="88" rx="12"/>
+      <g class="ico" transform="translate(16,16)">
+        <path d="M5 2 h14 l8 8 v20 h-22 z"/><path d="M19 2 v8 h8"/><path class="p" d="M9 21 a9 9 0 0 1 14 0 M12 25 a4.5 4.5 0 0 1 8 0 M7 15 L25 28"/>
+      </g>
+      <text x="60" y="34" fill="#ecebf5" font-size="16" font-weight="600">Offline</text>
+      <text x="60" y="54" fill="#a7a6c2" font-size="12.5">One SQLite file, no server</text>
+      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">back up with cp</text>
+    </g>
+    <g transform="translate(650,384)">
+      <rect class="card" width="240" height="88" rx="12"/>
+      <g class="ico" transform="translate(16,16)">
+        <rect x="1" y="3" width="30" height="25" rx="4"/><path d="M1 10 h30"/><circle cx="6" cy="6.5" r="1"/><circle cx="10" cy="6.5" r="1"/>
+        <path class="p" d="M8 22 l4 -6 4 3 4 -5 4 4"/>
+      </g>
+      <text x="60" y="34" fill="#ecebf5" font-size="16" font-weight="600">In the browser</text>
+      <text x="60" y="54" fill="#a7a6c2" font-size="12.5">WebAssembly, stays in the tab</text>
+      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">load any pack</text>
+    </g>
+  </g>
+</svg>

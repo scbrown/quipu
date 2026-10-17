@@ -52,6 +52,40 @@ A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record
 The long form (sharing between stores, the feature list, the architecture and
 a comparison): [Why Quipu](docs/book/src/why-quipu.md).
 
+## Run it anywhere
+
+<p align="center">
+  <img src="assets/run-anywhere.svg" width="900" alt="Quipu runs anywhere: one store, six ways in. Claude Code and any MCP client through quipu mcp; the quipu command line; quipu-server over HTTP with REST, MCP and a web UI; the quipu-ai Rust library embedded in your app; offline as a single SQLite file; and in the browser through WebAssembly with no server."/>
+</p>
+
+One store file, one engine. The same rules, provenance and history hold however you reach it.
+
+| Where | How |
+|---|---|
+| Claude Code and other MCP clients | `claude mcp add quipu -- /absolute/path/to/quipu mcp --db store.db` ([wire it into your agent](#wire-it-into-your-agent)) |
+| Command line | `quipu knot`, `quipu read`, `quipu share`, `quipu merge` ([CLI reference](docs/book/src/reference/cli.md)) |
+| HTTP | `quipu-server`: REST, MCP at `/mcp`, and a web UI ([REST API](docs/book/src/reference/rest-api.md)) |
+| Inside your app | the `quipu-ai` Rust crate ([library tour](docs/book/src/why-quipu.md#as-a-rust-library)) |
+| Offline | a single SQLite file: no server, inspect with `sqlite3`, back up with `cp` |
+| In the browser | WebAssembly, queries stay in the tab: [explore this repository's graph](https://scbrown.github.io/quipu/explore/) |
+
+## Share knowledge between stores
+
+<p align="center">
+  <img src="assets/sharing-flow.svg" width="900" alt="Sharing between Quipu stores: quipu share writes a git-diffable bundle of export.nt, shapes.ttl and manifest.json with stable hashes; quipu import verifies hashes and checks shapes into quarantine; quipu import promote is an explicit step into the main graph; diverged copies merge three ways by the shapes, and a conflict exits 2 instead of guessing."/>
+</p>
+
+```bash
+quipu share --output ./share                   # a git-native bundle: facts + shapes + lineage
+quipu import ./their-share                     # verifies hashes, lands in QUARANTINE, not ROOT
+quipu import promote <share-id>                # a named operator's explicit act
+quipu status ./share && quipu merge ./share    # diverged? three-way; conflict exits 2
+```
+
+A share is plain files with stable hashes, so it diffs cleanly in git. The producer
+refuses to publish identifiers your rules mark as internal, and nothing reaches
+your main graph until someone promotes it. More: [Sharing & Federation](https://scbrown.github.io/quipu/sharing/).
+
 ## Install
 
 Linux (x86_64, arm64) and macOS (Apple Silicon, Intel): download the
