@@ -1,0 +1,55 @@
+# PROPOSAL ONLY: not a loaded vocabulary or admission authorization.
+# Application profile: legal applicability interval is half-open [begin,end).
+# Transaction visibility comes from the fact log, never from these endpoints.
+@prefix rule: <http://quipu.local/rule#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix time: <http://www.w3.org/2006/time#> .
+@prefix spdx: <http://spdx.org/rdf/terms#> .
+
+rule:RuleSet rdfs:subClassOf prov:Entity .
+# An edition here is the immutable executable Turtle file, not the statute.
+# The legal source is separately identified through dct:source. This profile
+# uses SPDX checksum semantics without claiming full SPDX document conformance.
+rule:RuleEdition rdfs:subClassOf prov:Entity, spdx:File .
+
+# Preserve all existing optional parser RuleSet carriers. Only catalogue
+# identities reached from an Edition must meet the nested profile below.
+rule:CatalogueVocabularyShape a sh:NodeShape ; sh:targetClass rule:RuleSet .
+rule:CatalogueShape a sh:NodeShape ;
+  sh:nodeKind sh:IRI ;
+  sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+rule:EditionShape a sh:NodeShape ; sh:targetClass rule:RuleEdition ;
+  sh:nodeKind sh:IRI ;
+  sh:property [ sh:path dct:isVersionOf ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rule:RuleSet ; sh:node rule:CatalogueShape ] ;
+  sh:property [ sh:path prov:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ] ;
+  sh:property [ sh:path dct:source ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path time:hasTime ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class time:Interval ; sh:node rule:ApplicabilityShape ] ;
+  sh:property [ sh:path spdx:checksum ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class spdx:Checksum ; sh:node rule:ContentChecksumShape ] .
+
+# Bounded application profile, not a restriction on every OWL-Time interval.
+# Nested shapes enforce the profile only for editions; generic targets add
+# the standard types to the governed vocabulary without constraining others.
+rule:IntervalVocabularyShape a sh:NodeShape ; sh:targetClass time:Interval .
+rule:InstantVocabularyShape a sh:NodeShape ; sh:targetClass time:Instant .
+rule:ChecksumVocabularyShape a sh:NodeShape ; sh:targetClass spdx:Checksum .
+rule:ApplicabilityShape a sh:NodeShape ;
+  sh:property [ sh:path time:hasBeginning ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class time:Instant ; sh:node rule:BoundaryShape ] ;
+  sh:property [ sh:path time:hasEnd ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class time:Instant ; sh:node rule:BoundaryShape ] .
+rule:BoundaryShape a sh:NodeShape ;
+  sh:property [ sh:path time:inXSDDateTimeStamp ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTimeStamp ] .
+rule:ContentChecksumShape a sh:NodeShape ;
+  sh:property [ sh:path spdx:algorithm ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue spdx:checksumAlgorithm_sha256 ] ;
+  sh:property [ sh:path spdx:checksumValue ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] .
+
+# Required application checks beyond core SHACL: normalized whole-second UTC
+# boundaries with begin<end; exact Turtle byte digest; nonempty parsed rules;
+# at most one eligible edition in the pinned snapshot; complete catalogue
+# coverage proof. A missing end means unbounded future, not missing history.
+# Revision corrections mint a distinct immutable edition identity and update
+# temporal fact visibility, retaining earlier transaction answers.

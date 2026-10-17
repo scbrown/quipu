@@ -27,8 +27,17 @@
 
 pub mod ast;
 mod compile;
+pub mod editions;
 pub mod evaluate;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod governed;
+pub mod historical;
+mod historical_bounded;
+pub mod history_attestation;
 pub mod parse;
+pub mod provenance;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod raw_history;
 #[cfg(feature = "reactive-reasoner")]
 pub mod reactive;
 pub mod stratify;

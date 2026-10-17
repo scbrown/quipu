@@ -260,6 +260,94 @@ for (rule_id, count) in &report.per_rule {
 | `strata_run` | `usize` | Number of non-empty strata executed |
 | `per_rule` | `Vec<(String, usize)>` | Per-rule assertion counts |
 
+### Historical edition evaluation (native library)
+
+The native library exposes a separate historical path. The `timestamp` argument
+of `evaluate` stamps a current evaluation; it does not select historical
+premises or a historical rule edition. The file-based CLI above keeps its
+existing behavior. No historical CLI flags are provided by this library API.
+
+Use the following sequence for an independently retained raw SQLite artifact:
+
+1. Verify a detached `SignedHistoryAttestation` with
+   `history_attestation::verify_history_attestation`. The caller supplies a
+   trusted `HistoryCoverageGrant`, including the external policy revision,
+   reviewed evidence bytes and digest, issuer key, exact artifact digest,
+   source lineage, catalogue and premise graphs, and both coverage intervals.
+   A key or completeness assertion supplied by the manifest itself is not
+   authority. Missing, expired, ambiguous or mismatched evidence refuses.
+2. Call `raw_history::admit_raw_history` with those verified terms, the exact
+   retained bytes, a `RawHistoryRequest { valid_at, as_of_tx }`, configuration,
+   the caller's policy store, and the actual admission time. It verifies the
+   digest, SQLite integrity, lineage, real transaction boundaries and graph
+   registration, and refuses attachments and active frozen providers. The
+   reader owns a private immutable copy; it does not snapshot a live service.
+   ROOT is explicitly `urn:quipu:graph:root`, reserved graph zero; an unknown
+   named graph never falls back to ROOT.
+3. Call `governed::evaluate_governed_history(&source, ruleset_iri)`. Catalogue
+   membership is read at the transaction cut, then the edition is selected
+   independently by its valid-time applicability. Premises are read from the
+   admitted premise graph at both pins. Current inferred companions and
+   current shape sets do not participate. Evaluation occurs in isolation
+   without writing derivations into the retained source.
+
+`GovernedHistoricalAnswer` returns the selected edition identity, executable
+Turtle digest and applicability interval, the exact signed source terms,
+transaction cut, original admission time and sorted derived IRI tuples. It is
+an illustrative model answer, not a legal judgment or a captured derivation
+proof. Rule parsing alone does not establish that a vocabulary is loaded or
+that primary text supports the model.
+
+The selector refuses absent, overlapping, malformed or digest-mismatched
+editions. Its bounded profile permits at most 64 editions, 4,096 catalogue
+triples and 1 MiB of catalogue text; execution permits at most 64 uniquely
+identified rules. Premise evaluation permits at most 10,000 tuples and 64
+predicates. A smaller positive configured SPARQL output ceiling remains in
+force, with a reserved sentinel row: reaching the ceiling is a capacity
+refusal, not a truncated successful answer. Zero means no configured output
+ceiling, while these profile bounds still apply. Query deadlines and join
+budgets remain enforced for premise extraction. The same absolute deadline
+also covers derivation. Historical derivation streams one binding at a time,
+refuses before inserting a sentinel-sized derived relation, and shares one
+candidate-work budget across rules, strata and fixed-point rounds (at most
+1,000,000 candidate steps, reduced by a smaller positive caller row cap or
+configured join cap). It admits at most 64 body atoms per rule. Capacity or
+deadline exhaustion refuses the whole answer; it never returns a successful
+partial closure. This bounded historical evaluator does not change the legacy
+file evaluator.
+
+A matching artifact digest, store ID or known transaction cannot prove
+history completeness. That authority must come from the independently
+reviewed coverage grant, including pre-window facts needed by the catalogue
+and premises. This API supplies no producer certificate, issuer registration,
+live schema activation or automatic trust-policy loader. Preserve UNKNOWN
+when those prerequisites are unavailable. Retaining an old receipt does not
+extend its admission validity.
+
+### Bounded standards mapping
+
+This profile makes a conceptual mapping to
+[LegalRuleML 1.0, sections 4.3.1, 4.3.5 and 4.4](https://docs.oasis-open.org/legalruleml/legalruleml-core-spec/v1.0/os/legalruleml-core-spec-v1.0-os.html).
+LegalRuleML separates legal entry, efficacy and applicability and supports
+source associations and temporal parameters for parts of rules. Here, one
+immutable executable edition has one applicability interval and separately
+linked primary sources. That interval is not its assertion time, execution
+time, event time, legal entry or efficacy. This is not LegalRuleML XML
+interchange or a conformance claim.
+
+The catalogue reuses DCMI `isVersionOf` and `source`, PROV `value`, SPDX checksum
+terms and [OWL-Time](https://www.w3.org/TR/owl-time/) interval/instant
+relationships. Half-open applicability intervals, whole-second UTC and exact
+executable-byte SHA256 are application profile choices; OWL-Time does not
+mandate these choices.
+
+Unsupported constructs include temporal associations below edition granularity,
+legal authority and jurisdiction reasoning, deontic operators, defeasible
+priorities, penalties and reparations, legal completeness, and civil calendar
+arithmetic. Synthetic transition facts are precomputed inputs, not calculated
+legal deadlines. A reviewed teaching-case oracle is required before presenting
+any jurisdiction-specific example as an accepted model result.
+
 ### Reactive Evaluation
 
 Requires the `reactive-reasoner` feature.

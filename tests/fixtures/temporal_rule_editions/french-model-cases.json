@@ -1,0 +1,267 @@
+{
+  "status": "ILLUSTRATIVE_MODEL_ONLY_NOT_ACCEPTED_LEGAL_ORACLE",
+  "limitations": [
+    "Raw primary extracts remain unavailable; NULL hashes are not source pins.",
+    "Supplied nominal endpoints and ordering are model inputs; no civil calendar calculation.",
+    "Citation corrections are author-applied; legal expiry remains UNKNOWN."
+  ],
+  "cases": [
+    {
+      "id": "FR-OLD-CONTROL",
+      "primary_sources": [
+        {
+          "id": "fr-2262-old",
+          "url": "https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000006447778/1804-03-21",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Code civil",
+          "article": "2262",
+          "edition": "1804-03-21",
+          "effective_until": "2008-06-19"
+        }
+      ],
+      "premises": {
+        "general_regime_assumed": true,
+        "adult": true,
+        "suspension": false,
+        "interruption": false,
+        "special_exception": false,
+        "pre_entry_proceedings": false,
+        "expired_at_entry": false,
+        "calendar_computation_in_scope": false,
+        "accrual_at": "1990-01-01",
+        "actual_knowledge_at": "1990-01-01",
+        "constructive_knowledge_at": "1990-01-01",
+        "question_date": "2007-01-01"
+      },
+      "proposed_expected": {
+        "teaching_relation": "OLD_30_YEAR_MODEL",
+        "nominal_model_endpoint": "2020-01-01",
+        "legal_expiry": "UNKNOWN",
+        "legal_correctness": "NOT_ASSERTED"
+      },
+      "review_verdict": "FIX",
+      "citation_fix_status": "APPLIED_NOT_INDEPENDENTLY_REVERIFIED"
+    },
+    {
+      "id": "FR-REDUCTION-BINDS",
+      "primary_sources": [
+        {
+          "id": "fr-2224-2008",
+          "url": "https://www.legifrance.gouv.fr/codes/id/LEGIARTI000019017112/2008-06-19/",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Code civil",
+          "article": "2224",
+          "edition": "2008-06-19",
+          "effective_from": "2008-06-19"
+        },
+        {
+          "id": "fr-26-initial",
+          "url": "https://www.legifrance.gouv.fr/jorf/article_jo/JORFARTI000019013811",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Loi n° 2008-561 du 17 juin 2008",
+          "article": "26",
+          "edition": "initial JORF 2008-06-18",
+          "published_at": "2008-06-18",
+          "effective_from": "2008-06-19",
+          "paragraph": "II"
+        }
+      ],
+      "premises": {
+        "general_regime_assumed": true,
+        "adult": true,
+        "suspension": false,
+        "interruption": false,
+        "special_exception": false,
+        "pre_entry_proceedings": false,
+        "expired_at_entry": false,
+        "calendar_computation_in_scope": false,
+        "accrual_at": "1990-01-01",
+        "actual_knowledge_at": "1990-01-01",
+        "constructive_knowledge_at": "1990-01-01",
+        "question_date": "2014-01-01",
+        "old_nominal_endpoint": "2020-01-01",
+        "entry_plus_five_nominal_endpoint": "2013-06-19"
+      },
+      "proposed_expected": {
+        "teaching_relation": "MIN_OF_SUPPLIED_NOMINAL_ENDPOINTS",
+        "nominal_model_endpoint": "2013-06-19",
+        "legal_expiry": "UNKNOWN",
+        "legal_correctness": "NOT_ASSERTED"
+      },
+      "review_verdict": "FIX",
+      "citation_fix_status": "APPLIED_NOT_INDEPENDENTLY_REVERIFIED"
+    },
+    {
+      "id": "FR-PRIOR-CAP",
+      "primary_sources": [
+        {
+          "id": "fr-26-initial",
+          "url": "https://www.legifrance.gouv.fr/jorf/article_jo/JORFARTI000019013811",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Loi n° 2008-561 du 17 juin 2008",
+          "article": "26",
+          "edition": "initial JORF 2008-06-18",
+          "published_at": "2008-06-18",
+          "effective_from": "2008-06-19",
+          "paragraph": "II"
+        }
+      ],
+      "premises": {
+        "general_regime_assumed": true,
+        "adult": true,
+        "suspension": false,
+        "interruption": false,
+        "special_exception": false,
+        "pre_entry_proceedings": false,
+        "expired_at_entry": false,
+        "calendar_computation_in_scope": false,
+        "accrual_at": "1980-01-01",
+        "actual_knowledge_at": "1980-01-01",
+        "constructive_knowledge_at": "1980-01-01",
+        "question_date": "2009-01-01",
+        "old_nominal_endpoint": "2010-01-01",
+        "entry_plus_five_nominal_endpoint": "2013-06-19"
+      },
+      "proposed_expected": {
+        "teaching_relation": "PRIOR_TOTAL_DURATION_CAP",
+        "nominal_model_endpoint": "2010-01-01",
+        "legal_expiry": "UNKNOWN",
+        "legal_correctness": "NOT_ASSERTED"
+      },
+      "review_verdict": "FIX",
+      "citation_fix_status": "APPLIED_NOT_INDEPENDENTLY_REVERIFIED"
+    },
+    {
+      "id": "FR-EXPIRED-INPUT",
+      "primary_sources": [
+        {
+          "id": "fr-2262-old",
+          "url": "https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000006447778/1804-03-21",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Code civil",
+          "article": "2262",
+          "edition": "1804-03-21",
+          "effective_until": "2008-06-19"
+        },
+        {
+          "id": "fr-26-initial",
+          "url": "https://www.legifrance.gouv.fr/jorf/article_jo/JORFARTI000019013811",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Loi n° 2008-561 du 17 juin 2008",
+          "article": "26",
+          "edition": "initial JORF 2008-06-18",
+          "published_at": "2008-06-18",
+          "effective_from": "2008-06-19",
+          "paragraph": "II"
+        }
+      ],
+      "premises": {
+        "general_regime_assumed": true,
+        "adult": true,
+        "suspension": false,
+        "interruption": false,
+        "special_exception": false,
+        "pre_entry_proceedings": false,
+        "expired_at_entry": true,
+        "calendar_computation_in_scope": false,
+        "accrual_at": "1970-01-01",
+        "actual_knowledge_at": "1970-01-01",
+        "constructive_knowledge_at": "1970-01-01",
+        "question_date": "2008-06-19",
+        "old_nominal_endpoint": "2000-01-01",
+        "general_legal_nonrevival": "UNKNOWN"
+      },
+      "proposed_expected": {
+        "teaching_relation": "ALREADY_EXPIRED_UNDER_SUPPLIED_OLD_PERIOD",
+        "nominal_model_endpoint": null,
+        "legal_expiry": "UNKNOWN",
+        "legal_correctness": "NOT_ASSERTED"
+      },
+      "review_verdict": "FIX",
+      "citation_fix_status": "APPLIED_NOT_INDEPENDENTLY_REVERIFIED"
+    },
+    {
+      "id": "FR-NEW-CLAIM",
+      "primary_sources": [
+        {
+          "id": "fr-2224-2008",
+          "url": "https://www.legifrance.gouv.fr/codes/id/LEGIARTI000019017112/2008-06-19/",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Code civil",
+          "article": "2224",
+          "edition": "2008-06-19",
+          "effective_from": "2008-06-19"
+        }
+      ],
+      "premises": {
+        "general_regime_assumed": true,
+        "adult": true,
+        "suspension": false,
+        "interruption": false,
+        "special_exception": false,
+        "pre_entry_proceedings": false,
+        "expired_at_entry": false,
+        "calendar_computation_in_scope": false,
+        "accrual_at": "2009-01-01",
+        "actual_knowledge_at": "2009-01-01",
+        "constructive_knowledge_at": "2009-01-01",
+        "question_date": "2010-01-01"
+      },
+      "proposed_expected": {
+        "teaching_relation": "NEW_5_YEAR_MODEL",
+        "nominal_model_endpoint": "2014-01-01",
+        "legal_expiry": "UNKNOWN",
+        "legal_correctness": "NOT_ASSERTED"
+      },
+      "review_verdict": "FIX",
+      "citation_fix_status": "APPLIED_NOT_INDEPENDENTLY_REVERIFIED"
+    },
+    {
+      "id": "FR-PREENTRY-PROCEEDINGS",
+      "primary_sources": [
+        {
+          "id": "fr-26-initial",
+          "url": "https://www.legifrance.gouv.fr/jorf/article_jo/JORFARTI000019013811",
+          "raw_extract_sha256": null,
+          "raw_extract_status": "UNKNOWN_HTTP_403",
+          "instrument": "Loi n° 2008-561 du 17 juin 2008",
+          "article": "26",
+          "edition": "initial JORF 2008-06-18",
+          "published_at": "2008-06-18",
+          "effective_from": "2008-06-19",
+          "paragraph": "III"
+        }
+      ],
+      "premises": {
+        "general_regime_assumed": true,
+        "adult": true,
+        "suspension": "UNKNOWN",
+        "interruption": "UNKNOWN",
+        "special_exception": false,
+        "pre_entry_proceedings": true,
+        "expired_at_entry": false,
+        "calendar_computation_in_scope": false,
+        "accrual_at": "1990-01-01",
+        "actual_knowledge_at": "1990-01-01",
+        "constructive_knowledge_at": "1990-01-01",
+        "question_date": "2009-01-01",
+        "proceeding_instituted_at": "2008-06-18"
+      },
+      "proposed_expected": {
+        "teaching_relation": "OLD_LAW_REGIME_UNDER_ARTICLE_26_III",
+        "nominal_model_endpoint": null,
+        "legal_expiry": "UNKNOWN",
+        "legal_correctness": "NOT_ASSERTED"
+      },
+      "review_verdict": "FIX",
+      "citation_fix_status": "APPLIED_NOT_INDEPENDENTLY_REVERIFIED"
+    }
+  ]
+}

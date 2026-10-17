@@ -208,7 +208,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 /// legitimately be dated before the epoch even though nothing in this store was
 /// ever *written* then. Floor division, not truncation: `-1 / 86_400` is 0 in
 /// Rust, which would place 1969-12-31T23:59:59Z on 1970-01-01.
-fn format_iso_signed(secs: i64) -> String {
+pub(crate) fn format_iso_signed(secs: i64) -> String {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
     let (y, m, d) = civil_from_days(days);

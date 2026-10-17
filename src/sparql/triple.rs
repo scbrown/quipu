@@ -6,6 +6,7 @@
 
 mod model;
 mod scan;
+mod temporal_visibility;
 
 #[cfg(test)]
 mod limited_tests;
@@ -370,38 +371,7 @@ fn visit_triple_pattern_limited(
     // keep DISTINCT on (e,a,v), so a triple present in several graphs of a FROM
     // union collapses to ONE solution (default-graph merge), not one per graph.
     let want_g = bind_graph_var.is_some();
-    if let Some(vt) = &ctx.valid_at {
-        conditions.push(format!("valid_from <= ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(vt.clone()));
-        conditions.push(format!(
-            "(valid_to IS NULL OR valid_to > ?{})",
-            sql_params.len()
-        ));
-    } else if let Some(tx) = ctx.as_of_tx {
-        // quipu #83: as-of-TRANSACTION liveness, not present-tense liveness.
-        //
-        // This used to push `valid_to IS NULL` and then merely ADD `tx <= N`,
-        // so a fact live at N but retracted since was invisible at every N —
-        // silently, as a smaller answer rather than an error. The row is live
-        // at N when it was asserted by then AND was not retracted by then.
-        //
-        // A legacy row closed before the #83 migration has `retracted_tx` NULL,
-        // so `retracted_tx > N` is NULL and the row stays invisible exactly as
-        // it is today. That is deliberate: the tx that closed it was never
-        // recorded, and guessing would place it in windows it may not have been
-        // live in.
-        conditions.push(format!(
-            "(valid_to IS NULL OR retracted_tx > ?{})",
-            sql_params.len() + 1
-        ));
-        sql_params.push(Box::new(tx));
-    } else {
-        conditions.push("valid_to IS NULL".to_string());
-    }
-    if let Some(tx) = ctx.as_of_tx {
-        conditions.push(format!("tx <= ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(tx));
-    }
+    temporal_visibility::add_conditions(ctx, &mut conditions, &mut sql_params);
 
     let where_clause = if conditions.is_empty() {
         String::new()
