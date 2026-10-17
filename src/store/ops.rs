@@ -2,13 +2,15 @@
 
 use rusqlite::params;
 
-use crate::embedding;
 use crate::error::Result;
 use crate::types::{Fact, Op, Value};
 
 use super::{Datum, Store};
 
 pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome};
+
+#[path = "ops_post_commit.rs"]
+mod post_commit;
 
 /// Result of staging a transaction's rows into the open `quipu_transact`
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
@@ -162,7 +164,13 @@ impl Store {
         // the model never observed the staged rows at all.
         self.set_write_in_progress(true);
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
-        match self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source) {
+        let staged = self
+            .stage_and_guard(datums, timestamp, actor, source, graph, retract_source)
+            .and_then(|staged| {
+                crate::promotion_control::claim_commit(source)?;
+                Ok(staged)
+            });
+        match staged {
             Ok(mut staged) => {
                 let tx_id = staged.tx_id;
                 let counts = staged.counts;
@@ -222,6 +230,9 @@ impl Store {
                 // runs a nested transact whose own error path would otherwise
                 // consume it under the verdict-writer's actor/source.
                 let refusal = self.pending_refusal.take();
+                // Aborted validation advisories must not ride the audit writer
+                // below (or an unrelated later write).
+                self.clear_pending_write_events();
                 // AFTER the rollback, deliberately. The verdict of a denial is
                 // the one worth keeping — an accepted write leaves its own
                 // evidence in the facts it wrote, a refused one leaves nothing.
@@ -398,81 +409,6 @@ impl Store {
             #[cfg(feature = "reactive-reasoner")]
             retracts,
         })
-    }
-
-    /// Post-commit side effects: auto-embedding and reactive observers. Runs
-    /// after the savepoint is released (the write is durable relative to the
-    /// parent), preserving the previous ordering.
-    pub(super) fn after_commit_hooks(
-        &mut self,
-        datums: &[Datum],
-        staged: Staged,
-        timestamp: &str,
-        source: Option<&str>,
-        _graph: i64,
-    ) -> Result<()> {
-        // Post-transact hook: auto-embed touched entities.
-        // Skipped when a vector search delegate is set — embeddings belong in
-        // the external index layer (e.g. Bobbin's LanceDB).
-        if self.embedding_config.auto_embed
-            && self.vector_delegate.is_none()
-            && let Some(provider) = &self.embedding_provider
-        {
-            let entity_ids = embedding::touched_entity_ids(datums);
-            if self.defer_auto_embed {
-                // Deferred path: do only the cheap parts here —
-                // close retired embeddings and build texts — and queue the
-                // multi-second ONNX embed for the caller to run OUTSIDE the
-                // store lock. An episode write's lock hold-time drops from
-                // ~seconds (embed under lock) to the transact itself.
-                let work = embedding::collect_embed_work(self, &entity_ids, timestamp, datums)?;
-                if !work.is_empty() {
-                    match &mut self.pending_embed {
-                        Some(pending) => pending.merge(work),
-                        None => self.pending_embed = Some(work),
-                    }
-                }
-            } else {
-                embedding::auto_embed_entities(
-                    self,
-                    provider,
-                    &entity_ids,
-                    timestamp,
-                    self.embedding_config.embed_batch_size,
-                    datums,
-                )?;
-            }
-        }
-
-        // Notify registered observers. Observers may call store.transact()
-        // directly for per-rule provenance. Cloning the Arc vec first
-        // avoids a borrow conflict with &mut self.
-        #[cfg(feature = "reactive-reasoner")]
-        {
-            use super::Delta;
-
-            if !self.observers.is_empty() {
-                let delta = Delta {
-                    graph: _graph,
-                    tx: staged.tx_id,
-                    asserts: staged.asserts,
-                    retracts: staged.retracts,
-                    source: source.map(String::from),
-                };
-
-                let observers: Vec<_> = self.observers.clone();
-                for obs in &observers {
-                    obs.after_commit(self, &delta)?;
-                }
-            }
-        }
-
-        // `staged` (its tx id / written indices) and `source` are only consumed
-        // by the reactive-reasoner observer dispatch above.
-        #[cfg(not(feature = "reactive-reasoner"))]
-        let _ = (staged, source);
-
-        Ok(())
     }
 
     /// Execute `f` against a speculative fork of the store with `hypothetical`

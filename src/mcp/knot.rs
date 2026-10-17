@@ -96,6 +96,7 @@ fn resolve_committed_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
 /// - **Refusal records.** A gate refusal is an event in this store's own life,
 ///   so it is stamped when it happened, never with the payload's valid-time.
 pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::promotion_control::check()?;
     let turtle = input
         .get("turtle")
         .and_then(|v| v.as_str())
@@ -255,7 +256,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         // Both the retraction plan and the transaction are scoped to the
         // resolved graph: a snapshot in graph G replaces only G's prior
         // facts under this producer key and leaves ROOT untouched.
-        let mut datums = store.plan_source_retraction(&source_tag, graph)?;
+        let datums = store.plan_source_retraction(&source_tag, graph)?;
         let mut assertions = crate::rdf::parse_rdf_scoped(
             store,
             turtle.as_bytes(),
@@ -266,11 +267,20 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             input.get("blank_node_scope").and_then(JsonValue::as_str),
         )?;
         let count = assertions.len();
-        datums.retain(|old| {
-            !assertions.iter().any(|new| {
-                old.entity == new.entity && old.attribute == new.attribute && old.value == new.value
-            })
-        });
+        // Compare canonical term keys once instead of an O(old * new) scan.
+        let mut keys = std::collections::BTreeSet::new();
+        for datum in &assertions {
+            crate::promotion_control::check()?;
+            keys.insert((datum.entity, datum.attribute, datum.value.term_key()));
+        }
+        let mut retained = Vec::new();
+        for old in datums {
+            crate::promotion_control::check()?;
+            if !keys.contains(&(old.entity, old.attribute, old.value.term_key())) {
+                retained.push(old);
+            }
+        }
+        let mut datums = retained;
         datums.append(&mut assertions);
         let tx_id = store.transact_to_graph_scoped(
             &datums,

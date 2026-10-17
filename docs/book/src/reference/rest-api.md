@@ -446,6 +446,55 @@ Response: `{"tx_id": 1, "count": 2, "conforms": true,
 "valid_from": "2026-03-04T08:15:00Z"}` — the echoed `valid_from` is the
 normalised key the facts were actually stored under.
 
+### Resumable snapshot promotion and cancellation
+
+`POST /knot/stage` stores inert, content-addressed parts. Transport parts are
+limited to 512 KiB; the assembled upload is limited to 128 MiB and 512 parts.
+Those are byte limits, **not a bound on promotion memory**. Promotion still
+validates and replaces the complete producer snapshot atomically.
+
+Start or poll with `POST /knot/promote` and `{"upload_id":"sha256:..."}`.
+A pending response includes `"state":"running"` and `"lease_seconds":30`.
+Poll regularly (for example once per second) using the same authenticated
+identity. Each live poll renews the lease. Bound the heartbeat request timeout
+and retry sequence below the lease (for example a five-second timeout with
+three attempts). A 30-second request timeout can itself exhaust this lease;
+a network partition can therefore cancel a still-running client. If the producer stops polling, its
+lease expires and the worker cooperatively cancels before committing the
+snapshot. A late poll cannot revive an expired lease. Only one promotion per
+store is admitted at a time; another upload receives an admission refusal.
+
+For an explicit stop, send the same upload ID to `POST /knot/cancel`, using the
+identity that started promotion. Caller-declared `actor` is not authority.
+`"cancellation_requested":true` acknowledges the request, **not worker exit**.
+Poll `/knot/promote` until `{"pending":false,"state":"cancelled","cancelled":true}`
+confirms the worker has exited without committing its snapshot replacement.
+The previous snapshot and other producers' facts remain active. Durable policy
+and refusal audit records are preserved; validation advisories from the aborted
+payload are discarded. Inert staged
+bytes and dictionary terms can remain until their normal cleanup; cancellation
+is not deletion of staging or an undo of an earlier successful promotion.
+
+Cancellation competes with a single final commit claim. If commit wins,
+`/knot/cancel` reports `"cancellation_requested":false` and `"state":"committing"`
+or `"complete"`; the client must read the final promotion result. Once committed,
+deferred embedding may still be finishing and cannot be undone by cancellation.
+Checks run between upload parts, RDF rows, retraction comparisons and staged
+fact writes, and before commit. This is cooperative cancellation, not a promise
+that every validation or individual SQLite statement can be interrupted within
+30 seconds. Measure stop latency and peak memory for the intended workload
+before admitting a larger publication; raising memory limits is not a substitute.
+
+Terminal receipts are retained for an hour in a bounded process-local cache.
+Cancelled jobs stay terminal while their receipt is retained; polling does not
+restart them. To deliberately resume after confirmed terminal cancellation, the
+same identity can send `{"upload_id":"sha256:...","retry_cancelled":true}` to
+`/knot/promote`. This flag cannot restart a still-running worker, a failed job
+with an indeterminate commit, or a completed job. A fresh server process does
+not retain these receipts. After a
+restart or an indeterminate response, verify snapshot contents before starting
+another promotion. Staging remains content-addressed and independently expires.
+
 ### `POST /cord`
 
 List entities.

@@ -65,6 +65,7 @@ impl Store {
         )?;
         let mut close = self.prepare("UPDATE facts SET valid_to=?1,retracted_tx=?6 WHERE e=?2 AND a=?3 AND v=?4 AND g=?5 AND op=1 AND valid_to IS NULL AND (?7 IS NULL OR tx IN (SELECT id FROM transactions WHERE source=?7))")?;
         for datum in datums {
+            crate::promotion_control::check()?;
             let present =
                 self.has_fact_claim(datum.entity, datum.attribute, &datum.value, graph)?;
             let new_claim = if present && datum.op == Op::Assert {

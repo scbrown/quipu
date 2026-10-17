@@ -193,6 +193,7 @@ pub fn stage_snapshot_part(store: &mut Store, input: &JsonValue) -> Result<JsonV
 /// Verify every staged part and atomically replace the active snapshot. Any
 /// missing/corrupt byte returns before [`crate::mcp::knot::tool_knot`] runs.
 pub fn promote_snapshot_upload(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::promotion_control::check()?;
     let upload_id = required_str(input, "upload_id")?;
     cleanup_expired(store, crate::time::epoch_secs())?;
     type Manifest = (
@@ -256,6 +257,7 @@ pub fn promote_snapshot_upload(store: &mut Store, input: &JsonValue) -> Result<J
     let mut payload = Vec::with_capacity(total_bytes);
     let mut seen = 0_usize;
     for row in rows {
+        crate::promotion_control::check()?;
         let (part_number_raw, part_hash, bytes) = row?;
         let part_number = usize::try_from(part_number_raw)
             .map_err(|_| Error::InvalidValue("stored part_number is out of range".into()))?;
@@ -290,7 +292,12 @@ pub fn promote_snapshot_upload(store: &mut Store, input: &JsonValue) -> Result<J
     knot.as_object_mut()
         .expect("JSON object")
         .retain(|_, value| !value.is_null());
-    let mut result = crate::mcp::knot::tool_knot(store, &knot)?;
+    let result = crate::mcp::knot::tool_knot(store, &knot);
+    if result.is_err() {
+        // Validation can queue advisories before parsing or transaction entry.
+        store.clear_pending_write_events();
+    }
+    let mut result = result?;
     if result.get("conforms").and_then(JsonValue::as_bool) == Some(false) {
         return Ok(result);
     }
@@ -306,6 +313,10 @@ pub fn promote_snapshot_upload(store: &mut Store, input: &JsonValue) -> Result<J
     object.insert("promoted".into(), JsonValue::Bool(true));
     Ok(result)
 }
+
+#[cfg(test)]
+#[path = "snapshot_upload_cancel_tests.rs"]
+mod cancel_tests;
 
 #[cfg(test)]
 mod tests {

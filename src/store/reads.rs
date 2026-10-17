@@ -707,6 +707,7 @@ impl Store {
         let mut facts = Vec::new();
         let mut rows = stmt.query(params)?;
         while let Some(row) = rows.next()? {
+            crate::promotion_control::check()?;
             let v_bytes: Vec<u8> = row.get(2)?;
             let op_raw: i32 = row.get(6)?;
             facts.push(Fact {

@@ -302,6 +302,7 @@ fn parse_rdf_inner(
 
     let mut datums = Vec::new();
     for result in parser.for_reader(reader) {
+        crate::promotion_control::check()?;
         let quad = result.map_err(|e| Error::InvalidValue(format!("RDF parse error: {e}")))?;
         let triple = Triple::from(quad);
         let triple = match &mut scope {

@@ -109,6 +109,7 @@ pub mod share_pointer_load;
 pub mod share_diff;
 // The PR-review report over two pack versions: facts, introduced SHACL
 // violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
+pub mod promotion_control;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;

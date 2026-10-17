@@ -204,6 +204,28 @@ impl StoreHandle {
         guard
     }
 
+    /// A cancelled promotion must also leave the queue without waiting for an
+    /// unrelated long writer. Settle signed authority only after acquisition.
+    pub(crate) fn promotion_lock(
+        &self,
+        control: &quipu::promotion_control::PromotionControl,
+    ) -> quipu::Result<parking_lot::FairMutexGuard<'_, quipu::Store>> {
+        loop {
+            control.check()?;
+            if let Some(guard) = self
+                .writer
+                .try_lock_for(std::time::Duration::from_millis(50))
+            {
+                control.check()?;
+                if let Some(pending) = quipu::transaction_auth::current_attestation() {
+                    let _ = guard.settle_attestation(&pending);
+                }
+                quipu::transaction_auth::refuse_if_refused()?;
+                return Ok(guard);
+            }
+        }
+    }
+
     /// First writer acquisition for tool handlers. Budget rejection precedes
     /// attestation settlement, so a refused unrun write does not spend its nonce.
     pub(crate) fn write_lock(
