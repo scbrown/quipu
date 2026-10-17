@@ -95,6 +95,9 @@ jobs:
 
       # Inspect merged subjects across the package release window before the
       # action can cut a release. A PR title lint cannot see final squash titles.
+      - name: Bound the private pre-1.0 semver exception
+        run: python3 scripts/check-semver-policy.py
+
       - name: Require coverage for nonconventional commits in the release window
         run: python3 scripts/check-release-window.py
 

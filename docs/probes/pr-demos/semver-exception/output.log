@@ -1,0 +1,11 @@
+Script started on 2026-10-16 08:44:20-04:00 [COMMAND="python3 docs/probes/pr-demos/semver-exception/run.py" <not executed on terminal>]
+version=0.14.1 publish=False semver_check=False: exit=0
+semver policy: scoped private 0.x exception or normal checks
+version=0.14.1 publish=True semver_check=False: exit=1
+Restore semver_check=true before publishing quipu-ai, reaching 1.x, or extending the exception
+version=1.0.0 publish=False semver_check=False: exit=1
+Restore semver_check=true before publishing quipu-ai, reaching 1.x, or extending the exception
+version=1.0.0 publish=True semver_check=True: exit=0
+semver policy: scoped private 0.x exception or normal checks
+
+Script done on 2026-10-16 08:44:20-04:00 [COMMAND_EXIT_CODE="0"]

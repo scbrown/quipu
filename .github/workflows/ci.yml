@@ -422,6 +422,8 @@ jobs:
         run: |
           python3 scripts/test_release_ci_gate.py
           python3 scripts/test_release_ci_gate_controls.py
+          python3 scripts/test_semver_policy.py
+          python3 scripts/check-semver-policy.py
 
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'

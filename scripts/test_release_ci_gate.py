@@ -63,4 +63,14 @@ release_plz = release[release.index("  release-plz:\n") :]
 assert "    needs: ci-correctness\n" in release_plz.split("    steps:\n", 1)[0]
 assert "  workflow_dispatch:\n" in release, "manual artifact recovery must remain available"
 
+release_jobs = yaml.load(release, Loader=UniqueSafeLoader)["jobs"]
+steps = release_jobs["release-plz"]["steps"]
+policies = [step for step in steps if step.get("run", "").strip() == "python3 scripts/check-semver-policy.py"]
+assert len(policies) == 1, "semver exception must be bounded at release time"
+assert "if" not in policies[0] and not policies[0].get("continue-on-error", False)
+first_action = next(i for i, step in enumerate(steps) if "release-plz-action@" in step.get("uses", ""))
+assert steps.index(policies[0]) < first_action, "policy must run before release-plz"
+assert "python3 scripts/test_semver_policy.py" in ci
+assert "python3 scripts/check-semver-policy.py" in ci
+
 print("release CI gate contract: ok")

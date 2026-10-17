@@ -25,6 +25,11 @@ git_tag_enable = true
 
 [[package]]
 name = "quipu-ai"
+# The dedicated cache still left API inference at 20m49s (main b7253fd2).
+# This release lane does not publish the 0.x crate; derive bumps from reviewed
+# Conventional Commits. Restore true before enabling publication or reaching
+# 1.x; scripts/check-semver-policy.py refuses those transitions otherwise.
+semver_check = false
 # The crate was called `quipu` through v0.3.27.  A package-qualified tag gives
 # git_only a post-rename baseline whose worktree contains the package name it is
 # resolving; the matching v0.3.27 bridge tag points at the rename commit.
