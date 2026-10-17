@@ -39,6 +39,14 @@ pub(crate) fn limit_pushdown_safe(pattern: &GraphPattern) -> bool {
     }
 }
 
+fn ordered_limit_safe(pattern: &GraphPattern) -> bool {
+    match pattern {
+        GraphPattern::OrderBy { .. } => true,
+        GraphPattern::Project { inner, .. } => ordered_limit_safe(inner),
+        _ => false,
+    }
+}
+
 /// Evaluate a graph pattern, returning rows and the variable names encountered.
 pub fn eval_pattern(
     store: &Store,
@@ -233,6 +241,13 @@ pub fn eval_pattern_seeded(
             // Push only a prefix-safe subtree or a proven constant presence marker.
             let capped;
             let inner_ctx = match length {
+                Some(len) if ordered_limit_safe(inner) => {
+                    capped = TemporalContext {
+                        order_limit: Some(start.saturating_add(*len)),
+                        ..ctx.clone()
+                    };
+                    &capped
+                }
                 Some(len)
                     if limit_pushdown_safe(inner)
                         || super::limited_scan::named_presence(inner, ctx, seed) =>
@@ -314,8 +329,16 @@ pub fn eval_pattern_seeded(
         }
 
         GraphPattern::OrderBy { inner, expression } => {
-            let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
-            Ok((super::order::sort_rows(store, rows, expression, ctx)?, vars))
+            let inner_ctx = TemporalContext {
+                order_limit: None,
+                ..ctx.clone()
+            };
+            let (rows, vars) = eval_pattern_seeded(store, inner, &inner_ctx, seed)?;
+            let sorted = match ctx.order_limit {
+                Some(limit) => super::order::top_rows(store, rows, expression, ctx, limit)?,
+                None => super::order::sort_rows(store, rows, expression, ctx)?,
+            };
+            Ok((sorted, vars))
         }
 
         GraphPattern::Reduced { inner } => eval_pattern_seeded(store, inner, ctx, seed),

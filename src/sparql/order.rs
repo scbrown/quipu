@@ -7,6 +7,11 @@ use crate::{
 };
 use spargebra::algebra::OrderExpression;
 
+#[cfg(not(target_arch = "wasm32"))]
+mod spill;
+mod top;
+pub(super) use top::top_rows;
+
 pub(super) fn sort_rows(
     store: &Store,
     rows: Vec<Bindings>,
@@ -25,6 +30,10 @@ pub(super) fn sort_rows(
         .len()
         .checked_mul(expression.len())
         .ok_or_else(budget_error)?;
+    #[cfg(not(target_arch = "wasm32"))]
+    if rows.len() > 4096 || entries > MAX_KEY_ENTRIES {
+        return spill::sort(store, rows, expression, ctx);
+    }
     if entries > MAX_KEY_ENTRIES {
         return Err(budget_error());
     }
@@ -174,6 +183,104 @@ mod tests {
     use super::*;
 
     #[test]
+    fn limit_preserves_provenance_header_from_a_nonwinning_row() {
+        let store = Store::open_in_memory().unwrap();
+        let result = crate::sparql::query(&store,
+            "SELECT ?x WHERE { VALUES (?x ?_provider) { (1 UNDEF) (2 \"source\") } } ORDER BY ?x LIMIT 1").unwrap();
+        assert_eq!(
+            result.variables(),
+            &["x".to_owned(), "_provider".to_owned()]
+        );
+        assert_eq!(result.rows().len(), 1);
+        assert_eq!(result.rows()[0]["x"], Value::Int(1));
+        assert!(!result.rows()[0].contains_key("_provider"));
+    }
+
+    #[test]
+    fn mixed_incomparable_keys_and_computed_keys_keep_full_sort_prefix() {
+        let store = Store::open_in_memory().unwrap();
+        for keys in ["10 \"x\" 1", "\"x\" 10 1", "true 3 false 1", "2.0 1.0 3.0"] {
+            for order in ["?x", "DESC(?x)", "(?x + 1)"] {
+                let query =
+                    format!("SELECT ?x WHERE {{ VALUES ?x {{ {keys} }} }} ORDER BY {order}");
+                let all = crate::sparql::query(&store, &query).unwrap();
+                let limited = crate::sparql::query(&store, &format!("{query} LIMIT 2")).unwrap();
+                assert_eq!(limited.rows(), &all.rows()[..2], "{query}");
+            }
+        }
+    }
+
+    #[test]
+    fn limit_retains_only_winners_and_offset_preserves_stable_ties() {
+        let store = Store::open_in_memory().unwrap();
+        let values = (0..2000)
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let query = format!(
+            "SELECT ?x WHERE {{ VALUES ?x {{ {values} }} }} ORDER BY (\"{}\") DESC(?x) LIMIT 2 OFFSET 1",
+            "k".repeat(16384)
+        );
+        let result = crate::sparql::query(&store, &query).unwrap();
+        assert_eq!(
+            result
+                .rows()
+                .iter()
+                .map(|r| r["x"].clone())
+                .collect::<Vec<_>>(),
+            vec![Value::Int(1998), Value::Int(1997)]
+        );
+        let result = crate::sparql::query(&store,
+            "SELECT ?id WHERE { VALUES (?key ?id) { (2 9) (1 4) (1 3) (2 8) } } ORDER BY ?key LIMIT 2 OFFSET 1").unwrap();
+        assert_eq!(
+            result
+                .rows()
+                .iter()
+                .map(|r| r["id"].clone())
+                .collect::<Vec<_>>(),
+            vec![Value::Int(3), Value::Int(9)]
+        );
+    }
+
+    #[test]
+    fn limit_does_not_cross_distinct_or_constrain_nested_sort() {
+        let store = Store::open_in_memory().unwrap();
+        let result = crate::sparql::query(
+            &store,
+            "SELECT DISTINCT ?x WHERE { VALUES ?x { 3 3 2 1 } } ORDER BY DESC(?x) LIMIT 2",
+        )
+        .unwrap();
+        assert_eq!(
+            result
+                .rows()
+                .iter()
+                .map(|r| r["x"].clone())
+                .collect::<Vec<_>>(),
+            vec![Value::Int(3), Value::Int(2)]
+        );
+        let result = crate::sparql::query(&store,
+            "SELECT ?x WHERE { { SELECT ?x WHERE { VALUES ?x { 1 2 3 4 } } ORDER BY DESC(?x) } } ORDER BY ?x LIMIT 1").unwrap();
+        assert_eq!(result.rows()[0]["x"], Value::Int(1));
+    }
+
+    #[test]
+    fn complete_order_exceeds_key_slots_without_raising_retained_budget() {
+        let store = Store::open_in_memory().unwrap();
+        let rows = (0..70_000)
+            .rev()
+            .map(|n| Bindings::from([("x".to_owned(), Value::Int(n))]))
+            .collect();
+        let expression = OrderExpression::Asc(spargebra::algebra::Expression::Variable(
+            spargebra::term::Variable::new("x").unwrap(),
+        ));
+        let sorted = sort_rows(&store, rows, &[expression], &TemporalContext::default()).unwrap();
+        assert_eq!(sorted.len(), 70_000);
+        for (n, row) in sorted.iter().enumerate() {
+            assert_eq!(row["x"], Value::Int(n as i64));
+        }
+    }
+
+    #[test]
     fn payload_capacities_and_exact_byte_boundary_are_charged() {
         let mut bytes = MAX_KEY_BYTES - 1;
         charge(&mut bytes, 1).unwrap();
@@ -199,14 +306,18 @@ mod tests {
     }
 
     #[test]
-    fn many_entries_refuse_before_evaluating_any_key() {
+    fn many_entries_spill_natively_or_refuse_without_filesystem() {
         let store = Store::open_in_memory().unwrap();
         let rows = vec![Bindings::new(); MAX_KEY_ENTRIES + 1];
         let expr = OrderExpression::Asc(spargebra::algebra::Expression::Variable(
             spargebra::term::Variable::new("missing").unwrap(),
         ));
+        let result = sort_rows(&store, rows, &[expr], &TemporalContext::default());
+        #[cfg(not(target_arch = "wasm32"))]
+        assert_eq!(result.unwrap().len(), MAX_KEY_ENTRIES + 1);
+        #[cfg(target_arch = "wasm32")]
         assert!(
-            sort_rows(&store, rows, &[expr], &TemporalContext::default())
+            result
                 .unwrap_err()
                 .to_string()
                 .contains("retained key budget")
@@ -259,3 +370,6 @@ mod tests {
         println!("ORDER BY ordinary numeric control: {values:?}");
     }
 }
+
+#[cfg(test)]
+mod numeric_tests;

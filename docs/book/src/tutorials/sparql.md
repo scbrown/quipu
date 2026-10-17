@@ -257,6 +257,30 @@ LIMIT 2
 
 `OFFSET 1 LIMIT 1` would skip korimako and return only palau.
 
+An explicit `ORDER BY … LIMIT k OFFSET n` retains the best `k + n`
+solutions when only column projection separates the limit from the sort and
+keys are constants or consistently typed variables. Mixed incomparable values,
+non-finite numbers, and computed keys retain the full-sort path.
+Response-provenance columns also keep the full relation until projection, so
+metadata present only outside the requested page cannot disappear from headers.
+It still evaluates the complete input: this optimization does not push a
+scan limit through filters, joins, `DISTINCT`, or aggregates. Equal sort keys
+preserve input order, and each sort expression is evaluated once per solution.
+
+Native complete sorts above 4,096 input rows use private temporary-file runs;
+smaller sorts retain the in-memory path. The existing 65,536-key-entry and
+8 MiB retained-key guards are unchanged. Spill runs use a 2 MiB key budget,
+at most 128 initial runs, a 1 MiB encoded-record limit, and a cumulative
+256 MiB write quota including merge passes. Files contain evaluated keys and
+row positions, are private to the process, and are removed when closed.
+Disk errors, quota exhaustion, oversized keys, and deadlines return errors;
+they never return a silently shortened sorted result. WebAssembly keeps the
+explicit in-memory refusal because it has no native temporary-file backend.
+
+These limits bound sorting keys and temporary storage. Earlier query operators
+may already have materialized the input rows, so they are not a bound on total
+query memory. A small `LIMIT` also cannot make an expensive input scan cheap.
+
 ## 8. Aggregates: COUNT, SUM, AVG
 
 Group and aggregate with `GROUP BY`:

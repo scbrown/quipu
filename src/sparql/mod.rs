@@ -233,6 +233,10 @@ pub struct TemporalContext {
     /// scanning once it has enough rows instead of completing the scan and
     /// discarding. `None` = no cap (every pre-existing path).
     pub row_limit: Option<usize>,
+    /// Internal explicit ORDER BY/LIMIT demand, installed only through a
+    /// Project-to-OrderBy chain. Consumed before evaluating the ordered input;
+    /// never an input scan cap or an ambient limit on nested sorts.
+    pub order_limit: Option<usize>,
     /// Service-level result ceiling eligible for pushdown through a wholly
     /// prefix-safe SELECT plan. Unlike `row_limit`, this is not an explicit
     /// SPARQL LIMIT: unsafe operators (FILTER, aggregate, DISTINCT, ORDER BY,
