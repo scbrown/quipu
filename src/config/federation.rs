@@ -11,6 +11,19 @@ use serde::Deserialize;
 pub struct FederationConfig {
     /// List of remote Quipu endpoints.
     pub remotes: Vec<RemoteEndpoint>,
+    /// Local verified pendant declarations considered for exact SPARQL SERVICE URLs.
+    /// Declaration is not consent: Caboodle checks current endpoint policy on use.
+    pub pendants: Vec<EndpointPendant>,
+}
+
+/// A local pendant and its independently supplied pointing repository identity.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EndpointPendant {
+    /// Local directory or archive; never a URL or a discovered trust authority.
+    pub path: std::path::PathBuf,
+    /// Git remote of the repository which declares this pendant.
+    pub repo_remote: String,
 }
 
 /// A remote Quipu endpoint for federation.

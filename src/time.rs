@@ -97,6 +97,19 @@ impl Deadline {
         }
     }
 
+    /// Remaining remote-call budget without rounding a sub-millisecond tail up.
+    #[cfg(feature = "remote")]
+    pub(crate) fn remaining_duration(&self) -> std::time::Duration {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.0.saturating_duration_since(std::time::Instant::now())
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            std::time::Duration::from_secs_f64((self.0 - js_sys::Date::now()).max(0.0) / 1000.0)
+        }
+    }
+
     /// Milliseconds between `start` and this deadline (saturating) — the
     /// effective budget a query ran under, for timeout reporting.
     #[must_use]

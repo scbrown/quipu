@@ -442,6 +442,46 @@ deviation because query data cannot widen the operator's remote allowlist.
 See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for the measured
 score and named verdicts.
 
+### Endpoint pointers and Caboodle consent
+
+A pendant can declare a `kind = "endpoint"` pointer without carrying that
+remote graph. Register the **local** declaring pendant and its repository remote
+in the operator's federation configuration:
+
+```toml
+[[quipu.federation.pendants]]
+path = "/path/to/repo/knowledge/declaration.pendant"
+repo_remote = "https://github.com/example/project.git"
+```
+
+On each `SERVICE <exact-endpoint-url>` use, Quipu verifies the pendant's share
+identity and invokes `caboodle packs trust check-endpoint <repo-remote> <url>`.
+That command requires Tambo/Caboodle with endpoint decision support. Missing,
+refused, invalid or timed-out policy checks fail before network access; the error
+names the endpoint and pointing repository. Consent is rechecked after policy
+changes, including revocation. A foreign archive allow alone does not admit its
+endpoint. Use Caboodle's `packs trust allow-endpoint` or owner policy to grant
+consent; Quipu keeps no second trust policy or persistent admission cache.
+
+An admitted pointer contributes a credential-free, unlabelled endpoint only to
+the current SPARQL `SERVICE` plan. Its `_provider` is the declared graph IRI.
+It does not import triples or shapes, promote to ROOT, forward local credentials,
+follow redirects, infer trust labels, or enable REST whole-query fanout. The
+URL must match exactly, including its trailing slash: consent does not extend
+to an appended `/query` URL. Existing explicit federation remotes retain their
+operator-defined credentials and labels.
+
+The server and MCP use their federation configuration. To opt into strict
+project/user configuration from the native CLI, use:
+
+```bash
+quipu query 'SELECT ?s WHERE { SERVICE <https://example.org/sparql> { ?s ?p ?o } }' --federation
+```
+
+Without the `remote` build feature, `SERVICE` remains unsupported. Local
+filesystem declarations and the native Caboodle policy process are not a browser
+API; browser pack resolution is a separate host interface.
+
 ## The whole stack speaks it
 
 A primitive is only first-class if the tools around it use it, rather than reaching

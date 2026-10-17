@@ -190,6 +190,7 @@ fn a_floor_configured_store_refuses_a_federation_with_an_under_trust_remote() {
     *store.labels_config_mut() = floor(30);
     let fed = FederationConfig {
         remotes: vec![declared("weak", 10)],
+        ..Default::default()
     };
     let err = check_federated_floor(&store, FROM_LOCAL, &fed).expect_err("under-trust remote");
     assert!(err.to_string().contains("weak"), "{err}");
@@ -201,6 +202,7 @@ fn a_declared_remote_at_the_floor_federates() {
     *store.labels_config_mut() = floor(30);
     let fed = FederationConfig {
         remotes: vec![declared("strong", 40)],
+        ..Default::default()
     };
     assert!(check_federated_floor(&store, FROM_LOCAL, &fed).is_ok());
 }
@@ -210,6 +212,7 @@ fn an_undeclared_remote_refuses_under_a_floor_and_passes_without_one() {
     let mut store = store_with_local_trust(50);
     let fed = FederationConfig {
         remotes: vec![RemoteEndpoint::new("open", "http://127.0.0.1:1")],
+        ..Default::default()
     };
     assert!(
         check_federated_floor(&store, FROM_LOCAL, &fed).is_ok(),
@@ -241,6 +244,7 @@ fn a_remote_below_the_local_trust_drags_the_composed_label_down() {
     let store = store_with_local_trust(50);
     let fed = FederationConfig {
         remotes: vec![declared("weak", 10)],
+        ..Default::default()
     };
     let labels = federated_dataset_labels(&store, FROM_LOCAL, &fed)
         .unwrap()
@@ -256,6 +260,7 @@ fn an_undeclared_remote_degrades_coverage_but_fabricates_nothing() {
     let store = store_with_local_trust(50);
     let fed = FederationConfig {
         remotes: vec![RemoteEndpoint::new("open", "http://127.0.0.1:1")],
+        ..Default::default()
     };
     let labels = federated_dataset_labels(&store, FROM_LOCAL, &fed)
         .unwrap()
@@ -282,6 +287,7 @@ fn a_cross_chain_remote_refuses_the_fold_naming_both_chains() {
             trust_rank: Some(90),
             ..RemoteEndpoint::new("x", "http://127.0.0.1:1")
         }],
+        ..Default::default()
     };
     let err = federated_dataset_labels(&store, FROM_LOCAL, &fed).expect_err("cross-chain");
     let msg = err.to_string();

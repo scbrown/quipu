@@ -17,6 +17,8 @@ pub use label::{
 pub use remote::{RemoteProvider, federated_from_config};
 #[cfg(feature = "remote")]
 pub use service::query_configured_service;
+#[cfg(feature = "remote")]
+pub(crate) use service::query_configured_service_with_deadline;
 
 use serde_json::Value as JsonValue;
 

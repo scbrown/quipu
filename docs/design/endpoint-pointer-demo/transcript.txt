@@ -1,0 +1,15 @@
+before: SERVICE unavailable, requests=0
+foreign no consent: named refusal, requests=0
+pack-only approval: refused, requests=0
+exact consent: actual SERVICE row urn:served, exact trailing-slash path, no credentials
+revocation: named refusal, no further request
+URL neighbour: refused, no request
+redirect: refused, unconsented target never reached
+HTTP503: error preserved
+tampered declaration: refused before network
+older trust CLI: unavailable, no policy denial invented, no request
+missing trust CLI: unavailable, no fallback or request
+hung trust CLI: bounded refusal, child reaped, no request
+malformed policy: refused before network
+receiver ROOT: 0 facts, no imported remote data
+ALL endpoint SERVICE acceptance controls PASS

@@ -57,7 +57,7 @@ pub fn cmd_query(args: &[String], db_path: &str) {
         Some(q) if !q.starts_with("--") => q,
         _ => {
             eprintln!(
-                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--fork <name>] [--entailment rdfs] [--db <path>]\n\
+                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--fork <name>] [--entailment rdfs] [--federation] [--db <path>]\n\
                  note: --entailment rdfs MATERIALISES the closure, so it WRITES to the store (idempotent) and needs a writable database"
             );
             std::process::exit(1);
@@ -74,13 +74,25 @@ pub fn cmd_query(args: &[String], db_path: &str) {
 
     let graph = crate::cli_entailment::apply(args, &mut store, graph);
 
-    let ctx = quipu::TemporalContext {
+    let mut ctx = quipu::TemporalContext {
         valid_at,
         as_of_tx,
         graph,
         ..Default::default()
     };
 
+    if args.iter().any(|arg| arg == "--federation") {
+        let config =
+            quipu::config::QuipuConfig::load_strict(&std::env::current_dir().unwrap_or_else(|e| {
+                eprintln!("error reading current directory: {e}");
+                std::process::exit(1);
+            }))
+            .unwrap_or_else(|e| {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            });
+        ctx.service_remotes = Some(std::sync::Arc::new(config.federation));
+    }
     run_query_temporal(&store, sparql, &ctx);
 }
 

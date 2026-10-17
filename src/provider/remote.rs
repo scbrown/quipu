@@ -430,6 +430,7 @@ mod remote_tests {
                 crate::config::RemoteEndpoint::new("a", "http://one:3030"),
                 crate::config::RemoteEndpoint::new("b", "http://two:3030/"),
             ],
+            ..Default::default()
         };
         let fed = federated_from_config(&store, "local", &cfg).unwrap();
         let names: Vec<String> = fed.health_all().into_iter().map(|s| s.name).collect();
@@ -454,6 +455,7 @@ mod remote_tests {
                 trust_rank: Some(30),
                 ..crate::config::RemoteEndpoint::new("p", DEAD)
             }],
+            ..Default::default()
         };
         let fed = federated_from_config(&store, "local", &cfg).unwrap();
         let statuses = fed.health_all();
@@ -533,6 +535,7 @@ mod remote_tests {
                 timeout_ms: Some(2000),
                 ..crate::config::RemoteEndpoint::new("authed", url)
             }],
+            ..Default::default()
         };
         let fed = federated_from_config(&store, "local", &cfg).unwrap();
         let fq = fed.query_all("SELECT ?s WHERE { ?s ?p ?o }");

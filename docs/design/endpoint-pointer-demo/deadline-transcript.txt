@@ -1,0 +1,53 @@
+Script started on 2026-10-17 05:41:53-04:00 [COMMAND="python3 record-deadline-demo.py" <not executed on terminal>]
+BEFORE: reviewed source0749 resolver/service; copied retained candidate
+python3 deadline.py <copied-binary-directory>
+{
+  "results": [
+    {
+      "label": "immediate",
+      "trust_delay_ms": 0,
+      "query_budget_ms": 20,
+      "elapsed_ms": 385.024,
+      "exit": 0,
+      "requests": 1,
+      "output": "s\t_provider\n----------------------------------------\nurn:served\t\"urn:remote\"\n\n1 results\n"
+    },
+    {
+      "label": "delayed",
+      "trust_delay_ms": 250,
+      "query_budget_ms": 20,
+      "elapsed_ms": 637.405,
+      "exit": 2,
+      "requests": 1,
+      "output": "query error: query timeout: exceeded 20ms (ran 263ms) \u2014 narrow the query (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns) or raise [quipu.search] query_timeout_ms\n"
+    }
+  ],
+  "fixture": "copied executables; temporary stores and loopback endpoint; stub trust CLI; no installed-service proof"
+}
+AFTER: shared absolute deadline correction; owned rebuilt candidate
+python3 deadline.py <copied-binary-directory>
+{
+  "results": [
+    {
+      "label": "immediate",
+      "trust_delay_ms": 0,
+      "query_budget_ms": 20,
+      "elapsed_ms": 520.022,
+      "exit": 0,
+      "requests": 1,
+      "output": "s\t_provider\n----------------------------------------\nurn:served\t\"urn:remote\"\n\n1 results\n"
+    },
+    {
+      "label": "delayed",
+      "trust_delay_ms": 250,
+      "query_budget_ms": 20,
+      "elapsed_ms": 466.621,
+      "exit": 2,
+      "requests": 0,
+      "output": "query error: query timeout: exceeded 20ms (ran 20ms) \u2014 narrow the query (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns) or raise [quipu.search] query_timeout_ms\n"
+    }
+  ],
+  "fixture": "copied executables; temporary stores and loopback endpoint; stub trust CLI; no installed-service proof"
+}
+
+Script done on 2026-10-17 05:41:56-04:00 [COMMAND_EXIT_CODE="0"]

@@ -483,12 +483,12 @@ pub fn eval_pattern_seeded(
                 };
             };
             let remote_query = format!("SELECT * WHERE {{ {inner} }}");
-            let outcome = crate::provider::query_configured_service(
+            let outcome = crate::provider::query_configured_service_with_deadline(
                 store,
                 remotes,
                 endpoint,
                 &remote_query,
-                ctx.deadline.map(|deadline| deadline.remaining_millis()),
+                ctx.deadline,
             );
             let (result, provider, label) = match outcome {
                 Ok(v) => v,

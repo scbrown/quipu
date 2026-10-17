@@ -59,7 +59,10 @@ impl Explorer {
         floor: &str,
     ) -> Result<(), JsValue> {
         let remotes = serde_json::from_str(remotes).map_err(err_js)?;
-        let federation = quipu::config::FederationConfig { remotes };
+        let federation = quipu::config::FederationConfig {
+            remotes,
+            ..Default::default()
+        };
         let floor = serde_json::from_str(floor).map_err(err_js)?;
         let previous = std::mem::replace(self.store.labels_config_mut(), floor);
         let result = quipu::provider::check_federated_floor(&self.store, sparql, &federation);

@@ -66,38 +66,80 @@ pub fn query_configured_service(
     sparql: &str,
     deadline_ms: Option<u64>,
 ) -> Result<(QueryResult, String, super::DeclaredLabel)> {
-    let requested = endpoint.trim_end_matches('/');
-    let remote = federation
-        .remotes
-        .iter()
-        .find(|r| {
-            let base = r.url.trim_end_matches('/');
-            requested == base || requested == format!("{base}/query")
-        })
-        .ok_or_else(|| {
+    query_configured_service_with_deadline(
+        store,
+        federation,
+        endpoint,
+        sparql,
+        deadline_ms.map(crate::time::Deadline::after_millis),
+    )
+}
+
+/// Keep the query's original absolute deadline through local consent and HTTP.
+pub(crate) fn query_configured_service_with_deadline(
+    store: &Store,
+    federation: &crate::config::FederationConfig,
+    endpoint: &str,
+    sparql: &str,
+    deadline: Option<crate::time::Deadline>,
+) -> Result<(QueryResult, String, super::DeclaredLabel)> {
+    if let Some(deadline) = deadline.filter(crate::time::Deadline::passed) {
+        return Err(deadline.request_timeout());
+    }
+    let trimmed = endpoint.trim_end_matches('/');
+    let configured = federation.remotes.iter().find(|r| {
+        let base = r.url.trim_end_matches('/');
+        trimmed == base || trimmed == format!("{base}/query")
+    });
+    let (remote, pointer) = if let Some(remote) = configured {
+        (remote.clone(), false)
+    } else {
+        #[cfg(not(target_arch = "wasm32"))]
+        let admitted = federation.pointer_endpoint(endpoint, deadline)?;
+        #[cfg(target_arch = "wasm32")]
+        let admitted: Option<crate::config::RemoteEndpoint> = None;
+        let remote = admitted.ok_or_else(|| {
             Error::InvalidValue(format!(
-                "SERVICE endpoint '{endpoint}' is not in [[quipu.federation.remotes]]"
+                "SERVICE endpoint '{endpoint}' is not in [[quipu.federation.remotes]] or trusted pendant declarations"
             ))
         })?;
+        (remote, true)
+    };
+    // A pointer's consent names one exact URL, not its neighbours or redirects.
+    let requested = if pointer { endpoint } else { trimmed };
     let label = remote.declared_label()?;
-    let configured_timeout = remote.timeout_ms.unwrap_or(5000);
-    let effective_timeout = deadline_ms.map_or(configured_timeout, |remaining| {
-        configured_timeout.min(remaining.max(1))
-    });
-    let mut request = ureq::post(requested)
+    let configured_timeout = std::time::Duration::from_millis(remote.timeout_ms.unwrap_or(5000));
+    let mut agent = ureq::AgentBuilder::new();
+    if pointer {
+        agent = agent.redirects(0);
+    }
+    let mut request = agent
+        .build()
+        .post(requested)
         .set("Content-Type", "application/sparql-query")
-        .set("Accept", "application/sparql-results+json")
-        .timeout(std::time::Duration::from_millis(effective_timeout));
+        .set("Accept", "application/sparql-results+json");
     if let Some(token) = &remote.auth_token {
         request = request.set("Authorization", &format!("Bearer {token}"));
     }
+    // Consent and request preparation consume the same budget. Never turn an
+    // exhausted deadline into a fresh one-millisecond network allowance.
+    let effective_timeout = if let Some(deadline) = deadline {
+        let remaining = deadline.remaining_duration();
+        if remaining.is_zero() {
+            return Err(deadline.request_timeout());
+        }
+        configured_timeout.min(remaining)
+    } else {
+        configured_timeout
+    };
+    request = request.timeout(effective_timeout);
     let started = std::time::Instant::now();
     let response = request.send_string(sparql).map_err(|e| {
         let elapsed = started.elapsed();
-        if elapsed >= std::time::Duration::from_millis(effective_timeout) {
+        if elapsed >= effective_timeout {
             Error::QueryTimeout {
                 elapsed_ms: elapsed.as_millis(),
-                limit_ms: u128::from(effective_timeout),
+                limit_ms: effective_timeout.as_millis(),
             }
         } else {
             Error::InvalidValue(format!(
@@ -215,6 +257,7 @@ mod tests {
                 freshness: Some("fresh".into()),
                 ..crate::config::RemoteEndpoint::new("partner", &url)
             }],
+            ..Default::default()
         };
         let (result, truncated) = crate::mcp::query_result_with_federation(
             &store,
@@ -346,6 +389,7 @@ mod tests {
                 timeout_ms: Some(5000),
                 ..crate::config::RemoteEndpoint::new("slow", &url)
             }],
+            ..Default::default()
         };
         let started = std::time::Instant::now();
         let mut store = Store::open_in_memory().unwrap();
@@ -362,6 +406,47 @@ mod tests {
     }
 
     #[test]
+    fn service_http_uses_only_the_budget_left_after_prior_work() {
+        use std::io::{Read, Write};
+        use std::time::{Duration, Instant};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = socket.read(&mut buf);
+            std::thread::sleep(Duration::from_millis(200));
+            let body = r#"{"head":{"vars":[]},"results":{"bindings":[]}}"#;
+            let _ = write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+        });
+        let store = Store::open_in_memory().unwrap();
+        let cfg = crate::config::FederationConfig {
+            remotes: vec![crate::config::RemoteEndpoint::new("remaining", &url)],
+            ..Default::default()
+        };
+        let deadline = crate::time::Deadline::after_millis(300);
+        std::thread::sleep(Duration::from_millis(200));
+        let started = Instant::now();
+        let result = query_configured_service_with_deadline(
+            &store,
+            &cfg,
+            &url,
+            "SELECT * WHERE { ?s ?p ?o }",
+            Some(deadline),
+        );
+        assert!(
+            matches!(result, Err(Error::QueryTimeout { .. })),
+            "{result:?}"
+        );
+        assert!(started.elapsed() < Duration::from_millis(170));
+        server.join().unwrap();
+    }
+
+    #[test]
     fn service_results_obey_the_service_row_ceiling() {
         let (url, server) = serve_once(
             r#"{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"literal","value":"a"}},{"s":{"type":"literal","value":"b"}}]}}"#,
@@ -370,6 +455,7 @@ mod tests {
         store.search_config_mut().max_sparql_rows = 1;
         let cfg = crate::config::FederationConfig {
             remotes: vec![crate::config::RemoteEndpoint::new("bounded", &url)],
+            ..Default::default()
         };
         let (result, truncated) = crate::mcp::query_result_with_federation(
             &store,
@@ -397,6 +483,7 @@ mod tests {
             &input,
             Some(std::sync::Arc::new(crate::config::FederationConfig {
                 remotes: vec![crate::config::RemoteEndpoint::new("dead", DEAD)],
+                ..Default::default()
             })),
         )
         .unwrap()
