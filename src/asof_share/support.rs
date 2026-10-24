@@ -84,9 +84,19 @@ impl Drop for ReadPhaseGuard<'_> {
     }
 }
 
-/// Whether `iri` is a frozen graph whose pack is mounted (not thawed). A store
-/// that never froze anything has no registry table.
-pub(super) fn is_frozen(store: &Store, iri: &str) -> Result<bool> {
+/// A frozen graph's mounted pack, as the registry records it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct FrozenPack {
+    pub(super) alias: String,
+    pub(super) path: String,
+    pub(super) content_hash: String,
+    pub(super) frozen_at: String,
+}
+
+/// The mounted (not thawed) pack of frozen graph `iri`, if it is frozen. A
+/// store that never froze anything has no registry table.
+pub(super) fn frozen_pack(store: &Store, iri: &str) -> Result<Option<FrozenPack>> {
+    use rusqlite::OptionalExtension as _;
     let registry: bool = store.conn.query_row(
         "SELECT EXISTS (SELECT 1 FROM main.sqlite_master \
                         WHERE type = 'table' AND name = 'frozen_packs')",
@@ -94,14 +104,24 @@ pub(super) fn is_frozen(store: &Store, iri: &str) -> Result<bool> {
         |r| r.get(0),
     )?;
     if !registry {
-        return Ok(false);
+        return Ok(None);
     }
-    Ok(store.conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM main.frozen_packs \
-                        WHERE graph_iri = ?1 AND thawed_at IS NULL)",
-        params![iri],
-        |r| r.get(0),
-    )?)
+    Ok(store
+        .conn
+        .query_row(
+            "SELECT alias, path, content_hash, frozen_at FROM main.frozen_packs \
+             WHERE graph_iri = ?1 AND thawed_at IS NULL ORDER BY id DESC LIMIT 1",
+            params![iri],
+            |r| {
+                Ok(FrozenPack {
+                    alias: r.get(0)?,
+                    path: r.get(1)?,
+                    content_hash: r.get(2)?,
+                    frozen_at: r.get(3)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
 pub(super) fn sorted_unique(

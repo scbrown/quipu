@@ -8,6 +8,7 @@ use std::path::Path;
 
 use serde_json::Value as Json;
 
+use super::Capture;
 use super::replay_tests::{apply_tx, datum, live_digest, replay_onto};
 use crate::asof_share::{AbortReason, Cut, CutError, Limits, Request, cut, cut_with_control};
 use crate::store::Store;
@@ -878,16 +879,78 @@ fn digest_merging_runs_after_the_read_transaction_closes() {
     );
 }
 
-/// A frozen graph's rows live in its pack, not in main, and it is not one of
-/// the attachment-contributed graphs. Until frozen packs can be read
-/// (s24.1.1) the cut must refuse it, never cut it as an empty graph.
+/// Live facts of one graph only, by the same canonical form as `live_digest`.
+fn graph_digest(store: &Store, graph: &str) -> std::collections::BTreeSet<String> {
+    let prefix = format!("{graph} ");
+    live_digest(store)
+        .into_iter()
+        .filter(|line| line.starts_with(&prefix))
+        .collect()
+}
+
+/// s24.1.1: a frozen graph is cut from its mounted pack as of T, so a replica
+/// bootstrapped from the cut equals the graph as it was before the freeze.
+/// The freeze moved the rows out of main; without the pack read the replica
+/// would hold nothing for the graph.
 #[test]
-fn a_frozen_graph_is_refused_not_cut_empty() {
+fn a_frozen_graph_is_cut_from_its_pack() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, path) = file_store(dir.path());
+    fixture(&mut source);
+    let before = graph_digest(&source, G);
+    assert!(!before.is_empty(), "fixture wrote nothing to G");
+    let report = source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    assert!(report.facts > 0, "the freeze moved rows: {report:?}");
+    let spool = tempfile::tempdir().unwrap();
+    let first = cut(
+        &source,
+        &request(&source, None),
+        spool.path(),
+        &Limits::default(),
+    )
+    .unwrap();
+    let frozen = first.manifest.completeness.graphs[G]
+        .frozen
+        .clone()
+        .expect("the manifest names the pack");
+    assert_eq!(frozen["pack_content_hash"], report.content_hash);
+    let replica = bootstrap(&first);
+    assert_eq!(
+        graph_digest(&replica, G),
+        before,
+        "replica equals the pre-freeze graph"
+    );
+    // The same after reopening, when the pack is mounted from the registry.
+    drop(source);
+    let reopened = Store::open(&path).unwrap();
+    let again = cut(
+        &reopened,
+        &request(&reopened, None),
+        spool.path(),
+        &Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(graph_digest(&bootstrap(&again), G), before, "after reopen");
+}
+
+/// A pack whose content no longer matches its recorded hash refuses the cut;
+/// it is never cut without that graph or from an unverified pack.
+#[test]
+fn a_frozen_graph_whose_pack_fails_verification_refuses_the_cut() {
     let dir = tempfile::tempdir().unwrap();
     let (mut source, _path) = file_store(dir.path());
     fixture(&mut source);
     source
         .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    source
+        .conn
+        .execute(
+            "UPDATE frozen_packs SET content_hash = 'sha256:00' WHERE graph_iri = ?1",
+            [G],
+        )
         .unwrap();
     let spool = tempfile::tempdir().unwrap();
     let result = cut(
@@ -896,19 +959,55 @@ fn a_frozen_graph_is_refused_not_cut_empty() {
         spool.path(),
         &Limits::default(),
     );
-    assert!(
-        matches!(&result, Err(CutError::Refused(e)) if e.to_string().contains("frozen")),
-        "{result:?}"
-    );
+    assert!(matches!(result, Err(CutError::Refused(_))), "{result:?}");
     assert!(spool_is_empty(spool.path()));
-    // The same after reopening, when the pack is mounted from the registry.
-    drop(source);
-    let reopened = Store::open(&_path).unwrap();
-    let result = cut(
-        &reopened,
-        &request(&reopened, None),
+}
+
+/// s24.1.1 epoch conformance: a follower bootstrapped before another graph is
+/// frozen sees the next page name a new log epoch, refuses to splice, and a
+/// fresh cut (now reading that graph from its pack) equals the source again.
+#[test]
+fn a_freeze_after_bootstrap_changes_the_epoch_and_a_fresh_cut_reequals() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, _path) = file_store(dir.path());
+    fixture(&mut source);
+    let before = graph_digest(&source, G);
+    let spool = tempfile::tempdir().unwrap();
+    let first = cut(
+        &source,
+        &request(&source, None),
         spool.path(),
         &Limits::default(),
+    )
+    .unwrap();
+    let epoch = first.manifest.source.log_epoch.clone();
+    source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    let page = source
+        .changes_after(
+            first.manifest.watermark_tx,
+            10,
+            Capture::OldAndNewValues,
+            None,
+        )
+        .unwrap()
+        .to_json();
+    assert_ne!(
+        page["source"]["log_epoch"], epoch,
+        "the freeze moved rows, so the follower's next page names a new epoch"
     );
-    assert!(matches!(result, Err(CutError::Refused(_))), "{result:?}");
+    // The follower refuses to splice and bootstraps again.
+    let second = cut(
+        &source,
+        &request(&source, None),
+        spool.path(),
+        &Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        second.manifest.source.log_epoch,
+        page["source"]["log_epoch"]
+    );
+    assert_eq!(graph_digest(&bootstrap(&second), G), before);
 }

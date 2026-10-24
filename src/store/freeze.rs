@@ -527,6 +527,17 @@ impl Store {
     /// needs is the TEMP alias table, so `query_only` is toggled off around
     /// exactly that rebuild; the file handle stays `SQLITE_OPEN_READ_ONLY`,
     /// so real writes remain impossible at the layer that counts.
+    /// Verify a frozen pack's full history against its recorded hash, before
+    /// anything reads it as the graph's content.
+    pub(crate) fn verify_frozen_pack(
+        &self,
+        path: &str,
+        graph_iri: &str,
+        content_hash: &str,
+    ) -> Result<()> {
+        super::freeze_io::verify_history_pack(path, graph_iri, content_hash)
+    }
+
     pub fn sync_frozen_attachments(&mut self) -> Result<bool> {
         let has_table: bool = self
             .conn
