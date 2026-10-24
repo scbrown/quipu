@@ -5,11 +5,10 @@
 //! of the live facts. The plain fixture is the positive control: it proves the
 //! instrument can say "equal". Each defect fixture isolates one feed gap.
 
-use std::collections::BTreeSet;
-
 use serde_json::Value as Json;
 
 use super::*;
+use crate::applier::live_digest;
 use crate::store::{Datum, Store};
 use crate::types::Op;
 
@@ -21,86 +20,6 @@ fn datum(e: i64, a: i64, value: Value, valid_from: &str, op: Op) -> Datum {
         valid_from: valid_from.into(),
         valid_to: None,
         op,
-    }
-}
-
-/// `(e, a, v, g, valid_from, valid_to)` as stored.
-type FactRow = (i64, i64, Vec<u8>, i64, String, Option<String>);
-
-/// Live facts as resolved strings, so two stores with different term ids
-/// compare by meaning. Valid time is part of a fact's identity here.
-fn live_digest(store: &Store) -> BTreeSet<String> {
-    let mut stmt = store
-        .conn
-        .prepare(
-            "SELECT e, a, v, g, valid_from, valid_to FROM facts \
-             WHERE op = 1 AND retracted_tx IS NULL",
-        )
-        .unwrap();
-    let rows: Vec<FactRow> = stmt
-        .query_map([], |r| {
-            Ok((
-                r.get(0)?,
-                r.get(1)?,
-                r.get(2)?,
-                r.get(3)?,
-                r.get(4)?,
-                r.get(5)?,
-            ))
-        })
-        .unwrap()
-        .collect::<std::result::Result<_, _>>()
-        .unwrap();
-    rows.into_iter()
-        .map(|(e, a, v, g, from, to)| {
-            let value = match Value::from_bytes(&v).unwrap() {
-                Value::Ref(id) => format!("ref:{}", store.resolve(id).unwrap()),
-                Value::Bytes(b) => format!("bytes:{b:?}"),
-                other => format!("{other:?}"),
-            };
-            let graph = if g == 0 {
-                "ROOT".to_string()
-            } else {
-                store.resolve(g).unwrap()
-            };
-            format!(
-                "{graph} {} {} {value} [{from}, {to:?})",
-                store.resolve(e).unwrap(),
-                store.resolve(a).unwrap()
-            )
-        })
-        .collect()
-}
-
-/// Rebuild a stored value from its feed JSON. What the feed leaves out cannot
-/// be invented here: a `bytes_len` stub replays as empty bytes.
-fn value_of(replica: &Store, json: &Json) -> Value {
-    match json {
-        Json::String(s) => Value::Str(s.clone()),
-        Json::Bool(b) => Value::Bool(*b),
-        Json::Number(n) if n.is_i64() => Value::Int(n.as_i64().unwrap()),
-        Json::Number(n) => Value::Float(n.as_f64().unwrap()),
-        Json::Object(o) if o.contains_key("ref") => {
-            Value::Ref(replica.intern(o["ref"].as_str().unwrap()).unwrap())
-        }
-        Json::Object(o) if o.contains_key("lang") => Value::Lang {
-            lexical: o["value"].as_str().unwrap().into(),
-            lang: o["lang"].as_str().unwrap().into(),
-        },
-        Json::Object(o) if o.contains_key("datatype") => Value::Typed {
-            lexical: o["value"].as_str().unwrap().into(),
-            datatype: o["datatype"].as_str().unwrap().into(),
-        },
-        Json::Object(o) if o.contains_key("base64") => {
-            use base64::Engine as _;
-            Value::Bytes(
-                base64::engine::general_purpose::STANDARD
-                    .decode(o["base64"].as_str().unwrap())
-                    .unwrap(),
-            )
-        }
-        Json::Object(o) if o.contains_key("bytes_len") => Value::Bytes(Vec::new()),
-        other => panic!("unreplayable value {other}"),
     }
 }
 
@@ -123,28 +42,14 @@ fn replay(source: &Store) -> Store {
     for (_, records) in by_tx {
         let timestamp = records[0]["timestamp"].as_str().unwrap().to_string();
         let graph_name = records[0]["graph"].as_str().unwrap().to_string();
+        // The applier's conversion, so the conformance tests and every
+        // replica share one record -> datum mapping (aegis-s24.2).
         let datums: Vec<Datum> = records
             .iter()
             .map(|r| {
-                let e = replica.intern(r["entity"].as_str().unwrap()).unwrap();
-                let a = replica.intern(r["attribute"].as_str().unwrap()).unwrap();
-                let from = r["valid_from"].as_str().unwrap_or(&timestamp).to_string();
-                let mut d = match r["op"].as_str().unwrap() {
-                    "retract" => datum(
-                        e,
-                        a,
-                        value_of(&replica, &r["old_value"]),
-                        &from,
-                        Op::Retract,
-                    ),
-                    _ => datum(e, a, value_of(&replica, &r["value"]), &from, Op::Assert),
-                };
-                // A retract names the fact it closes; its own row's valid time
-                // describes the closing, not an interval to replay.
-                if d.op == Op::Assert {
-                    d.valid_to = r["valid_to"].as_str().map(String::from);
-                }
-                d
+                crate::applier::record_to_datum(&replica, r, &timestamp)
+                    .unwrap()
+                    .expect("every post-F4 record is reproducible")
             })
             .collect();
         if graph_name == "ROOT" {

@@ -79,6 +79,7 @@ Both return one page:
       "valid_from": "2026-04-03", "valid_to": null
     }
   ],
+  "since": 42,
   "next_tx": 43,
   "watermark_tx": 43,
   "watermark_timestamp": "2026-04-03",
@@ -88,7 +89,12 @@ Both return one page:
 ```
 
 Pass `next_tx` back as the cursor (`--from` / `since`). On an empty page it
-stays put, so polling is a fixpoint, not a rewind. `Ref` values resolve to
+stays put, so polling is a fixpoint, not a rewind. `since` echoes the cursor
+the page answers: the page holds every transaction in scope in
+`(since, next_tx]`. A follower whose own cursor is below `since` has missed
+the transactions between them and must resume from its cursor rather than
+apply the page. The chunked `begin` and `commit` frames carry the same
+`since`. `Ref` values resolve to
 `{"ref": "<iri>"}` so a consumer can tell an edge from a string that happens
 to look like one. Bytes arrive as `{"bytes_len": n, "base64": "..."}` — the
 whole body, so a replica built from the feed holds the same value.

@@ -361,6 +361,7 @@ pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Feed
     // `source` names the store and log epoch, so a follower can epoch-check a
     // chunked transaction exactly as it checks a whole page (F5).
     for key in [
+        "since",
         "next_tx",
         "watermark_tx",
         "watermark_timestamp",
@@ -378,6 +379,7 @@ pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Feed
             "records": records.len(),
             "bytes": parts.iter().map(String::len).sum::<usize>(),
             "digest": digest,
+            "since": page.get("since").cloned().unwrap_or(Value::Null),
             "source": page.get("source").cloned().unwrap_or(Value::Null),
         })
         .to_string(),

@@ -133,6 +133,15 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // store mints its own on first open, and a follower holding a cursor into
     // the original sees the epoch change and re-bootstraps (local-sync-mode §5).
     ("log_epoch", Disposition::Excluded),
+    // A replica's cursor into ONE source's history (the shared applier,
+    // aegis-s24.2). A share of the replica is a different copy with no cursor
+    // of its own: carrying it would let the copy splice a feed it never
+    // bootstrapped from. Excluded, like the epoch it is bound to.
+    ("replica_progress", Disposition::Excluded),
+    // The digests of the transactions that cursor applied, kept to tell an
+    // exact redelivery from a changed one. They belong to the same cursor and
+    // mean nothing without it: excluded with it.
+    ("replica_applied_tx", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.

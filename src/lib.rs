@@ -5,6 +5,7 @@
 
 pub mod acquisition;
 pub mod align;
+pub mod applier;
 pub mod bindings;
 pub mod compact;
 pub mod config;

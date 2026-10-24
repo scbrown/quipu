@@ -86,6 +86,10 @@ impl Capture {
 #[derive(Debug)]
 pub struct ChangePage {
     pub records: Vec<Json>,
+    /// The cursor this page answers: it covers every transaction in scope in
+    /// `(since, next_tx]`. A follower whose cursor is below `since` would skip
+    /// transactions by applying it, so it must resume instead.
+    pub since: i64,
     pub next_tx: i64,
     pub watermark_tx: i64,
     pub watermark_timestamp: Option<String>,
@@ -102,6 +106,7 @@ impl ChangePage {
     pub fn to_json(&self) -> Json {
         json!({
             "records": self.records,
+            "since": self.since,
             "next_tx": self.next_tx,
             "watermark_tx": self.watermark_tx,
             "watermark_timestamp": self.watermark_timestamp,
@@ -164,6 +169,7 @@ impl Store {
         }
         Ok(ChangePage {
             records,
+            since: since_tx,
             next_tx: tx_ids.last().copied().unwrap_or(since_tx),
             watermark_tx,
             watermark_timestamp,
