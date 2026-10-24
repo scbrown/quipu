@@ -1,8 +1,15 @@
 # Decision Deck native backend
 
-Status: native library implementation, disabled by default. There is no HTTP,
-MCP, CLI enrollment, browser ceremony, or production caller in this change.
-Temporary-store tests use software authenticators and establish no human identity.
+Status: native implementation, disabled by default.
+
+- The HTTP routes `/deck/present`, `/deck/attest` and `/deck/receipt` exist
+  behind `[quipu.server] deck_http`.
+- The operator CLI `quipu deck` configures, enrolls, enables, revokes and
+  reports over the store file (see "Operator CLI" below).
+- There is no MCP enrollment, no browser enrollment ceremony and no
+  production caller.
+- Temporary-store tests use software authenticators and establish no human
+  identity.
 
 ## Trust and scope
 
@@ -85,6 +92,27 @@ install it with `Store::query_load`. It lists admitted receipt projections;
 query text and a returned row alone are not signature verification. Re-verify
 the protected receipt before trusting a result. Receipt lookup works while the
 application is disabled or the credential has been revoked.
+
+## Operator CLI
+
+`quipu deck` is the only caller of the operator methods outside tests. It
+acts on the store file, so file access remains the authority, and it has no
+HTTP route:
+
+```text
+quipu deck configure --origin https://HOST --rp-id HOST --actor WHO --author CURATOR
+quipu deck enroll --credential-id B64URL --cose-key B64URL --scheme webauthn-es256|webauthn-eddsa --expires-at EPOCH
+quipu deck enable | disable
+quipu deck revoke <CREDENTIAL-ID>
+quipu deck status
+```
+
+`enroll` and `status` print the credential's fingerprint: the first 16 hex
+digits of SHA-256 over the exact COSE key bytes, in groups of four (for
+example `9bb1-7e67-b268-ca8b`). An enrollment page shows the same value,
+computed from the bytes it hands over. Before enabling, the person enrolling
+confirms that the two match. A match names the key; it does not prove who
+holds it. A mismatched enrollment is revoked, never edited.
 
 ## Remaining integration gates
 

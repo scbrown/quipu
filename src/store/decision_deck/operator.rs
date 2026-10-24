@@ -117,6 +117,47 @@ impl Store {
             == 1)
     }
 
+    /// Read-only operator view; `None` when no scope was ever configured.
+    pub fn deck_status(&self) -> Result<Option<DeckStatus>> {
+        let row: Option<(Vec<u8>, bool)> = self
+            .conn
+            .query_row("SELECT data,enabled FROM deck_config WHERE id=1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .optional()?;
+        let Some((data, enabled)) = row else {
+            return Ok(None);
+        };
+        let config: Config = decode(&data)?;
+        let mut statement = self
+            .conn
+            .prepare("SELECT data,revoked,sign_count FROM deck_credentials ORDER BY rowid")?;
+        let credentials = statement
+            .query_map([], |r| Ok((r.get::<_, Vec<u8>>(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(|(data, revoked, sign_count)| {
+                let credential: Credential = decode(&data)?;
+                Ok(CredentialStatus {
+                    fingerprint: credential_fingerprint(&credential.cose_key),
+                    id: credential.id,
+                    scheme: credential.scheme,
+                    expires_at: credential.expires_at,
+                    revoked,
+                    sign_count,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Some(DeckStatus {
+            origin: config.origin,
+            rp_id: config.rp_id,
+            actor: config.actor,
+            author: config.author,
+            enabled,
+            credentials,
+        }))
+    }
+
     /// Author one explicit request through trusted operator access. Transport
     /// callers must not expose this method with a self-asserted author string.
     /// Revisions increase strictly; a challenge for an older revision fails.

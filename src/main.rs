@@ -49,6 +49,7 @@ mod cli_changes;
 mod cli_commands;
 mod cli_compose;
 mod cli_db;
+mod cli_deck;
 mod cli_demotions;
 mod cli_entailment;
 mod cli_explain;
@@ -169,6 +170,7 @@ fn main() {
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
+        "deck" => cli_deck::cmd_deck(&args, db_path),
         "trust-root" => cli_trust_root::cmd_trust_root(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
         "rule-query" => cli_rule_answers::run(&args, db_path),
@@ -434,6 +436,10 @@ COMMANDS:
     qp share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     qp attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     qp attest list [--db <path>]
+    qp deck configure --origin https://HOST --rp-id HOST --actor WHO --author CURATOR [--db <path>]   Decision Deck scope (operator-only, starts disabled)
+    qp deck enroll --credential-id B64URL --cose-key B64URL --scheme webauthn-es256|webauthn-eddsa --expires-at EPOCH [--db <path>]
+    qp deck enable|disable|status [--db <path>]
+    qp deck revoke <credential-id> [--db <path>]
     qp trust-root challenge --verifier NAME --public-key HEX [--db <path>]
     qp trust-root bootstrap --verifier NAME --public-key HEX --pop-signature HEX [--attests POLICY]... [--db <path>]
     qp trust-root status [--db <path>]

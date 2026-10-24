@@ -86,6 +86,54 @@ pub struct Credential {
     pub expires_at: i64,
 }
 
+/// Short operator-readable fingerprint of a COSE public key: the first 16 hex
+/// digits of its SHA-256, in groups of four. The enrollment page computes the
+/// same value from the bytes it shows, and the operator compares the two before
+/// trusting an enrollment. It names a key; it is not a security proof.
+pub fn credential_fingerprint(cose_key: &[u8]) -> String {
+    let digest = hex::encode(ring::digest::digest(&ring::digest::SHA256, cose_key));
+    digest.as_bytes()[..16]
+        .chunks(4)
+        .map(|c| std::str::from_utf8(c).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// One enrolled credential as the operator sees it. No key material beyond
+/// the public fingerprint.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CredentialStatus {
+    /// Unpadded base64url credential ID.
+    pub id: String,
+    /// `WebAuthn` scheme tag.
+    pub scheme: String,
+    /// [`credential_fingerprint`] of the enrolled COSE key.
+    pub fingerprint: String,
+    /// Binding deadline (epoch seconds).
+    pub expires_at: i64,
+    /// Permanently revoked.
+    pub revoked: bool,
+    /// Last recorded authenticator counter.
+    pub sign_count: u32,
+}
+
+/// Read-only operator view of the deck: scope, switch and enrollments.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DeckStatus {
+    /// Exact dedicated HTTPS origin.
+    pub origin: String,
+    /// Relying-party host.
+    pub rp_id: String,
+    /// Configured human identity.
+    pub actor: String,
+    /// Configured request curator.
+    pub author: String,
+    /// The store's operator switch (the server's `deck_http` is separate).
+    pub enabled: bool,
+    /// Every enrollment, including revoked and expired ones, oldest first.
+    pub credentials: Vec<CredentialStatus>,
+}
+
 /// Complete canonical server-issued action. Serialize this struct, never a
 /// caller-supplied JSON object. The `WebAuthn` challenge is derived over these
 /// bytes using the existing published verifier domain.
