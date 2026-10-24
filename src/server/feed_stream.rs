@@ -17,13 +17,12 @@ use axum::{
 };
 use futures::stream::unfold;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 
 use super::{
     SharedStore,
     base::blocking,
-    event_cursor::{fits_frame, fits_frame_len, resume_offset, validate_frame},
+    event_cursor::{fits_frame, resume_offset, validate_frame},
     feed,
 };
 
@@ -87,9 +86,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         )
             .into_response();
     }
-    static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
-    let slots = SLOTS.get_or_init(|| Arc::new(Semaphore::new(64))).clone();
-    let Ok(slot) = slots.try_acquire_owned() else {
+    let Some(slot) = stream_slot() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             "stream capacity exhausted; reconnect later",
@@ -262,6 +259,17 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         .into_response()
 }
 
+/// One of the 64 slots every long-lived feed stream holds while it sends,
+/// or `None` when all are taken.
+pub(crate) fn stream_slot() -> Option<OwnedSemaphorePermit> {
+    static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    SLOTS
+        .get_or_init(|| Arc::new(Semaphore::new(64)))
+        .clone()
+        .try_acquire_owned()
+        .ok()
+}
+
 /// One feed frame, independent of transport: the event name, the cursor id
 /// it acknowledges (if any) and its data, byte-for-byte as sent. SSE builds an
 /// `Event` from it only at the edge, so another transport can send the same
@@ -274,7 +282,7 @@ pub(crate) struct FeedFrame {
 }
 
 impl FeedFrame {
-    fn into_sse(self) -> Event {
+    pub(crate) fn into_sse(self) -> Event {
         let event = Event::default().event(self.event);
         let event = match self.id {
             Some(id) => event.id(id.to_string()),
@@ -306,56 +314,32 @@ pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Feed
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    // Sized with a placeholder digest of the final length, so the real part
-    // can never be larger than the one that was measured.
-    let placeholder = "0".repeat(64);
-    let part_data = |index: usize, chunk: &[Value], before: &str| {
-        json!({"source_tx": next, "index": index, "digest_before": before, "records": chunk})
-            .to_string()
-    };
-    // Sizes add exactly: an array serializes as `[`, the items joined by `,`,
-    // and `]`, so a part is its empty frame plus each record plus a comma.
-    let mut chunks: Vec<Vec<Value>> = Vec::new();
-    let mut chunk: Vec<Value> = Vec::new();
-    let mut size = part_data(0, &[], &placeholder).len();
-    for record in &records {
-        let text = record.to_string().len();
-        if !chunk.is_empty() && !fits_frame_len(size + text + 1) {
-            chunks.push(std::mem::take(&mut chunk));
-            size = part_data(chunks.len(), &[], &placeholder).len();
+    let mut builder = quipu::feed_parts::PartBuilder::new(next);
+    let mut parts = Vec::new();
+    for record in records {
+        match builder.push(&record) {
+            Ok(closed) => parts.extend(closed),
+            Err(quipu::feed_parts::RecordTooLarge) => {
+                return Err(FeedFrame {
+                    event: "quipu.changes.tx_too_large",
+                    id: None,
+                    data: json!({
+                        "source_tx": next,
+                        "reason": "one record exceeds the transport frame budget; cursor not advanced",
+                    })
+                    .to_string(),
+                });
+            }
         }
-        let len = text + usize::from(!chunk.is_empty());
-        if !fits_frame_len(size + len) {
-            return Err(FeedFrame {
-                event: "quipu.changes.tx_too_large",
-                id: None,
-                data: json!({
-                    "source_tx": next,
-                    "reason": "one record exceeds the transport frame budget; cursor not advanced",
-                })
-                .to_string(),
-            });
-        }
-        size += len;
-        chunk.push(record.clone());
     }
-    if !chunk.is_empty() {
-        chunks.push(chunk);
-    }
-    let mut hasher = Sha256::new();
-    let mut parts = Vec::with_capacity(chunks.len());
-    for (index, chunk) in chunks.iter().enumerate() {
-        let before = hex::encode(hasher.clone().finalize());
-        let data = part_data(index, chunk, &before);
-        hasher.update(data.as_bytes());
-        parts.push(data);
-    }
-    let digest = hex::encode(hasher.finalize());
+    let (last, summary) = builder.finish();
+    parts.extend(last);
+    let digest = summary.digest;
     let mut frames = VecDeque::new();
     let mut commit = json!({
         "source_tx": next,
-        "parts": parts.len(),
-        "records": records.len(),
+        "parts": summary.parts,
+        "records": summary.records,
         "digest": digest,
     });
     // `source` names the store and log epoch, so a follower can epoch-check a
@@ -374,9 +358,9 @@ pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Feed
         id: None,
         data: json!({
             "source_tx": next,
-            "parts": parts.len(),
-            "records": records.len(),
-            "bytes": parts.iter().map(String::len).sum::<usize>(),
+            "parts": summary.parts,
+            "records": summary.records,
+            "bytes": summary.bytes,
             "digest": digest,
             "source": page.get("source").cloned().unwrap_or(Value::Null),
         })

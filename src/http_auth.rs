@@ -127,6 +127,11 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // unconditionally even though the handler is cfg(feature = "owl"), because
     // the enforcer scans server.rs as TEXT and sees the route either way.
     "/ontology",
+    // aegis-s24.1: the as-of share writes nothing to the store. It is
+    // write-class ONLY so that it is fail-closed until per-graph read
+    // authorization has its own design and ruling: no unauthenticated or
+    // read-only caller can pull a cut of the whole board.
+    "/share/asof",
     // quipu-923: /reason runs a Datalog ruleset and PERSISTS its derivations
     // (assert + retract through the fact log) — a write however read-shaped
     // "run the reasoner" sounds.

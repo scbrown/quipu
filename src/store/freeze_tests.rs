@@ -507,3 +507,90 @@ impl crate::vector_delegate::VectorSearchDelegate for NoopFreezeDelegate {
         Ok(0)
     }
 }
+
+/// F2 (local-sync-mode.md §2): freeze relocates a graph's rows out of the
+/// change feed. The graph reads the same, so a following replica needs no
+/// record, but a replay from an older cursor now returns fewer records. A new
+/// log epoch is what tells a follower that its cursor no longer names the same
+/// history. Thaw brings the rows back behind every cursor, so it mints again.
+#[test]
+fn freeze_and_thaw_each_mint_a_new_log_epoch() {
+    use crate::store::changes::Capture;
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = file_store(&dir);
+    seed_window(&mut store);
+    // The window graph's own records; freeze also writes label and lifecycle
+    // facts in other graphs, so the total is not the measure.
+    let records = |store: &Store| {
+        store
+            .changes_after(0, usize::MAX >> 1, Capture::NewValues, None)
+            .unwrap()
+            .records
+            .iter()
+            .filter(|r| r["graph"] == WINDOW)
+            .count()
+    };
+    let (epoch0, served0) = (store.log_epoch().unwrap(), records(&store));
+
+    store
+        .freeze_graph(
+            WINDOW,
+            dir.path().to_str().unwrap(),
+            "2026-08-24T01:00:00Z",
+            Some("tester"),
+        )
+        .unwrap();
+    let (epoch1, served1) = (store.log_epoch().unwrap(), records(&store));
+    assert_ne!(
+        epoch1, epoch0,
+        "freeze removed served history without a new epoch"
+    );
+    // A follower sees the change on the next page it reads, not by a side
+    // channel: a cursor from epoch0 must not be spliced onto this history.
+    let page = store
+        .changes_after(0, 1, Capture::NewValues, None)
+        .unwrap()
+        .to_json();
+    assert_eq!(page["source"]["log_epoch"], epoch1, "{page}");
+    assert!(
+        served0 > 0 && served1 == 0,
+        "control: freeze must remove the graph's feed rows ({served0} -> {served1})"
+    );
+
+    store
+        .thaw_graph(WINDOW, "2026-08-24T02:00:00Z", Some("tester"))
+        .unwrap();
+    let epoch2 = store.log_epoch().unwrap();
+    assert_ne!(
+        epoch2, epoch1,
+        "thaw changed served history without a new epoch"
+    );
+}
+
+/// A freeze or thaw that moves no feed rows changes no served history, so it
+/// keeps the epoch: a needless bump would make every follower re-bootstrap. A
+/// refused freeze rolls back before anything is written and keeps it too.
+#[test]
+fn a_freeze_or_thaw_that_moves_no_rows_keeps_the_log_epoch() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = file_store(&dir);
+    store.graph_create(WINDOW).unwrap();
+    let out = dir.path().to_str().unwrap().to_string();
+    let epoch = store.log_epoch().unwrap();
+
+    store
+        .freeze_graph(WINDOW, &out, "2026-08-24T01:00:00Z", Some("tester"))
+        .unwrap();
+    assert_eq!(store.log_epoch().unwrap(), epoch, "empty freeze bumped");
+    assert!(
+        store
+            .freeze_graph(WINDOW, &out, "2026-08-24T01:30:00Z", Some("tester"))
+            .is_err(),
+        "control: a second freeze must be refused"
+    );
+    assert_eq!(store.log_epoch().unwrap(), epoch, "refused freeze bumped");
+    store
+        .thaw_graph(WINDOW, "2026-08-24T02:00:00Z", Some("tester"))
+        .unwrap();
+    assert_eq!(store.log_epoch().unwrap(), epoch, "empty thaw bumped");
+}

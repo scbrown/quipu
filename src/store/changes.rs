@@ -315,7 +315,7 @@ impl Store {
 
     /// JSON for a stored value. Refs resolve to their IRI under `"ref"` so a
     /// consumer can tell an edge from a string that happens to look like one.
-    fn value_json(&self, value: &Value) -> Result<Json> {
+    pub(crate) fn value_json(&self, value: &Value) -> Result<Json> {
         Ok(match value {
             Value::Ref(id) => json!({"ref": self.resolve(*id)?}),
             Value::Str(s) => json!(s),
@@ -338,3 +338,7 @@ mod tests;
 #[cfg(test)]
 #[path = "changes_replay_tests.rs"]
 mod replay_tests;
+
+#[cfg(test)]
+#[path = "changes_asof_tests.rs"]
+mod asof_tests;

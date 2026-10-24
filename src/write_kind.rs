@@ -112,6 +112,8 @@ impl WriteKind {
             | "/subscriptions"
             | "/events/commit"
             | "/events/graph/commit" => Self::GraphAdmin,
+            // Writes no fact; listed with the writes only for authorization.
+            "/share/asof" => Self::GraphAdmin,
             "/project"
             | "/impact"
             | "/embed_backfill"

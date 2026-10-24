@@ -8,6 +8,7 @@ use quipu::{
     store::Datum,
     types::{Op, Value as FactValue},
 };
+use sha2::{Digest, Sha256};
 
 fn datum(store: &mut Store, name: &str) -> Datum {
     Datum {

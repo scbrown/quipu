@@ -9,9 +9,13 @@ use super::{
     tools::finish_deferred_embed,
 };
 
+#[path = "asof.rs"]
+mod asof;
+
 pub(crate) fn acquisition_routes() -> axum::Router<SharedStore> {
     axum::Router::new()
         .route("/acquire", axum::routing::post(acquire))
+        .route("/share/asof", axum::routing::post(asof::share_asof))
         .route("/acquire/composed", axum::routing::post(acquire_composed))
         .route(
             "/acquire/eligibility",

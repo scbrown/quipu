@@ -1,7 +1,5 @@
 //! Private transport core: replay offsets are delivery positions, never ACKs.
 
-const MAX_FRAME_BYTES: usize = 1024 * 1024;
-
 pub(super) fn resume_offset(
     since: Option<i64>,
     last_id: Option<&str>,
@@ -51,7 +49,7 @@ pub(super) fn fits_frame(json: &str) -> bool {
 
 /// [`fits_frame`] for a body whose length is already known.
 pub(super) fn fits_frame_len(len: usize) -> bool {
-    len <= MAX_FRAME_BYTES.saturating_sub(64)
+    quipu::feed_parts::fits_frame_len(len)
 }
 
 #[cfg(test)]
@@ -95,7 +93,7 @@ mod tests {
     fn sse_injection_and_oversize_refuse() {
         assert!(frame(0, 1, "{}\nid: 999").is_err());
         assert!(frame(0, 1, "{}\rdata: forged").is_err());
-        assert!(frame(0, 1, &"x".repeat(MAX_FRAME_BYTES)).is_err());
+        assert!(frame(0, 1, &"x".repeat(quipu::feed_parts::MAX_FRAME_BYTES)).is_err());
         assert_eq!(
             frame(0, 1, "{}"),
             Ok("id: 1\nevent: quipu.event\ndata: {}\n\n".into())

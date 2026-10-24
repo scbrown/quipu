@@ -13,7 +13,7 @@ use super::*;
 use crate::store::{Datum, Store};
 use crate::types::Op;
 
-fn datum(e: i64, a: i64, value: Value, valid_from: &str, op: Op) -> Datum {
+pub(super) fn datum(e: i64, a: i64, value: Value, valid_from: &str, op: Op) -> Datum {
     Datum {
         entity: e,
         attribute: a,
@@ -29,7 +29,7 @@ type FactRow = (i64, i64, Vec<u8>, i64, String, Option<String>);
 
 /// Live facts as resolved strings, so two stores with different term ids
 /// compare by meaning. Valid time is part of a fact's identity here.
-fn live_digest(store: &Store) -> BTreeSet<String> {
+pub(super) fn live_digest(store: &Store) -> BTreeSet<String> {
     let mut stmt = store
         .conn
         .prepare(
@@ -108,9 +108,14 @@ fn value_of(replica: &Store, json: &Json) -> Value {
 /// Valid time comes from the record when the feed carries it, else from the
 /// record's commit timestamp, which is all a consumer has today.
 fn replay(source: &Store) -> Store {
-    let mut replica = Store::open_in_memory().unwrap();
+    replay_onto(source, 0, Store::open_in_memory().unwrap())
+}
+
+/// Tail the feed from `since` into `replica`, as a follower does after a
+/// bootstrap.
+pub(super) fn replay_onto(source: &Store, since: i64, mut replica: Store) -> Store {
     let page = source
-        .changes_after(0, usize::MAX >> 1, Capture::OldAndNewValues, None)
+        .changes_after(since, usize::MAX >> 1, Capture::OldAndNewValues, None)
         .unwrap();
     let mut by_tx: Vec<(i64, Vec<&Json>)> = Vec::new();
     for record in &page.records {
@@ -122,41 +127,41 @@ fn replay(source: &Store) -> Store {
     }
     for (_, records) in by_tx {
         let timestamp = records[0]["timestamp"].as_str().unwrap().to_string();
-        let graph_name = records[0]["graph"].as_str().unwrap().to_string();
-        let datums: Vec<Datum> = records
-            .iter()
-            .map(|r| {
-                let e = replica.intern(r["entity"].as_str().unwrap()).unwrap();
-                let a = replica.intern(r["attribute"].as_str().unwrap()).unwrap();
-                let from = r["valid_from"].as_str().unwrap_or(&timestamp).to_string();
-                let mut d = match r["op"].as_str().unwrap() {
-                    "retract" => datum(
-                        e,
-                        a,
-                        value_of(&replica, &r["old_value"]),
-                        &from,
-                        Op::Retract,
-                    ),
-                    _ => datum(e, a, value_of(&replica, &r["value"]), &from, Op::Assert),
-                };
-                // A retract names the fact it closes; its own row's valid time
-                // describes the closing, not an interval to replay.
-                if d.op == Op::Assert {
-                    d.valid_to = r["valid_to"].as_str().map(String::from);
-                }
-                d
-            })
-            .collect();
-        if graph_name == "ROOT" {
-            replica.transact(&datums, &timestamp, None, None).unwrap();
-        } else {
-            let g = replica.graph_create(&graph_name).unwrap();
-            replica
-                .transact_to_graph(&datums, &timestamp, None, None, g)
-                .unwrap();
-        }
+        apply_tx(&mut replica, &records, &timestamp);
     }
     replica
+}
+
+/// Apply one group of records as one replica transaction. A record without
+/// its own `valid_from` takes `timestamp`.
+pub(super) fn apply_tx(replica: &mut Store, records: &[&Json], timestamp: &str) {
+    let graph_name = records[0]["graph"].as_str().unwrap().to_string();
+    let datums: Vec<Datum> = records
+        .iter()
+        .map(|r| {
+            let e = replica.intern(r["entity"].as_str().unwrap()).unwrap();
+            let a = replica.intern(r["attribute"].as_str().unwrap()).unwrap();
+            let from = r["valid_from"].as_str().unwrap_or(timestamp).to_string();
+            let mut d = match r["op"].as_str().unwrap() {
+                "retract" => datum(e, a, value_of(replica, &r["old_value"]), &from, Op::Retract),
+                _ => datum(e, a, value_of(replica, &r["value"]), &from, Op::Assert),
+            };
+            // A retract names the fact it closes; its own row's valid time
+            // describes the closing, not an interval to replay.
+            if d.op == Op::Assert {
+                d.valid_to = r["valid_to"].as_str().map(String::from);
+            }
+            d
+        })
+        .collect();
+    if graph_name == "ROOT" {
+        replica.transact(&datums, timestamp, None, None).unwrap();
+    } else {
+        let g = replica.graph_create(&graph_name).unwrap();
+        replica
+            .transact_to_graph(&datums, timestamp, None, None, g)
+            .unwrap();
+    }
 }
 
 fn assert_replica_equals_source(source: &Store) {

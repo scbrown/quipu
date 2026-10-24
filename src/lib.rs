@@ -5,6 +5,9 @@
 
 pub mod acquisition;
 pub mod align;
+/// As-of scoped share: a replica bootstrap cut at one transaction.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod asof_share;
 pub mod bindings;
 pub mod compact;
 pub mod config;
@@ -68,6 +71,8 @@ pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
+/// Oversized-transaction parts shared by the change stream and the as-of share.
+pub mod feed_parts;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_pin;

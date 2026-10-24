@@ -2291,6 +2291,57 @@ limits output frames to 1 MiB. A large transaction is still read whole before
 it is split into parts, so this is not a total heap bound. See the
 [committed-feed protocol](../architecture/event-stream.md).
 
+### `POST /share/asof`
+
+The replica bootstrap: the live facts of 1 to 64 registered committed graphs
+(or `"ROOT"`, when named) at one transaction `T`, as `/changes` assert records. A follower applies the cut,
+then tails `/changes?since=<watermark_tx>` (design: `docs/design/as-of-share.md`).
+
+```json
+{"graphs": ["https://example.org/graph/hosts"], "context_graphs": [],
+ "tx": 742611, "expected_store_id": "urn:uuid:..."}
+```
+
+- `tx` is optional; without it the cut is taken at the head read inside the
+  cut. `context_graphs` names further graphs the follower needs; their records
+  are carried too. Unknown fields are refused.
+- **Authorization:** the route is write-class. It requires an authenticated
+  writer and is refused in read-only mode, until per-graph read authorization
+  exists.
+- **Response:** Server-Sent Events. A cut that fits one frame is a single
+  `quipu.asof` event, `{manifest, records}`. A larger cut has the layout of an
+  oversized change transaction:
+  - `quipu.asof.begin`: `source_tx` (= `watermark_tx`), `parts`, `records`,
+    `bytes`, `digest`, `source`, the `manifest` and `manifest_sha256`;
+  - numbered `quipu.asof.part` frames, each `{source_tx, index, digest_before,
+    records}`;
+  - a `quipu.asof.commit` barrier repeating the totals, digest, source and
+    manifest hash. Only the barrier carries an SSE id.
+- `digest` is SHA-256 over every part's data in order; each part's
+  `digest_before` is the same hash over the parts before it. Stage every part
+  and apply nothing until the barrier's digest matches. A disconnect discards
+  the stage; request a new cut.
+- Each record is `{op: "assert", tx, timestamp, actor, source, graph,
+  entity, attribute, value, valid_from, valid_to}`, with values encoded as in
+  `/changes` (bytes as base64).
+- The manifest's per-graph `digest` is SHA-256 over the graph's records as
+  compact JSON with sorted keys, the lines sorted and joined by `\n`; its
+  `scope_digest` is SHA-256 over `{"context_graphs": [...], "scope": [...]}`. A fact retracted after `T` reports `valid_to: null`, as its `/changes`
+  assert record does; the retract arrives in the tail.
+- **Refusals** are ordinary responses, sent before any frame:
+  - `400`: an invalid selection, an overlay or dataset IRI, a graph served from
+    an attached or frozen pack (not yet supported), or a store identity mismatch;
+  - `503` with `Retry-After`: `cut_in_progress` (one read phase at a time),
+    `stream_capacity_exhausted`, or
+    `{"error":"cut_aborted","reason":"time_ceiling|wal_ceiling|spool_quota|disk_full"}`.
+    An aborted cut sends nothing; retry later.
+- The read transaction is open only while the cut is spooled to disk
+  (`QUIPU_ASOF_SPOOL_DIR`, default `<tmp>/quipu-asof-spool`). The spool is
+  deleted once the stream ends. The read phase aborts after 300 s or 1 GiB of
+  WAL growth, checked inside SQLite as well as between records. A cut may use
+  at most the 8 GiB quota less what the spool directory already holds, and
+  never the last 1 GiB of free disk.
+
 ### `POST /events/commit`
 
 `{"consumer_id", "offset"}` — durably record a ROOT consumer's cursor. Any
