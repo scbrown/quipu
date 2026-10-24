@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "8fb57af0472af4bb8038247ccb54f9a4b2afe689",
-  "quipu_version": "quipu 0.15.0\ngit_sha: 8fb57af0472af4bb8038247ccb54f9a4b2afe689\ngit_dirty: false",
-  "generated_at": "2026-10-21T15:07:20Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/39619544090",
+  "quipu_revision": "e3ea3658626bcacc1502f7d494e406b599817840",
+  "quipu_version": "quipu 0.16.1\ngit_sha: e3ea3658626bcacc1502f7d494e406b599817840\ngit_dirty: false",
+  "generated_at": "2026-10-24T15:21:25Z",
+  "generated_by": "https://github.com/intigraph/quipu/actions/runs/40104549546",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -25,8 +25,8 @@
   "classes": {
     "sparql10-query": {
       "cases": 242,
-      "failed": 33,
-      "passed": 199,
+      "failed": 30,
+      "passed": 202,
       "unsupported": 10
     }
   },
@@ -478,8 +478,8 @@
       "manifest": "../sparql10/open-world/manifest.ttl",
       "query": "../sparql10/open-world/date-3.rq",
       "result": "../sparql10/open-world/date-3-result.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -498,8 +498,8 @@
       "manifest": "../sparql10/open-world/manifest.ttl",
       "query": "../sparql10/open-world/open-cmp-01.rq",
       "result": "../sparql10/open-world/open-cmp-01-result.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -508,8 +508,8 @@
       "manifest": "../sparql10/open-world/manifest.ttl",
       "query": "../sparql10/open-world/open-cmp-02.rq",
       "result": "../sparql10/open-world/open-cmp-02-result.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
